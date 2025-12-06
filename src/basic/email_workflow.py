@@ -103,9 +103,10 @@ class EmailWorkflow(Workflow):
         try:
             response_email = SendEmailRequest(
                 to_email=email_data.from_email,  # Reply to sender
+                from_email=email_data.to_email,
                 subject=f"Re: {email_data.subject}",
                 text=f"Your email has been processed.\n\nResult: {result.message}",
-                reply_to=email_data.to_email,
+                reply_to=email_data.from_email,
             )
 
             async with httpx.AsyncClient() as client:
