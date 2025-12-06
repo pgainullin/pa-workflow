@@ -16,13 +16,6 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-class EmailStartEvent(StartEvent):
-    """Start event for email workflow containing email data and callback config."""
-
-    email_data: EmailData
-    callback: CallbackConfig
-
-
 class EmailReceivedEvent(Event):
     """Event triggered when an email is received."""
 
@@ -48,6 +41,10 @@ class EmailWorkflow(Workflow):
     async def receive_email(self, ev: StartEvent, ctx: Context) -> EmailReceivedEvent:
         """Receive and validate incoming email data.
 
+        The WorkflowServer passes email_data and callback as kwargs to workflow.run().
+        These are accessible via the StartEvent's model_dump() or as attributes if
+        StartEvent is configured to accept extra fields.
+
         Args:
             ev: Start event containing email_data and callback config
             ctx: Workflow context
@@ -55,52 +52,51 @@ class EmailWorkflow(Workflow):
         Returns:
             EmailReceivedEvent with validated email data and callback
         """
-        # The WorkflowServer creates a base StartEvent from the JSON payload.
-        # The email_data and callback are passed as kwargs to workflow.run(),
-        # but may not be directly accessible on the StartEvent object.
-        # We need to reconstruct EmailStartEvent from the event's data.
-        
-        # Get all data from the event (including any extra fields)
+        # The WorkflowServer calls workflow.run(email_data=..., callback=...)
+        # These kwargs should be accessible from the StartEvent.
+        # Try to get them from model_dump() which includes all fields.
         event_dict = ev.model_dump()
         
-        # Also check model_extra for Pydantic v2 extra fields
-        if hasattr(ev, 'model_extra') and ev.model_extra:
-            event_dict.update(ev.model_extra)
+        # Check for email_data and callback in the event data
+        if 'email_data' not in event_dict or 'callback' not in event_dict:
+            # Try model_extra for Pydantic v2 extra fields
+            if hasattr(ev, 'model_extra') and ev.model_extra:
+                event_dict.update(ev.model_extra)
+            
+            # If still not found, try direct attribute access
+            if 'email_data' not in event_dict and hasattr(ev, 'email_data'):
+                event_dict['email_data'] = ev.email_data
+            if 'callback' not in event_dict and hasattr(ev, 'callback'):
+                event_dict['callback'] = ev.callback
         
-        # Debug: log what we received
-        logger.debug(f"StartEvent type: {type(ev)}, model_dump: {event_dict}")
-        logger.debug(f"StartEvent has email_data attr: {hasattr(ev, 'email_data')}")
-        logger.debug(f"StartEvent has callback attr: {hasattr(ev, 'callback')}")
-        
-        # Try to construct EmailStartEvent from the data
-        # If email_data and callback are already EmailData/CallbackConfig objects, use them directly
-        # Otherwise, they should be dicts that we can validate
-        try:
-            # First try direct access (in case it's already EmailStartEvent or has the attrs)
-            if hasattr(ev, 'email_data') and hasattr(ev, 'callback'):
-                email_data = ev.email_data
-                callback = ev.callback
-                # Ensure they're the right types
-                if not isinstance(email_data, EmailData):
-                    email_data = EmailData(**email_data) if isinstance(email_data, dict) else EmailData.model_validate(email_data)
-                if not isinstance(callback, CallbackConfig):
-                    callback = CallbackConfig(**callback) if isinstance(callback, dict) else CallbackConfig.model_validate(callback)
-            else:
-                # Construct EmailStartEvent from the event data
-                email_start = EmailStartEvent(**event_dict)
-                email_data = email_start.email_data
-                callback = email_start.callback
-        except (TypeError, ValueError, KeyError) as e:
+        # Validate and extract the data
+        if 'email_data' not in event_dict or 'callback' not in event_dict:
             logger.error(
-                f"Failed to extract email_data and callback from StartEvent. "
-                f"Error: {e}, Event type: {type(ev)}, Event data: {event_dict}, "
-                f"Event attributes: {dir(ev)}"
+                f"StartEvent missing required fields. "
+                f"Event type: {type(ev)}, Available fields: {list(event_dict.keys())}"
             )
             raise ValueError(
                 "StartEvent must contain 'email_data' and 'callback' fields. "
-                f"Available fields in event_dict: {list(event_dict.keys())}, "
-                f"Event type: {type(ev).__name__}"
-            ) from e
+                f"Received fields: {list(event_dict.keys())}"
+            )
+        
+        # Convert to proper types if needed
+        email_data_dict = event_dict['email_data']
+        callback_dict = event_dict['callback']
+        
+        if isinstance(email_data_dict, EmailData):
+            email_data = email_data_dict
+        elif isinstance(email_data_dict, dict):
+            email_data = EmailData(**email_data_dict)
+        else:
+            email_data = EmailData.model_validate(email_data_dict)
+        
+        if isinstance(callback_dict, CallbackConfig):
+            callback = callback_dict
+        elif isinstance(callback_dict, dict):
+            callback = CallbackConfig(**callback_dict)
+        else:
+            callback = CallbackConfig.model_validate(callback_dict)
 
         event = EmailReceivedEvent(email_data=email_data, callback=callback)
         ctx.write_event_to_stream(event)
