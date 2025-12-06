@@ -36,3 +36,8 @@ env_files = [".env"]
 
 [tool.llamadeploy.workflows]
 default = "basic.workflow:workflow"
+email = "basic.email_workflow:email_workflow"
+
+[tool.llamadeploy.server]
+server = "basic.server:server"
+

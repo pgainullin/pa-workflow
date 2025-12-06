@@ -9,11 +9,12 @@ Usage:
 """
 
 import logging
+import asyncio
 
 from workflows.server import WorkflowServer
 
-from pa_workflow.email_workflow import email_workflow
-from pa_workflow.workflow import workflow as basic_workflow
+from basic.email_workflow import email_workflow
+from basic.workflow import workflow as basic_workflow
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,11 +29,14 @@ server.add_workflow("email", email_workflow)
 server.add_workflow("BasicWorkflow", basic_workflow)
 
 
-def main() -> None:
-    """Start the workflow server."""
-    logger.info("Starting workflow server...")
-    server.start()
+async def main():
+    await server.serve(host="127.0.0.1", port=8080)
+
+# def main() -> None:
+#     """Start the workflow server."""
+#     logger.info("Starting workflow server...")
+#     server.start()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

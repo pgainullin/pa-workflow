@@ -6,7 +6,7 @@ import httpx
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
-from pa_workflow.models import (
+from .models import (
     CallbackConfig,
     EmailData,
     EmailProcessingResult,
