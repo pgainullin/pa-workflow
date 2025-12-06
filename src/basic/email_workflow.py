@@ -16,6 +16,13 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+class EmailStartEvent(StartEvent):
+    """Start event for email workflow containing email data and callback config."""
+
+    email_data: EmailData
+    callback: CallbackConfig
+
+
 class EmailReceivedEvent(Event):
     """Event triggered when an email is received."""
 
@@ -38,7 +45,7 @@ class EmailWorkflow(Workflow):
     """
 
     @step
-    async def receive_email(self, ev: StartEvent, ctx: Context) -> EmailReceivedEvent:
+    async def receive_email(self, ev: EmailStartEvent, ctx: Context) -> EmailReceivedEvent:
         """Receive and validate incoming email data.
 
         Args:
