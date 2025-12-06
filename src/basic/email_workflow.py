@@ -93,7 +93,7 @@ class EmailWorkflow(Workflow):
         result = EmailProcessingResult(
             success=True,
             message=f"Email from {email_data.from_email} processed successfully",
-            email_from=email_data.from_email,
+            from_email=email_data.from_email,
             email_subject=email_data.subject,
         )
 

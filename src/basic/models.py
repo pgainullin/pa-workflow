@@ -41,7 +41,7 @@ class EmailProcessingResult(BaseModel):
 
     success: bool = Field(..., description="Whether processing was successful")
     message: str = Field(..., description="Result message or error description")
-    email_from: str = Field(default="", description="Original sender address")
+    from_email: str = Field(default="", description="Original sender address")
     email_subject: str = Field(default="", description="Original subject line")
 
 
