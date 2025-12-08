@@ -8,6 +8,15 @@ independently without affecting the other.
 from pydantic import BaseModel, Field
 
 
+class Attachment(BaseModel):
+    """Represents a single email attachment."""
+
+    id: str  # Or 'content-id'
+    name: str  # Filename
+    type: str  # MIME type (e.g., 'application/pdf')
+    content: str  # Base64-encoded content
+
+
 class CallbackConfig(BaseModel):
     """Callback configuration for sending email responses.
 
@@ -34,6 +43,9 @@ class EmailData(BaseModel):
     subject: str = Field(default="", description="Email subject line")
     text: str = Field(default="", description="Plain text body of the email")
     html: str = Field(default="", description="HTML body of the email")
+    attachments: list[Attachment] = Field(
+        default_factory=list, description="List of attachments"
+    )
 
 
 class EmailProcessingResult(BaseModel):

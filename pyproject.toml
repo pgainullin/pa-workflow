@@ -9,7 +9,10 @@ description = "Minimal starter workflow project"
 requires-python = ">=3.10"
 readme = "README.md"
 dependencies = [
+    "llama-index>=0.14.10",
+    "llama-index-llms-openai>=0.6.10",
     "llama-index-workflows>=2.5.0,<3.0.0",
+    "llama-parse>=0.6.54",
 ]
 
 [dependency-groups]

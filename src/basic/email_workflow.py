@@ -1,12 +1,18 @@
 """Email processing workflow for handling inbound emails."""
 
+import base64
 import logging
+import pathlib
+import tempfile
 
 import httpx
+from llama_index.llms.openai import OpenAI
+from llama_parse import LlamaParse
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
 from .models import (
+    Attachment,
     CallbackConfig,
     EmailData,
     EmailProcessingResult,
@@ -22,6 +28,7 @@ class EmailStartEvent(StartEvent):
     This event is created from the JSON payload sent to the workflow server.
     The payload should contain 'email_data' and 'callback' fields at the top level.
     """
+
     email_data: EmailData
     callback: CallbackConfig
 
@@ -39,6 +46,23 @@ class EmailProcessedEvent(Event):
     result: EmailProcessingResult
 
 
+class AttachmentFoundEvent(Event):
+    """Event triggered when an email attachment is found."""
+
+    attachment: Attachment
+    original_email: EmailData
+    callback: CallbackConfig
+
+
+class AttachmentSummaryEvent(Event):
+    """Event triggered when an attachment has been summarized."""
+
+    summary: str
+    filename: str
+    original_email: EmailData
+    callback: CallbackConfig
+
+
 class EmailWorkflow(Workflow):
     """Workflow for processing inbound emails from SendGrid Inbound Parse.
 
@@ -47,8 +71,13 @@ class EmailWorkflow(Workflow):
     to send a response email.
     """
 
+    llama_parser = LlamaParse(result_type="markdown")
+    llm = OpenAI(model="gpt-3.5-turbo")
+
     @step
-    async def receive_email(self, ev: EmailStartEvent, ctx: Context) -> EmailReceivedEvent:
+    async def receive_email(
+        self, ev: EmailStartEvent, ctx: Context
+    ) -> EmailReceivedEvent:
         """Receive and validate incoming email data.
 
         The WorkflowServer deserializes the JSON payload into EmailStartEvent.
@@ -70,29 +99,123 @@ class EmailWorkflow(Workflow):
         return event
 
     @step
-    async def process_email(self, ev: EmailReceivedEvent, ctx: Context) -> StopEvent:
-        """Process the received email and send response via callback.
-
-        This step processes the email and then calls back to the webhook
-        server to send a response email to the original sender.
-
-        Args:
-            ev: EmailReceivedEvent containing the email data and callback
-            ctx: Workflow context
-
-        Returns:
-            StopEvent with processing result
-        """
+    async def process_email(
+        self, ev: EmailReceivedEvent, ctx: Context
+    ) -> StopEvent | None:
+        """Classify email attachments and dispatch to next steps."""
         email_data = ev.email_data
         callback = ev.callback
 
-        # TODO: Replace this placeholder with actual email processing logic.
-        # This is where LLM processing, email classification, content extraction,
-        # or other business logic would be implemented. Currently, all emails
-        # are marked as successfully processed without any actual validation.
+        if not email_data.attachments:
+            # No attachments, process as before
+            result = EmailProcessingResult(
+                success=True,
+                message=f"Email from {email_data.from_email} processed successfully (no attachments).",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
+            )
+            ctx.write_event_to_stream(EmailProcessedEvent(result=result))
+            # Send response email via callback
+            try:
+                response_email = SendEmailRequest(
+                    to_email=email_data.from_email,
+                    from_email=email_data.to_email,
+                    subject=f"Re: {email_data.subject}",
+                    text=f"Your email has been processed.\n\nResult: {result.message}",
+                    reply_to=email_data.from_email,
+                )
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        callback.callback_url,
+                        json=response_email.model_dump(),
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-Auth-Token": callback.auth_token,
+                        },
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    logger.info("Callback email sent successfully")
+            except httpx.HTTPError as e:
+                logger.error("Failed to send callback email: %s", str(e))
+                raise RuntimeError(f"Email processed but callback failed: {e!s}")
+            return StopEvent(result=result)
+
+        # Got attachments, fan out events for each one
+        for attachment in email_data.attachments:
+            ctx.send_event(
+                AttachmentFoundEvent(
+                    attachment=attachment,
+                    original_email=email_data,
+                    callback=callback,
+                )
+            )
+        return None  # The workflow continues with the fanned-out events
+
+    @step
+    async def process_attachment(
+        self, ev: AttachmentFoundEvent, ctx: Context
+    ) -> AttachmentSummaryEvent:
+        """Process a single attachment, classify and summarize it."""
+        attachment = ev.attachment
+        summary = ""
+
+        try:
+            decoded_content = base64.b64decode(attachment.content)
+        except (ValueError, TypeError):
+            summary = f"Could not decode attachment: {attachment.name}"
+            return AttachmentSummaryEvent(
+                summary=summary,
+                filename=attachment.name,
+                original_email=ev.original_email,
+                callback=ev.callback,
+            )
+
+        # Create a temporary file to store the decoded content
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(decoded_content)
+            tmp_path = tmp.name
+
+        try:
+            # Simple classification based on MIME type
+            mime_type = attachment.type.lower()
+            if "pdf" in mime_type or "sheet" in mime_type or "csv" in mime_type:
+                # Use LlamaParse
+                documents = self.llama_parser.load_data(tmp_path)
+                content = "\n".join([doc.get_content() for doc in documents])
+
+                # Summarize with OpenAI
+                prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
+                response = await self.llm.acomplete(prompt)
+                summary = str(response)
+
+            elif "image" in mime_type:
+                summary = f"This is an image named '{attachment.name}'. Summarization of images is not yet implemented."
+            else:
+                summary = f"Unsupported attachment type: {mime_type}"
+
+        finally:
+            # Clean up the temporary file
+            pathlib.Path(tmp_path).unlink()
+
+        return AttachmentSummaryEvent(
+            summary=summary,
+            filename=attachment.name,
+            original_email=ev.original_email,
+            callback=ev.callback,
+        )
+
+    @step
+    async def send_summary_email(
+        self, ev: AttachmentSummaryEvent, ctx: Context
+    ) -> StopEvent:
+        """Send an email with the attachment summary."""
+        email_data = ev.original_email
+        callback = ev.callback
+
         result = EmailProcessingResult(
             success=True,
-            message=f"Email from {email_data.from_email} processed successfully",
+            message=f"Processed attachment '{ev.filename}': {ev.summary}",
             from_email=email_data.from_email,
             email_subject=email_data.subject,
         )
@@ -102,10 +225,10 @@ class EmailWorkflow(Workflow):
         # Send response email via callback
         try:
             response_email = SendEmailRequest(
-                to_email=email_data.from_email,  # Reply to sender
+                to_email=email_data.from_email,
                 from_email=email_data.to_email,
-                subject=f"Re: {email_data.subject}",
-                text=f"Your email has been processed.\n\nResult: {result.message}",
+                subject=f"Re: {email_data.subject} (Attachment: {ev.filename})",
+                text=f"Your email attachment has been processed.\n\nSummary for {ev.filename}:\n{ev.summary}",
                 reply_to=email_data.from_email,
             )
 
@@ -120,11 +243,14 @@ class EmailWorkflow(Workflow):
                     timeout=30.0,
                 )
                 response.raise_for_status()
-                logger.info("Callback email sent successfully")
+                logger.info(
+                    f"Callback email for attachment {ev.filename} sent successfully"
+                )
         except httpx.HTTPError as e:
-            logger.error("Failed to send callback email: %s", str(e))
-            # Raise an exception to indicate workflow failure
-            raise RuntimeError(f"Email processed but callback failed: {e!s}")
+            logger.error(
+                f"Failed to send callback email for attachment {ev.filename}: {e!s}"
+            )
+            raise RuntimeError(f"Attachment processed but callback failed: {e!s}")
 
         return StopEvent(result=result)
 
