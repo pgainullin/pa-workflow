@@ -119,7 +119,6 @@ class EmailWorkflow(Workflow):
                     from_email=email_data.from_email,
                     email_subject=email_data.subject,
                 )
-                ctx.write_event_to_stream(EmailProcessedEvent(result=result))
                 # Send response email via callback
                 try:
                     response_email = SendEmailRequest(
@@ -141,6 +140,8 @@ class EmailWorkflow(Workflow):
                         )
                         response.raise_for_status()
                         logger.info("Callback email sent successfully")
+                    # Only emit success event after callback succeeds
+                    ctx.write_event_to_stream(EmailProcessedEvent(result=result))
                 except httpx.HTTPError as e:
                     logger.error("Failed to send callback email: %s", str(e))
                     failure = EmailProcessingResult(
@@ -249,8 +250,6 @@ class EmailWorkflow(Workflow):
             email_subject=email_data.subject,
         )
 
-        ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-
         # Send response email via callback
         try:
             response_email = SendEmailRequest(
@@ -275,6 +274,8 @@ class EmailWorkflow(Workflow):
                 logger.info(
                     f"Callback email for attachment {ev.filename} sent successfully"
                 )
+            # Only emit success event after callback succeeds
+            ctx.write_event_to_stream(EmailProcessedEvent(result=result))
         except httpx.HTTPError as e:
             logger.error(
                 f"Failed to send callback email for attachment {ev.filename}: {e!s}"
