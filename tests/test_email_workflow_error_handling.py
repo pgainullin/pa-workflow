@@ -8,6 +8,7 @@ we'll test the error handling patterns and model validation directly.
 """
 
 import pytest
+from pydantic import ValidationError
 
 from basic.models import (
     Attachment,
@@ -20,7 +21,7 @@ from basic.models import (
 def test_email_processing_result_requires_success_and_message():
     """Test that EmailProcessingResult requires success and message fields."""
     # This should fail - missing required fields
-    with pytest.raises(Exception):  # Will be a pydantic validation error
+    with pytest.raises(ValidationError):
         EmailProcessingResult()
 
     # This should succeed - has required fields
@@ -40,7 +41,7 @@ def test_email_processing_result_with_error_dict_fails():
     # When workflow returns {'detail': 'Error...'}, it can't be parsed as EmailProcessingResult
     error_dict = {"detail": "Error running workflow: AttachmentFoundEvent"}
 
-    with pytest.raises(Exception):  # Will be a pydantic validation error
+    with pytest.raises(ValidationError):
         EmailProcessingResult(**error_dict)
 
 

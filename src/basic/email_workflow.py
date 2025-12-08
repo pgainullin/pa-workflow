@@ -264,12 +264,19 @@ class EmailWorkflow(Workflow):
                 callback = ev.callback
             except Exception:
                 # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
-                # If we can't access the event data, we have a critical failure
-                # This should be very rare, but we need to handle it
+                # If we can't access the event data, create minimal valid instances
+                # to ensure we always return AttachmentSummaryEvent (never raise)
                 logger.error(
-                    "Cannot access event data in process_attachment error handler"
+                    "Cannot access event data in process_attachment error handler, using placeholder values"
                 )
-                raise  # Re-raise to let workflow framework handle it
+                original_email = EmailData(
+                    from_email="error@unknown.com",
+                    subject="Error: Unable to access original email data",
+                )
+                callback = CallbackConfig(
+                    callback_url="http://error-placeholder.local/callback",
+                    auth_token="error-placeholder-token",
+                )
 
             return AttachmentSummaryEvent(
                 summary=f"Critical error processing attachment: {e!s}",
