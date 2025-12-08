@@ -62,7 +62,9 @@ class SendEmailRequest(BaseModel):
 
     to_email: str = Field(..., description="Recipient email address")
     subject: str = Field(..., description="Email subject line")
-    text: str = Field(default="(No content)", description="Plain text body of the email")
+    text: str = Field(
+        default="(No content)", description="Plain text body of the email"
+    )
     html: str = Field(default="(No html content)", description="HTML body of the email")
     from_email: str | None = Field(
         default=None,

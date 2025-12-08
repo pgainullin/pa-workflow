@@ -32,6 +32,7 @@ server.add_workflow("BasicWorkflow", basic_workflow)
 async def main():
     await server.serve(host="127.0.0.1", port=8080)
 
+
 # def main() -> None:
 #     """Start the workflow server."""
 #     logger.info("Starting workflow server...")
