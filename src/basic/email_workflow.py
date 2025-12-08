@@ -133,7 +133,6 @@ class EmailWorkflow(Workflow):
                         )
                         response.raise_for_status()
                         logger.info("Callback email sent successfully")
-                    
                     # Only write success event after callback succeeds
                     result = EmailProcessingResult(
                         success=True,
