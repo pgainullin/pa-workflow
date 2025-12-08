@@ -247,19 +247,23 @@ class EmailWorkflow(Workflow):
             if tmp_path:
                 try:
                     pathlib.Path(tmp_path).unlink()
-                except Exception:
-                    pass  # Ignore cleanup errors
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to cleanup temporary file %s: %s",
+                        tmp_path,
+                        cleanup_error,
+                    )
             # Try to extract what information we can for the error event
             try:
                 filename = ev.attachment.name
             except Exception:
-                # Broad exception needed here for graceful degradation when event is malformed
+                # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
                 filename = "unknown"
             try:
                 original_email = ev.original_email
                 callback = ev.callback
             except Exception:
-                # Broad exception needed here for graceful degradation when event is malformed
+                # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
                 # If we can't access the event data, we have a critical failure
                 # This should be very rare, but we need to handle it
                 logger.error(
@@ -341,7 +345,7 @@ class EmailWorkflow(Workflow):
                 from_email = ev.original_email.from_email
                 subject = ev.original_email.subject
             except Exception:
-                # Broad exception needed here for graceful degradation when event is malformed
+                # Catch AttributeError, KeyError, validation errors, etc. for graceful degradation when event is malformed
                 from_email = "unknown"
                 subject = "unknown"
 
