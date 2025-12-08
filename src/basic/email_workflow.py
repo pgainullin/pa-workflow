@@ -180,6 +180,7 @@ class EmailWorkflow(Workflow):
     ) -> AttachmentSummaryEvent:
         """Process a single attachment, classify and summarize it."""
         # Wrap entire step in try-except to ensure we always return AttachmentSummaryEvent
+        tmp_path = None  # Track temp file path for cleanup
         try:
             attachment = ev.attachment
             summary = ""
@@ -228,8 +229,9 @@ class EmailWorkflow(Workflow):
                 summary = f"Error processing attachment {attachment.name}: {e!s}"
                 success = False
             finally:
-                # Clean up the temporary file
-                pathlib.Path(tmp_path).unlink()
+                # Clean up the temporary file if it was created
+                if tmp_path:
+                    pathlib.Path(tmp_path).unlink()
 
             return AttachmentSummaryEvent(
                 summary=summary,
@@ -241,15 +243,23 @@ class EmailWorkflow(Workflow):
         except Exception as e:
             # Catch any unhandled exceptions (e.g., event validation, attribute access)
             logger.exception("Critical error in process_attachment step")
+            # Clean up temp file if it was created before the exception
+            if tmp_path:
+                try:
+                    pathlib.Path(tmp_path).unlink()
+                except Exception:
+                    pass  # Ignore cleanup errors
             # Try to extract what information we can for the error event
             try:
                 filename = ev.attachment.name
             except Exception:
+                # Broad exception needed here for graceful degradation when event is malformed
                 filename = "unknown"
             try:
                 original_email = ev.original_email
                 callback = ev.callback
             except Exception:
+                # Broad exception needed here for graceful degradation when event is malformed
                 # If we can't access the event data, we have a critical failure
                 # This should be very rare, but we need to handle it
                 logger.error(
@@ -331,6 +341,7 @@ class EmailWorkflow(Workflow):
                 from_email = ev.original_email.from_email
                 subject = ev.original_email.subject
             except Exception:
+                # Broad exception needed here for graceful degradation when event is malformed
                 from_email = "unknown"
                 subject = "unknown"
 
