@@ -3,5 +3,7 @@ workflows.db
 package-lock.json
 node_modules
 uv.lock
+__pycache__/
+*.pyc
 
 .env
