@@ -60,6 +60,7 @@ class AttachmentSummaryEvent(Event):
 
     summary: str
     filename: str
+    success: bool
     original_email: EmailData
     callback: CallbackConfig
 
@@ -182,6 +183,7 @@ class EmailWorkflow(Workflow):
         """Process a single attachment, classify and summarize it."""
         attachment = ev.attachment
         summary = ""
+        success = True
 
         try:
             decoded_content = base64.b64decode(attachment.content)
@@ -190,6 +192,7 @@ class EmailWorkflow(Workflow):
             return AttachmentSummaryEvent(
                 summary=summary,
                 filename=attachment.name,
+                success=False,
                 original_email=ev.original_email,
                 callback=ev.callback,
             )
@@ -223,6 +226,7 @@ class EmailWorkflow(Workflow):
         except Exception as e:
             logger.exception("Failed to process attachment %s", attachment.name)
             summary = f"Error processing attachment {attachment.name}: {e!s}"
+            success = False
         finally:
             # Clean up the temporary file
             pathlib.Path(tmp_path).unlink()
@@ -230,6 +234,7 @@ class EmailWorkflow(Workflow):
         return AttachmentSummaryEvent(
             summary=summary,
             filename=attachment.name,
+            success=success,
             original_email=ev.original_email,
             callback=ev.callback,
         )
@@ -243,7 +248,7 @@ class EmailWorkflow(Workflow):
         callback = ev.callback
 
         result = EmailProcessingResult(
-            success=True,
+            success=ev.success,
             message=f"Processed attachment '{ev.filename}': {ev.summary}",
             from_email=email_data.from_email,
             email_subject=email_data.subject,
