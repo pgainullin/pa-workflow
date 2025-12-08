@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class EmailStartEvent(StartEvent):
     """Start event for email workflow containing email data and callback config.
-    
+
     This event is created from the JSON payload sent to the workflow server.
     The payload should contain 'email_data' and 'callback' fields at the top level.
     """
@@ -74,10 +74,7 @@ class EmailWorkflow(Workflow):
     """
 
     llama_parser = LlamaParse(result_type="markdown")
-    llm = GoogleGenAI(
-        model="gemini-2.5-flash",
-        api_key=os.getenv("GEMINI_API_KEY")
-    )
+    llm = GoogleGenAI(model="gemini-2.5-flash", api_key=os.getenv("GEMINI_API_KEY"))
 
     @step
     async def receive_email(
@@ -143,7 +140,7 @@ class EmailWorkflow(Workflow):
                     )
                     ctx.write_event_to_stream(EmailProcessedEvent(result=result))
                     return StopEvent(result=result)
-                    
+
                 except httpx.HTTPError as e:
                     logger.error("Failed to send callback email: %s", str(e))
                     failure = EmailProcessingResult(
@@ -182,119 +179,191 @@ class EmailWorkflow(Workflow):
         self, ev: AttachmentFoundEvent, ctx: Context
     ) -> AttachmentSummaryEvent:
         """Process a single attachment, classify and summarize it."""
-        attachment = ev.attachment
-        summary = ""
-        success = True
-
+        # Wrap entire step in try-except to ensure we always return AttachmentSummaryEvent
+        tmp_path = None  # Track temp file path for cleanup
         try:
-            decoded_content = base64.b64decode(attachment.content)
-        except (ValueError, TypeError):
-            summary = f"Could not decode attachment: {attachment.name}"
+            attachment = ev.attachment
+            summary = ""
+            success = True
+
+            try:
+                decoded_content = base64.b64decode(attachment.content)
+            except (ValueError, TypeError):
+                summary = f"Could not decode attachment: {attachment.name}"
+                return AttachmentSummaryEvent(
+                    summary=summary,
+                    filename=attachment.name,
+                    success=False,
+                    original_email=ev.original_email,
+                    callback=ev.callback,
+                )
+
+            # Create a temporary file to store the decoded content
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(decoded_content)
+                tmp_path = tmp.name
+
+            try:
+                # Simple classification based on MIME type
+                mime_type = attachment.type.lower()
+                if "pdf" in mime_type or "sheet" in mime_type or "csv" in mime_type:
+                    # Use LlamaParse
+                    documents = self.llama_parser.load_data(tmp_path)
+                    content = "\n".join([doc.get_content() for doc in documents])
+
+                    # Summarize with OpenAI
+                    prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
+                    response = await self.llm.acomplete(prompt)
+                    summary = str(response)
+
+                elif "image" in mime_type:
+                    summary = (
+                        f"This is an image named '{attachment.name}'. Summarization of images "
+                        "is not yet implemented."
+                    )
+                else:
+                    summary = f"Unsupported attachment type: {mime_type}"
+
+            except Exception as e:
+                logger.exception("Failed to process attachment %s", attachment.name)
+                summary = f"Error processing attachment {attachment.name}: {e!s}"
+                success = False
+            finally:
+                # Clean up the temporary file if it was created
+                if tmp_path:
+                    pathlib.Path(tmp_path).unlink()
+
             return AttachmentSummaryEvent(
                 summary=summary,
                 filename=attachment.name,
-                success=False,
+                success=success,
                 original_email=ev.original_email,
                 callback=ev.callback,
             )
-
-        # Create a temporary file to store the decoded content
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            tmp.write(decoded_content)
-            tmp_path = tmp.name
-
-        try:
-            # Simple classification based on MIME type
-            mime_type = attachment.type.lower()
-            if "pdf" in mime_type or "sheet" in mime_type or "csv" in mime_type:
-                # Use LlamaParse
-                documents = self.llama_parser.load_data(tmp_path)
-                content = "\n".join([doc.get_content() for doc in documents])
-
-                # Summarize with OpenAI
-                prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
-                response = await self.llm.acomplete(prompt)
-                summary = str(response)
-
-            elif "image" in mime_type:
-                summary = (
-                    f"This is an image named '{attachment.name}'. Summarization of images "
-                    "is not yet implemented."
-                )
-            else:
-                summary = f"Unsupported attachment type: {mime_type}"
-
         except Exception as e:
-            logger.exception("Failed to process attachment %s", attachment.name)
-            summary = f"Error processing attachment {attachment.name}: {e!s}"
-            success = False
-        finally:
-            # Clean up the temporary file
-            pathlib.Path(tmp_path).unlink()
+            # Catch any unhandled exceptions (e.g., event validation, attribute access)
+            logger.exception("Critical error in process_attachment step")
+            # Clean up temp file if it was created before the exception
+            if tmp_path:
+                try:
+                    pathlib.Path(tmp_path).unlink()
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to cleanup temporary file %s: %s",
+                        tmp_path,
+                        cleanup_error,
+                    )
+            # Try to extract what information we can for the error event
+            try:
+                filename = ev.attachment.name
+            except Exception:
+                # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
+                filename = "unknown"
+            try:
+                original_email = ev.original_email
+                callback = ev.callback
+            except Exception:
+                # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
+                # If we can't access the event data, create minimal valid instances
+                # to ensure we always return AttachmentSummaryEvent (never raise)
+                logger.error(
+                    "Cannot access event data in process_attachment error handler, using placeholder values"
+                )
+                original_email = EmailData(
+                    from_email="error@placeholder.invalid",
+                    subject="Error: Unable to access original email data",
+                )
+                callback = CallbackConfig(
+                    callback_url="http://error-placeholder.invalid/callback",
+                    auth_token="INVALID-PLACEHOLDER-TOKEN",
+                )
 
-        return AttachmentSummaryEvent(
-            summary=summary,
-            filename=attachment.name,
-            success=success,
-            original_email=ev.original_email,
-            callback=ev.callback,
-        )
+            return AttachmentSummaryEvent(
+                summary=f"Critical error processing attachment: {e!s}",
+                filename=filename,
+                success=False,
+                original_email=original_email,
+                callback=callback,
+            )
 
     @step
     async def send_summary_email(
         self, ev: AttachmentSummaryEvent, ctx: Context
     ) -> StopEvent:
         """Send an email with the attachment summary."""
-        email_data = ev.original_email
-        callback = ev.callback
-
-        # Send response email via callback
+        # Wrap entire step in try-except to ensure we always return StopEvent with EmailProcessingResult
         try:
-            response_email = SendEmailRequest(
-                to_email=email_data.from_email,
-                from_email=email_data.to_email,
-                subject=f"Re: {email_data.subject} (Attachment: {ev.filename})",
-                text=f"Your email attachment has been processed.\n\nSummary for {ev.filename}:\n{ev.summary}",
-                reply_to=email_data.from_email,
-            )
+            email_data = ev.original_email
+            callback = ev.callback
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    callback.callback_url,
-                    json=response_email.model_dump(),
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-Auth-Token": callback.auth_token,
-                    },
-                    timeout=30.0,
+            # Send response email via callback
+            try:
+                response_email = SendEmailRequest(
+                    to_email=email_data.from_email,
+                    from_email=email_data.to_email,
+                    subject=f"Re: {email_data.subject} (Attachment: {ev.filename})",
+                    text=f"Your email attachment has been processed.\n\nSummary for {ev.filename}:\n{ev.summary}",
+                    reply_to=email_data.from_email,
                 )
-                response.raise_for_status()
-                logger.info(
-                    f"Callback email for attachment {ev.filename} sent successfully"
+
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        callback.callback_url,
+                        json=response_email.model_dump(),
+                        headers={
+                            "Content-Type": "application/json",
+                            "X-Auth-Token": callback.auth_token,
+                        },
+                        timeout=30.0,
+                    )
+                    response.raise_for_status()
+                    logger.info(
+                        f"Callback email for attachment {ev.filename} sent successfully"
+                    )
+
+                # Only write success event after callback succeeds
+                result = EmailProcessingResult(
+                    success=True,
+                    message=f"Processed attachment '{ev.filename}': {ev.summary}",
+                    from_email=email_data.from_email,
+                    email_subject=email_data.subject,
                 )
-            
-            # Only write success event after callback succeeds
+                ctx.write_event_to_stream(EmailProcessedEvent(result=result))
+                return StopEvent(result=result)
+
+            except httpx.HTTPError as e:
+                logger.error(
+                    f"Failed to send callback email for attachment {ev.filename}: {e!s}"
+                )
+                failure = EmailProcessingResult(
+                    success=False,
+                    message=f"Attachment processed but callback failed: {e!s}",
+                    from_email=email_data.from_email,
+                    email_subject=email_data.subject,
+                )
+                ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+                return StopEvent(result=failure)
+
+        except Exception as e:
+            # Catch any unhandled exceptions (e.g., event validation, attribute access, validation errors)
+            logger.exception("Critical error in send_summary_email step")
+            # Try to extract what information we can for the error result
+            try:
+                from_email = ev.original_email.from_email
+                subject = ev.original_email.subject
+            except Exception:
+                # Catch AttributeError, KeyError, validation errors, etc. for graceful degradation when event is malformed
+                from_email = "unknown"
+                subject = "unknown"
+
             result = EmailProcessingResult(
-                success=True,
-                message=f"Processed attachment '{ev.filename}': {ev.summary}",
-                from_email=email_data.from_email,
-                email_subject=email_data.subject,
+                success=False,
+                message=f"Critical error sending summary email: {e!s}",
+                from_email=from_email,
+                email_subject=subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=result))
             return StopEvent(result=result)
-            
-        except httpx.HTTPError as e:
-            logger.error(
-                f"Failed to send callback email for attachment {ev.filename}: {e!s}"
-            )
-            failure = EmailProcessingResult(
-                success=False,
-                message=f"Attachment processed but callback failed: {e!s}",
-                from_email=email_data.from_email,
-                email_subject=email_data.subject,
-            )
-            ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
-            return StopEvent(result=failure)
 
 
 email_workflow = EmailWorkflow(timeout=60)
