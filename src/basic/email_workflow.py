@@ -113,21 +113,13 @@ class EmailWorkflow(Workflow):
 
         try:
             if not email_data.attachments:
-                # No attachments, process as before
-                result = EmailProcessingResult(
-                    success=True,
-                    message=f"Email from {email_data.from_email} processed successfully (no attachments).",
-                    from_email=email_data.from_email,
-                    email_subject=email_data.subject,
-                )
-                ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-                # Send response email via callback
+                # No attachments, send response email via callback
                 try:
                     response_email = SendEmailRequest(
                         to_email=email_data.from_email,
                         from_email=email_data.to_email,
                         subject=f"Re: {email_data.subject}",
-                        text=f"Your email has been processed.\n\nResult: {result.message}",
+                        text=f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments).",
                         reply_to=email_data.from_email,
                     )
                     async with httpx.AsyncClient() as client:
@@ -142,6 +134,16 @@ class EmailWorkflow(Workflow):
                         )
                         response.raise_for_status()
                         logger.info("Callback email sent successfully")
+                    # Only write success event after callback succeeds
+                    result = EmailProcessingResult(
+                        success=True,
+                        message=f"Email from {email_data.from_email} processed successfully (no attachments).",
+                        from_email=email_data.from_email,
+                        email_subject=email_data.subject,
+                    )
+                    ctx.write_event_to_stream(EmailProcessedEvent(result=result))
+                    return StopEvent(result=result)
+                    
                 except httpx.HTTPError as e:
                     logger.error("Failed to send callback email: %s", str(e))
                     failure = EmailProcessingResult(
@@ -152,7 +154,6 @@ class EmailWorkflow(Workflow):
                     )
                     ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
                     return StopEvent(result=failure)
-                return StopEvent(result=result)
 
             # Got attachments, fan out events for each one
             for attachment in email_data.attachments:
@@ -247,15 +248,6 @@ class EmailWorkflow(Workflow):
         email_data = ev.original_email
         callback = ev.callback
 
-        result = EmailProcessingResult(
-            success=ev.success,
-            message=f"Processed attachment '{ev.filename}': {ev.summary}",
-            from_email=email_data.from_email,
-            email_subject=email_data.subject,
-        )
-
-        ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-
         # Send response email via callback
         try:
             response_email = SendEmailRequest(
@@ -280,6 +272,17 @@ class EmailWorkflow(Workflow):
                 logger.info(
                     f"Callback email for attachment {ev.filename} sent successfully"
                 )
+            
+            # Only write success event after callback succeeds
+            result = EmailProcessingResult(
+                success=True,
+                message=f"Processed attachment '{ev.filename}': {ev.summary}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
+            )
+            ctx.write_event_to_stream(EmailProcessedEvent(result=result))
+            return StopEvent(result=result)
+            
         except httpx.HTTPError as e:
             logger.error(
                 f"Failed to send callback email for attachment {ev.filename}: {e!s}"
@@ -292,8 +295,6 @@ class EmailWorkflow(Workflow):
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
             return StopEvent(result=failure)
-
-        return StopEvent(result=result)
 
 
 email_workflow = EmailWorkflow(timeout=60)
