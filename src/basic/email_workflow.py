@@ -7,7 +7,7 @@ import pathlib
 import tempfile
 
 import httpx
-from llama_index.llms.google import Gemini
+from llama_index.llms.google_genai import GoogleGenAI
 from llama_parse import LlamaParse
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
@@ -73,7 +73,10 @@ class EmailWorkflow(Workflow):
     """
 
     llama_parser = LlamaParse(result_type="markdown")
-    llm = Gemini(api_key=os.getenv("GEMINI_API_KEY"))
+    llm = GoogleGenAI(
+        model="gemini-2.5-flash",
+        api_key=os.getenv("GEMINI_API_KEY")
+    )
 
     @step
     async def receive_email(
