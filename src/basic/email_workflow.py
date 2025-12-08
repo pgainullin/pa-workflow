@@ -2,11 +2,12 @@
 
 import base64
 import logging
+import os
 import pathlib
 import tempfile
 
 import httpx
-from llama_index.llms.openai import OpenAI
+from llama_index.llms.google import Gemini
 from llama_parse import LlamaParse
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
@@ -72,7 +73,7 @@ class EmailWorkflow(Workflow):
     """
 
     llama_parser = LlamaParse(result_type="markdown")
-    llm = OpenAI(model="gpt-3.5-turbo")
+    llm = Gemini(api_key=os.getenv("GEMINI_API_KEY"))
 
     @step
     async def receive_email(
