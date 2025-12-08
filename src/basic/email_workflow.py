@@ -60,6 +60,7 @@ class AttachmentSummaryEvent(Event):
 
     summary: str
     filename: str
+    success: bool
     original_email: EmailData
     callback: CallbackConfig
 
@@ -110,51 +111,71 @@ class EmailWorkflow(Workflow):
         email_data = ev.email_data
         callback = ev.callback
 
-        if not email_data.attachments:
-            # No attachments, process as before
+        try:
+            if not email_data.attachments:
+                # No attachments, send response email via callback
+                try:
+                    response_email = SendEmailRequest(
+                        to_email=email_data.from_email,
+                        from_email=email_data.to_email,
+                        subject=f"Re: {email_data.subject}",
+                        text=f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments).",
+                        reply_to=email_data.from_email,
+                    )
+                    async with httpx.AsyncClient() as client:
+                        response = await client.post(
+                            callback.callback_url,
+                            json=response_email.model_dump(),
+                            headers={
+                                "Content-Type": "application/json",
+                                "X-Auth-Token": callback.auth_token,
+                            },
+                            timeout=30.0,
+                        )
+                        response.raise_for_status()
+                        logger.info("Callback email sent successfully")
+                    # Only write success event after callback succeeds
+                    result = EmailProcessingResult(
+                        success=True,
+                        message=f"Email from {email_data.from_email} processed successfully (no attachments).",
+                        from_email=email_data.from_email,
+                        email_subject=email_data.subject,
+                    )
+                    ctx.write_event_to_stream(EmailProcessedEvent(result=result))
+                    return StopEvent(result=result)
+                    
+                except httpx.HTTPError as e:
+                    logger.error("Failed to send callback email: %s", str(e))
+                    failure = EmailProcessingResult(
+                        success=False,
+                        message=f"Email processed but callback failed: {e!s}",
+                        from_email=email_data.from_email,
+                        email_subject=email_data.subject,
+                    )
+                    ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+                    return StopEvent(result=failure)
+
+            # Got attachments, fan out events for each one
+            for attachment in email_data.attachments:
+                ctx.send_event(
+                    AttachmentFoundEvent(
+                        attachment=attachment,
+                        original_email=email_data,
+                        callback=callback,
+                    )
+                )
+            return None  # The workflow continues with the fanned-out events
+
+        except Exception as e:  # Catch-all to keep response format stable
+            logger.exception("Unexpected error while processing email")
             result = EmailProcessingResult(
-                success=True,
-                message=f"Email from {email_data.from_email} processed successfully (no attachments).",
+                success=False,
+                message=f"Failed to process email: {e!s}",
                 from_email=email_data.from_email,
                 email_subject=email_data.subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-            # Send response email via callback
-            try:
-                response_email = SendEmailRequest(
-                    to_email=email_data.from_email,
-                    from_email=email_data.to_email,
-                    subject=f"Re: {email_data.subject}",
-                    text=f"Your email has been processed.\n\nResult: {result.message}",
-                    reply_to=email_data.from_email,
-                )
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        callback.callback_url,
-                        json=response_email.model_dump(),
-                        headers={
-                            "Content-Type": "application/json",
-                            "X-Auth-Token": callback.auth_token,
-                        },
-                        timeout=30.0,
-                    )
-                    response.raise_for_status()
-                    logger.info("Callback email sent successfully")
-            except httpx.HTTPError as e:
-                logger.error("Failed to send callback email: %s", str(e))
-                raise RuntimeError(f"Email processed but callback failed: {e!s}")
             return StopEvent(result=result)
-
-        # Got attachments, fan out events for each one
-        for attachment in email_data.attachments:
-            ctx.send_event(
-                AttachmentFoundEvent(
-                    attachment=attachment,
-                    original_email=email_data,
-                    callback=callback,
-                )
-            )
-        return None  # The workflow continues with the fanned-out events
 
     @step
     async def process_attachment(
@@ -163,6 +184,7 @@ class EmailWorkflow(Workflow):
         """Process a single attachment, classify and summarize it."""
         attachment = ev.attachment
         summary = ""
+        success = True
 
         try:
             decoded_content = base64.b64decode(attachment.content)
@@ -171,6 +193,7 @@ class EmailWorkflow(Workflow):
             return AttachmentSummaryEvent(
                 summary=summary,
                 filename=attachment.name,
+                success=False,
                 original_email=ev.original_email,
                 callback=ev.callback,
             )
@@ -194,10 +217,17 @@ class EmailWorkflow(Workflow):
                 summary = str(response)
 
             elif "image" in mime_type:
-                summary = f"This is an image named '{attachment.name}'. Summarization of images is not yet implemented."
+                summary = (
+                    f"This is an image named '{attachment.name}'. Summarization of images "
+                    "is not yet implemented."
+                )
             else:
                 summary = f"Unsupported attachment type: {mime_type}"
 
+        except Exception as e:
+            logger.exception("Failed to process attachment %s", attachment.name)
+            summary = f"Error processing attachment {attachment.name}: {e!s}"
+            success = False
         finally:
             # Clean up the temporary file
             pathlib.Path(tmp_path).unlink()
@@ -205,6 +235,7 @@ class EmailWorkflow(Workflow):
         return AttachmentSummaryEvent(
             summary=summary,
             filename=attachment.name,
+            success=success,
             original_email=ev.original_email,
             callback=ev.callback,
         )
@@ -216,15 +247,6 @@ class EmailWorkflow(Workflow):
         """Send an email with the attachment summary."""
         email_data = ev.original_email
         callback = ev.callback
-
-        result = EmailProcessingResult(
-            success=True,
-            message=f"Processed attachment '{ev.filename}': {ev.summary}",
-            from_email=email_data.from_email,
-            email_subject=email_data.subject,
-        )
-
-        ctx.write_event_to_stream(EmailProcessedEvent(result=result))
 
         # Send response email via callback
         try:
@@ -250,13 +272,29 @@ class EmailWorkflow(Workflow):
                 logger.info(
                     f"Callback email for attachment {ev.filename} sent successfully"
                 )
+            
+            # Only write success event after callback succeeds
+            result = EmailProcessingResult(
+                success=True,
+                message=f"Processed attachment '{ev.filename}': {ev.summary}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
+            )
+            ctx.write_event_to_stream(EmailProcessedEvent(result=result))
+            return StopEvent(result=result)
+            
         except httpx.HTTPError as e:
             logger.error(
                 f"Failed to send callback email for attachment {ev.filename}: {e!s}"
             )
-            raise RuntimeError(f"Attachment processed but callback failed: {e!s}")
-
-        return StopEvent(result=result)
+            failure = EmailProcessingResult(
+                success=False,
+                message=f"Attachment processed but callback failed: {e!s}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
+            )
+            ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+            return StopEvent(result=failure)
 
 
 email_workflow = EmailWorkflow(timeout=60)
