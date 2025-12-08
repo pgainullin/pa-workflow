@@ -270,12 +270,12 @@ class EmailWorkflow(Workflow):
                     "Cannot access event data in process_attachment error handler, using placeholder values"
                 )
                 original_email = EmailData(
-                    from_email="error@unknown.com",
+                    from_email="error@placeholder.invalid",
                     subject="Error: Unable to access original email data",
                 )
                 callback = CallbackConfig(
-                    callback_url="http://error-placeholder.local/callback",
-                    auth_token="error-placeholder-token",
+                    callback_url="http://error-placeholder.invalid/callback",
+                    auth_token="INVALID-PLACEHOLDER-TOKEN",
                 )
 
             return AttachmentSummaryEvent(
