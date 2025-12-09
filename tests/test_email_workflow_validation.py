@@ -6,8 +6,16 @@ ensuring all events are properly declared in step return types.
 
 import ast
 import inspect
+from pathlib import Path
 
 import pytest
+
+
+def get_workflow_file_path():
+    """Get the path to the email workflow file relative to this test file."""
+    test_dir = Path(__file__).parent
+    project_root = test_dir.parent
+    return project_root / 'src' / 'basic' / 'email_workflow.py'
 
 
 def test_process_email_step_includes_attachment_found_event_in_return_type():
@@ -22,7 +30,8 @@ def test_process_email_step_includes_attachment_found_event_in_return_type():
     occurs when this return type is missing.
     """
     # Read the source file
-    with open('src/basic/email_workflow.py', 'r') as f:
+    workflow_file = get_workflow_file_path()
+    with open(workflow_file, 'r') as f:
         source = f.read()
     
     # Parse the AST
@@ -70,13 +79,28 @@ def test_process_email_step_includes_attachment_found_event_in_return_type():
 
 
 def test_workflow_events_structure():
-    """Test that workflow events are properly structured."""
+    """Test that workflow events are properly structured using AST parsing."""
     # Read the source file
-    with open('src/basic/email_workflow.py', 'r') as f:
+    workflow_file = get_workflow_file_path()
+    with open(workflow_file, 'r') as f:
         source = f.read()
     
+    # Parse the AST
+    tree = ast.parse(source)
+    
+    # Find all class definitions
+    class_names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            class_names.add(node.name)
+    
     # Check that all required event classes are defined
-    assert 'class AttachmentFoundEvent(Event):' in source
-    assert 'class AttachmentSummaryEvent(Event):' in source
-    assert 'class EmailReceivedEvent(Event):' in source
-    assert 'class EmailProcessedEvent(Event):' in source
+    required_events = [
+        'AttachmentFoundEvent',
+        'AttachmentSummaryEvent',
+        'EmailReceivedEvent',
+        'EmailProcessedEvent',
+    ]
+    
+    for event_name in required_events:
+        assert event_name in class_names, f"{event_name} class not found in workflow file"
