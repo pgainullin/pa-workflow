@@ -8,7 +8,6 @@ wrote to in the first place", meaning that if a user sends an email TO
 support@company.com, the reply should come FROM support@company.com.
 """
 
-import pytest
 from basic.models import EmailData, SendEmailRequest
 
 
