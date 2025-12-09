@@ -7,6 +7,8 @@ ensuring all events are properly declared in step return types.
 import ast
 import inspect
 
+import pytest
+
 
 def test_process_email_step_includes_attachment_found_event_in_return_type():
     """Test that process_email step declares AttachmentFoundEvent in its return type.
