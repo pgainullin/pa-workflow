@@ -117,7 +117,6 @@ class EmailWorkflow(Workflow):
                         from_email=email_data.to_email,
                         subject=f"Re: {email_data.subject}",
                         text=f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments).",
-                        reply_to=email_data.from_email,
                     )
                     async with httpx.AsyncClient() as client:
                         response = await client.post(
@@ -303,7 +302,6 @@ class EmailWorkflow(Workflow):
                     from_email=email_data.to_email,
                     subject=f"Re: {email_data.subject} (Attachment: {ev.filename})",
                     text=f"Your email attachment has been processed.\n\nSummary for {ev.filename}:\n{ev.summary}",
-                    reply_to=email_data.from_email,
                 )
 
                 async with httpx.AsyncClient() as client:
