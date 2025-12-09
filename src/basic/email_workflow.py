@@ -114,7 +114,7 @@ class EmailWorkflow(Workflow):
                 try:
                     response_email = SendEmailRequest(
                         to_email=email_data.from_email,
-                        from_email=email_data.to_email,
+                        from_email=email_data.to_email or None,
                         subject=f"Re: {email_data.subject}",
                         text=f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments).",
                     )
@@ -299,7 +299,7 @@ class EmailWorkflow(Workflow):
             try:
                 response_email = SendEmailRequest(
                     to_email=email_data.from_email,
-                    from_email=email_data.to_email,
+                    from_email=email_data.to_email or None,
                     subject=f"Re: {email_data.subject}",
                     text=f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}",
                 )
