@@ -96,6 +96,13 @@ class EmailWorkflow(Workflow):
         email_data = ev.email_data
         callback = ev.callback
 
+        # Debug logging to see incoming email data
+        logger.info(
+            f"Received email: from={email_data.from_email}, "
+            f"to={repr(email_data.to_email)}, "
+            f"subject={email_data.subject}"
+        )
+
         event = EmailReceivedEvent(email_data=email_data, callback=callback)
         ctx.write_event_to_stream(event)
         return event
@@ -112,6 +119,12 @@ class EmailWorkflow(Workflow):
             if not email_data.attachments:
                 # No attachments, send response email via callback
                 try:
+                    # Debug logging to track from_email value
+                    logger.info(
+                        f"Creating SendEmailRequest: to_email={email_data.from_email}, "
+                        f"from_email source={repr(email_data.to_email)}, "
+                        f"from_email final={repr(email_data.to_email or None)}"
+                    )
                     response_email = SendEmailRequest(
                         to_email=email_data.from_email,
                         from_email=email_data.to_email or None,
@@ -297,6 +310,12 @@ class EmailWorkflow(Workflow):
 
             # Send response email via callback
             try:
+                # Debug logging to track from_email value
+                logger.info(
+                    f"Creating SendEmailRequest for attachment: to_email={email_data.from_email}, "
+                    f"from_email source={repr(email_data.to_email)}, "
+                    f"from_email final={repr(email_data.to_email or None)}"
+                )
                 response_email = SendEmailRequest(
                     to_email=email_data.from_email,
                     from_email=email_data.to_email or None,
