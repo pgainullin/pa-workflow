@@ -300,8 +300,8 @@ class EmailWorkflow(Workflow):
                 response_email = SendEmailRequest(
                     to_email=email_data.from_email,
                     from_email=email_data.to_email,
-                    subject=f"Re: {email_data.subject} (Attachment: {ev.filename})",
-                    text=f"Your email attachment has been processed.\n\nSummary for {ev.filename}:\n{ev.summary}",
+                    subject=f"Re: {email_data.subject}",
+                    text=f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}",
                 )
 
                 async with httpx.AsyncClient() as client:
