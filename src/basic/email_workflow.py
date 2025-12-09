@@ -103,7 +103,7 @@ class EmailWorkflow(Workflow):
     @step
     async def process_email(
         self, ev: EmailReceivedEvent, ctx: Context
-    ) -> StopEvent | None:
+    ) -> AttachmentFoundEvent | StopEvent | None:
         """Classify email attachments and dispatch to next steps."""
         email_data = ev.email_data
         callback = ev.callback
