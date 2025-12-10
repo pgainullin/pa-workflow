@@ -19,7 +19,7 @@ from .models import (
     EmailProcessingResult,
     SendEmailRequest,
 )
-from .utils import text_to_html
+from .utils import download_file_from_llamacloud, text_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -205,8 +205,6 @@ class EmailWorkflow(Workflow):
                 # Get file content either from base64 or LlamaCloud
                 if attachment.file_id:
                     # Download from LlamaCloud
-                    from .utils import download_file_from_llamacloud
-
                     logger.info(
                         f"Downloading attachment {attachment.name} from LlamaCloud (file_id: {attachment.file_id})"
                     )

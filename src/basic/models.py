@@ -14,6 +14,10 @@ class Attachment(BaseModel):
     Supports two modes:
     1. Base64 content mode: content field contains base64-encoded data
     2. LlamaCloud file mode: file_id references a file in LlamaCloud
+    
+    Note: While both content and file_id are optional at the model level,
+    workflows should provide at least one when processing attachments.
+    The workflow will return an error if an attachment has neither field.
     """
 
     id: str  # Or 'content-id'
