@@ -266,8 +266,9 @@ async def test_upload_file_to_llamacloud_success():
         result = await upload_file_to_llamacloud(file_content, filename)
         
         assert result == expected_file_id
+        # upload_bytes now takes (bytes, external_file_id) - filename is used as external_file_id
         mock_file_client.upload_bytes.assert_called_once_with(
-            file_content, filename=filename, external_file_id=None
+            file_content, filename
         )
 
 
@@ -291,8 +292,9 @@ async def test_upload_file_to_llamacloud_with_external_id():
         result = await upload_file_to_llamacloud(file_content, filename, external_id)
         
         assert result == expected_file_id
+        # upload_bytes takes (bytes, external_file_id)
         mock_file_client.upload_bytes.assert_called_once_with(
-            file_content, filename=filename, external_file_id=external_id
+            file_content, external_id
         )
 
 

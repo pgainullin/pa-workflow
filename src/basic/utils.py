@@ -8,7 +8,7 @@ import os
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from llama_cloud_services import FileClient
+    from llama_cloud_services.files import FileClient
 
     from .models import Attachment
 
@@ -44,7 +44,8 @@ async def get_file_client() -> FileClient:
     Raises:
         ValueError: If required environment variables are not set
     """
-    from llama_cloud_services import AsyncLlamaCloud, FileClient
+    from llama_cloud.client import AsyncLlamaCloud
+    from llama_cloud_services.files import FileClient
 
     api_key = os.getenv("LLAMA_CLOUD_API_KEY")
     if not api_key:
@@ -106,8 +107,10 @@ async def upload_file_to_llamacloud(
     """
     try:
         file_client = await get_file_client()
+        # upload_bytes signature: upload_bytes(bytes, external_file_id)
+        # Use filename as external_file_id if no external_file_id is provided
         file = await file_client.upload_bytes(
-            file_content, filename=filename, external_file_id=external_file_id
+            file_content, external_file_id or filename
         )
         logger.info(f"Successfully uploaded file {filename} to LlamaCloud: {file.id}")
         return file.id
