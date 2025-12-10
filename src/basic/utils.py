@@ -84,7 +84,7 @@ async def download_file_from_llamacloud(file_id: str) -> bytes:
         # Wrap all LlamaCloud API errors (network, auth, not found, etc.)
         # in ValueError with preserved exception chain for debugging
         logger.error(f"Failed to download file {file_id} from LlamaCloud: {e}")
-        raise ValueError(f"Failed to download file from LlamaCloud: {e}") from e
+        raise ValueError(f"Failed to download file {file_id} from LlamaCloud: {e}") from e
 
 
 async def upload_file_to_llamacloud(
