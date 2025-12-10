@@ -7,12 +7,77 @@ import logging
 import os
 from typing import TYPE_CHECKING, Optional
 
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
+
 if TYPE_CHECKING:
     from llama_cloud.client import AsyncLlamaCloud
 
     from .models import Attachment
 
 logger = logging.getLogger(__name__)
+
+
+def is_retryable_error(exception: Exception) -> bool:
+    """Check if an exception is retryable (transient API errors).
+    
+    This includes:
+    - HTTP 429 (Too Many Requests / Rate Limit)
+    - HTTP 500 (Internal Server Error)
+    - HTTP 503 (Service Unavailable / Overloaded)
+    - Connection errors and timeouts
+    
+    Args:
+        exception: The exception to check
+        
+    Returns:
+        True if the error should be retried
+    """
+    # Convert exception to string for error message matching
+    error_str = str(exception).lower()
+    
+    # Check for HTTP status codes in error messages
+    retryable_codes = ["429", "500", "503"]
+    if any(code in error_str for code in retryable_codes):
+        return True
+    
+    # Check for common transient error messages
+    retryable_messages = [
+        "rate limit",
+        "quota",
+        "overload",
+        "unavailable",
+        "timeout",
+        "connection",
+        "temporarily",
+    ]
+    if any(msg in error_str for msg in retryable_messages):
+        return True
+    
+    # Check for httpx-specific errors
+    try:
+        import httpx
+        if isinstance(exception, (httpx.TimeoutException, httpx.ConnectError)):
+            return True
+    except ImportError:
+        pass
+    
+    return False
+
+
+# Create a reusable retry decorator for API calls
+api_retry = retry(
+    retry=retry_if_exception(is_retryable_error),
+    stop=stop_after_attempt(5),  # Maximum 5 attempts
+    wait=wait_exponential(multiplier=1, min=1, max=45),  # Exponential backoff: 1s, 2s, 4s, 8s, 16s (max 45s)
+    before_sleep=before_sleep_log(logger, logging.WARNING),  # Log retry attempts
+    reraise=True,  # Re-raise the exception after all retries exhausted
+)
 
 
 def text_to_html(text: str) -> str:
@@ -58,8 +123,12 @@ async def get_llama_cloud_client() -> tuple["AsyncLlamaCloud", str]:
     return client, project_id
 
 
+@api_retry
 async def download_file_from_llamacloud(file_id: str) -> bytes:
     """Download a file from LlamaCloud using its file_id.
+    
+    This function automatically retries on transient errors (503, 429, 500)
+    with exponential backoff.
     
     Args:
         file_id: The LlamaCloud file ID
@@ -101,10 +170,14 @@ async def download_file_from_llamacloud(file_id: str) -> bytes:
         raise ValueError(f"Failed to download file {file_id} from LlamaCloud: {e}") from e
 
 
+@api_retry
 async def upload_file_to_llamacloud(
     file_content: bytes, filename: str, external_file_id: Optional[str] = None
 ) -> str:
     """Upload a file to LlamaCloud.
+    
+    This function automatically retries on transient errors (503, 429, 500)
+    with exponential backoff.
     
     Args:
         file_content: The file content as bytes

@@ -11,6 +11,7 @@ from google.genai import types
 import httpx
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_parse import LlamaParse
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential, before_sleep_log
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
@@ -21,9 +22,19 @@ from .models import (
     EmailProcessingResult,
     SendEmailRequest,
 )
-from .utils import download_file_from_llamacloud, text_to_html
+from .utils import download_file_from_llamacloud, text_to_html, is_retryable_error
 
 logger = logging.getLogger(__name__)
+
+
+# Create retry decorator for LLM API calls
+llm_api_retry = retry(
+    retry=retry_if_exception(is_retryable_error),
+    stop=stop_after_attempt(5),  # Maximum 5 attempts
+    wait=wait_exponential(multiplier=1, min=1, max=45),  # Exponential backoff
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True,
+)
 
 
 class EmailStartEvent(StartEvent):
@@ -80,6 +91,48 @@ class EmailWorkflow(Workflow):
     llm = GoogleGenAI(model="gemini-2.5-flash", api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+    @llm_api_retry
+    async def _llm_complete_with_retry(self, prompt: str) -> str:
+        """Execute LLM completion with automatic retry on transient errors.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            
+        Returns:
+            The LLM response as a string
+        """
+        response = await self.llm.acomplete(prompt)
+        return str(response)
+
+    @llm_api_retry
+    async def _genai_generate_content_with_retry(self, model: str, contents: list) -> str:
+        """Execute Gemini multi-modal content generation with automatic retry.
+        
+        Args:
+            model: The model name (e.g., "gemini-2.0-flash-exp")
+            contents: List of content parts (text, images, etc.)
+            
+        Returns:
+            The generated text response
+        """
+        response = await self.genai_client.aio.models.generate_content(
+            model=model,
+            contents=contents
+        )
+        return response.text
+
+    @llm_api_retry
+    async def _parse_document_with_retry(self, file_path: str) -> list:
+        """Parse a document using LlamaParse with automatic retry.
+        
+        Args:
+            file_path: Path to the file to parse
+            
+        Returns:
+            List of parsed documents
+        """
+        return self.llama_parser.load_data(file_path)
 
     @step
     async def receive_email(
@@ -248,13 +301,12 @@ class EmailWorkflow(Workflow):
                 
                 if "pdf" in mime_type or "sheet" in mime_type or "csv" in mime_type:
                     # Use LlamaParse for document types
-                    documents = self.llama_parser.load_data(tmp_path)
+                    documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
                     # Summarize with LLM
                     prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
-                    response = await self.llm.acomplete(prompt)
-                    summary = str(response)
+                    summary = await self._llm_complete_with_retry(prompt)
 
                 elif "image" in mime_type:
                     # Use Google Gemini's vision capabilities for image analysis
@@ -276,12 +328,10 @@ class EmailWorkflow(Workflow):
                     )
                     
                     # Use async API to avoid blocking the event loop
-                    response = await self.genai_client.aio.models.generate_content(
-                        model="gemini-2.0-flash-exp",  # Using vision-capable model
+                    summary = await self._genai_generate_content_with_retry(
+                        model="gemini-2.0-flash-exp",
                         contents=[prompt_text, image_part]
                     )
-                    
-                    summary = response.text
 
                 elif (
                     "word" in mime_type
@@ -295,13 +345,12 @@ class EmailWorkflow(Workflow):
                     logger.info(
                         f"Processing office document: {attachment.name} ({mime_type})"
                     )
-                    documents = self.llama_parser.load_data(tmp_path)
+                    documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
                     # Summarize with LLM
                     prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
-                    response = await self.llm.acomplete(prompt)
-                    summary = str(response)
+                    summary = await self._llm_complete_with_retry(prompt)
 
                 elif (
                     "json" in mime_type
@@ -323,8 +372,7 @@ class EmailWorkflow(Workflow):
                         
                         # Summarize with LLM
                         prompt = f"Provide a short, bullet-point summary of the following {mime_type} content:\n\n{content}"
-                        response = await self.llm.acomplete(prompt)
-                        summary = str(response)
+                        summary = await self._llm_complete_with_retry(prompt)
                     except UnicodeDecodeError:
                         summary = f"Could not decode text file {attachment.name} as UTF-8"
                         success = False
