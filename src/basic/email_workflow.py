@@ -19,6 +19,7 @@ from .models import (
     EmailProcessingResult,
     SendEmailRequest,
 )
+from .utils import text_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +126,13 @@ class EmailWorkflow(Workflow):
                         f"from_email source={repr(email_data.to_email)}, "
                         f"from_email final={repr(email_data.to_email or None)}"
                     )
+                    response_text = f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments)."
                     response_email = SendEmailRequest(
                         to_email=email_data.from_email,
                         from_email=email_data.to_email or None,
                         subject=f"Re: {email_data.subject}",
-                        text=f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments).",
+                        text=response_text,
+                        html=text_to_html(response_text),
                     )
                     async with httpx.AsyncClient() as client:
                         response = await client.post(
@@ -316,11 +319,13 @@ class EmailWorkflow(Workflow):
                     f"from_email source={repr(email_data.to_email)}, "
                     f"from_email final={repr(email_data.to_email or None)}"
                 )
+                response_text = f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}"
                 response_email = SendEmailRequest(
                     to_email=email_data.from_email,
                     from_email=email_data.to_email or None,
                     subject=f"Re: {email_data.subject}",
-                    text=f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}",
+                    text=response_text,
+                    html=text_to_html(response_text),
                 )
 
                 async with httpx.AsyncClient() as client:
