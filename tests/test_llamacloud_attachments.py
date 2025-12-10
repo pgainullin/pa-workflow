@@ -5,6 +5,9 @@ This module tests that attachments can be provided either as:
 2. LlamaCloud file_id (new behavior)
 """
 
+import pytest
+from pydantic import ValidationError
+
 from basic.models import Attachment, SendEmailRequest
 
 
@@ -53,15 +56,15 @@ def test_attachment_with_both_content_and_file_id():
 
 
 def test_attachment_without_content_or_file_id():
-    """Test that Attachment can be created without content or file_id (both optional)."""
-    attachment = Attachment(
-        id="1",
-        name="test.pdf",
-        type="application/pdf",
-    )
-
-    assert attachment.content is None
-    assert attachment.file_id is None
+    """Test that Attachment requires either content or file_id."""
+    with pytest.raises(ValidationError) as exc_info:
+        Attachment(
+            id="1",
+            name="test.pdf",
+            type="application/pdf",
+        )
+    
+    assert "Attachment must have either 'content' or 'file_id'" in str(exc_info.value)
 
 
 def test_send_email_request_with_attachments():
