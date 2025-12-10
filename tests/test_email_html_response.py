@@ -4,32 +4,8 @@ This module tests that the email workflow properly sets the HTML field
 in the SendEmailRequest instead of using the default "(No html content)".
 """
 
-import html
-
 from basic.models import SendEmailRequest
-
-
-def text_to_html(text: str) -> str:
-    """Convert plain text to simple HTML format.
-
-    This is a copy of the function from email_workflow.py for testing purposes.
-    We copy it to avoid import issues with API keys.
-
-    Args:
-        text: Plain text string with newlines
-
-    Returns:
-        HTML-formatted string with paragraphs
-    """
-    # Escape HTML special characters to prevent XSS
-    escaped_text = html.escape(text)
-    # Split text into paragraphs (separated by double newlines)
-    paragraphs = escaped_text.split("\n\n")
-    # Wrap each paragraph in <p> tags, converting single newlines to <br>
-    html_paragraphs = [
-        f"<p>{para.replace(chr(10), '<br>')}</p>" for para in paragraphs if para.strip()
-    ]
-    return "".join(html_paragraphs)
+from basic.utils import text_to_html
 
 
 def test_send_email_request_html_field_default():
