@@ -118,7 +118,7 @@ The workflow succeeds after the transient overload condition clears, and the use
 
 ## Testing
 
-The retry mechanism is thoroughly tested with 18 test cases covering:
+The retry mechanism is thoroughly tested with 19 test cases covering:
 
 - Error detection for all retryable error types
 - Proper identification of non-retryable errors

@@ -44,12 +44,15 @@ def is_retryable_error(exception: Exception) -> bool:
     error_str = str(exception)
     
     # Check for HTTP status codes with context to avoid false positives
-    # Matches patterns like "503 UNAVAILABLE", "HTTP 503", "status: 503", etc.
-    # But not "503 items"
+    # Pattern 1: Matches HTTP status codes with error keywords
+    #   Examples: "503 UNAVAILABLE", "500 internal error", "429 too many requests"
+    # Pattern 2: Also matches status codes with punctuation
+    #   Examples: "status: 503", "HTTP 500 - error", "error-503"
     if re.search(r'(http\s+)?[45]0[03](\s+(unavailable|error|server|internal|service|too\s+many)|\s*[:\-])', error_str, re.IGNORECASE):
         return True
     
-    # Also match common HTTP error formats
+    # Matches common HTTP error message formats
+    # Examples: "429 error", "503 unavailable", "500 internal server error"
     if re.search(r'\b(429|500|503)\s+(error|unavailable|too\s+many|internal|server)', error_str, re.IGNORECASE):
         return True
     
@@ -85,8 +88,8 @@ def is_retryable_error(exception: Exception) -> bool:
 # Create a reusable retry decorator for API calls
 api_retry = retry(
     retry=retry_if_exception(is_retryable_error),
-    stop=stop_after_attempt(5),  # Maximum 5 attempts
-    wait=wait_exponential(multiplier=1, min=1, max=45),  # Exponential backoff: 1s, 2s, 4s, 8s, 16s (max 45s)
+    stop=stop_after_attempt(5),  # Max 5 attempts total (1 initial + 4 retries)
+    wait=wait_exponential(multiplier=1, min=1, max=45),  # Exponential backoff: 1s, 2s, 4s, 8s
     before_sleep=before_sleep_log(logger, logging.WARNING),  # Log retry attempts
     reraise=True,  # Re-raise the exception after all retries exhausted
 )
