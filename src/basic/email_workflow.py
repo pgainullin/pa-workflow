@@ -6,6 +6,8 @@ import os
 import pathlib
 import tempfile
 
+import google.genai as genai
+from google.genai import types
 import httpx
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_parse import LlamaParse
@@ -76,6 +78,8 @@ class EmailWorkflow(Workflow):
 
     llama_parser = LlamaParse(result_type="markdown")
     llm = GoogleGenAI(model="gemini-2.5-flash", api_key=os.getenv("GEMINI_API_KEY"))
+    # Create genai client for multi-modal support (images, videos, etc.)
+    genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     @step
     async def receive_email(
@@ -239,25 +243,107 @@ class EmailWorkflow(Workflow):
                 tmp_path = tmp.name
 
             try:
-                # Simple classification based on MIME type
+                # Classification and processing based on MIME type
                 mime_type = attachment.type.lower()
+                
                 if "pdf" in mime_type or "sheet" in mime_type or "csv" in mime_type:
-                    # Use LlamaParse
+                    # Use LlamaParse for document types
                     documents = self.llama_parser.load_data(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
-                    # Summarize with OpenAI
+                    # Summarize with LLM
                     prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
                     response = await self.llm.acomplete(prompt)
                     summary = str(response)
 
                 elif "image" in mime_type:
-                    summary = (
-                        f"This is an image named '{attachment.name}'. Summarization of images "
-                        "is not yet implemented."
+                    # Use Google Gemini's vision capabilities for image analysis
+                    logger.info(f"Processing image attachment: {attachment.name}")
+                    
+                    # Create a Part object with the image data
+                    image_part = types.Part.from_bytes(
+                        data=decoded_content,
+                        mime_type=mime_type
                     )
+                    
+                    # Generate content with both text prompt and image
+                    prompt_text = (
+                        f"Analyze this image (filename: {attachment.name}) and provide:\n"
+                        "1. A brief description of what the image shows\n"
+                        "2. Any notable objects, people, or text visible\n"
+                        "3. The general context or setting\n\n"
+                        "Keep the summary concise and informative."
+                    )
+                    
+                    # Use async API to avoid blocking the event loop
+                    response = await self.genai_client.aio.models.generate_content(
+                        model="gemini-2.0-flash-exp",  # Using vision-capable model
+                        contents=[prompt_text, image_part]
+                    )
+                    
+                    summary = response.text
+
+                elif (
+                    "word" in mime_type
+                    or "msword" in mime_type
+                    or "wordprocessingml" in mime_type
+                    or "presentationml" in mime_type
+                    or "presentation" in mime_type
+                    or "powerpoint" in mime_type
+                ):
+                    # Word documents, PowerPoint - use LlamaParse
+                    logger.info(
+                        f"Processing office document: {attachment.name} ({mime_type})"
+                    )
+                    documents = self.llama_parser.load_data(tmp_path)
+                    content = "\n".join([doc.get_content() for doc in documents])
+
+                    # Summarize with LLM
+                    prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
+                    response = await self.llm.acomplete(prompt)
+                    summary = str(response)
+
+                elif (
+                    "json" in mime_type
+                    or "xml" in mime_type
+                    or "markdown" in mime_type
+                    or "text" in mime_type
+                ):
+                    # JSON, XML, Markdown, plain text - read directly and summarize
+                    # Note: Ordered from most specific to least specific
+                    logger.info(f"Processing text file: {attachment.name} ({mime_type})")
+                    try:
+                        # Try to decode as UTF-8 text
+                        content = decoded_content.decode("utf-8")
+                        
+                        # Truncate if too long (to avoid token limits)
+                        max_chars = 50000
+                        if len(content) > max_chars:
+                            content = content[:max_chars] + "\n... (truncated)"
+                        
+                        # Summarize with LLM
+                        prompt = f"Provide a short, bullet-point summary of the following {mime_type} content:\n\n{content}"
+                        response = await self.llm.acomplete(prompt)
+                        summary = str(response)
+                    except UnicodeDecodeError:
+                        summary = f"Could not decode text file {attachment.name} as UTF-8"
+                        success = False
+
+                elif "video" in mime_type or "audio" in mime_type:
+                    # Videos and audio - note that these require special handling
+                    summary = (
+                        f"This is a {mime_type} file named '{attachment.name}'. "
+                        "Video and audio summarization requires uploading to Gemini's File API "
+                        "and is not yet implemented in this workflow."
+                    )
+                    
                 else:
-                    summary = f"Unsupported attachment type: {mime_type}"
+                    summary = (
+                        f"Unsupported attachment type: {mime_type} (filename: {attachment.name}). "
+                        "Supported types: PDF, images, spreadsheets, CSV, Word documents, "
+                        "PowerPoint presentations, text files, JSON, XML, and Markdown."
+                    )
+                    success = False
 
             except Exception as e:
                 logger.exception("Failed to process attachment %s", attachment.name)
