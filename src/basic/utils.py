@@ -118,7 +118,7 @@ async def upload_file_to_llamacloud(
         # Wrap all LlamaCloud API errors (network, auth, quota, etc.)
         # in ValueError with preserved exception chain for debugging
         logger.error(f"Failed to upload file {filename} to LlamaCloud: {e}")
-        raise ValueError(f"Failed to upload file to LlamaCloud: {e}") from e
+        raise ValueError(f"Failed to upload file {filename} to LlamaCloud: {e}") from e
 
 
 async def create_llamacloud_attachment(
