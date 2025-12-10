@@ -9,12 +9,18 @@ from pydantic import BaseModel, Field
 
 
 class Attachment(BaseModel):
-    """Represents a single email attachment."""
+    """Represents a single email attachment.
+    
+    Supports two modes:
+    1. Base64 content mode: content field contains base64-encoded data
+    2. LlamaCloud file mode: file_id references a file in LlamaCloud
+    """
 
     id: str  # Or 'content-id'
     name: str  # Filename
     type: str  # MIME type (e.g., 'application/pdf')
-    content: str  # Base64-encoded content
+    content: str | None = None  # Base64-encoded content (optional if file_id is provided)
+    file_id: str | None = None  # LlamaCloud file ID (optional if content is provided)
 
 
 class CallbackConfig(BaseModel):
@@ -72,4 +78,8 @@ class SendEmailRequest(BaseModel):
     )
     reply_to: str | None = Field(
         default=None, description="Reply-to email address (optional)"
+    )
+    attachments: list[Attachment] = Field(
+        default_factory=list,
+        description="List of attachments (with file_id for LlamaCloud files)",
     )
