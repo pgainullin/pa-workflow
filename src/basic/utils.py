@@ -1,11 +1,15 @@
 """Utility functions for the basic workflow package."""
 
+from __future__ import annotations
+
 import html
 import logging
 import os
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from llama_cloud_services import FileClient
+
     from .models import Attachment
 
 logger = logging.getLogger(__name__)
@@ -31,11 +35,11 @@ def text_to_html(text: str) -> str:
     return "".join(html_paragraphs)
 
 
-async def get_file_client():
+async def get_file_client() -> FileClient:
     """Get a FileClient instance for LlamaCloud operations.
     
     Returns:
-        FileClient configured with API key and project ID from environment
+        FileClient: Configured with API key and project ID from environment
         
     Raises:
         ValueError: If required environment variables are not set
@@ -64,14 +68,21 @@ async def download_file_from_llamacloud(file_id: str) -> bytes:
         The file content as bytes
         
     Raises:
-        ValueError: If file_id is invalid or file cannot be downloaded
+        ValueError: If file_id is invalid, file cannot be downloaded, or any
+            LlamaCloud API error occurs. The original exception is preserved
+            in the chain for debugging.
     """
     try:
         file_client = await get_file_client()
         content = await file_client.read_file_content(file_id=file_id)
         logger.info(f"Successfully downloaded file {file_id} from LlamaCloud")
         return content
+    except ValueError:
+        # Re-raise ValueError from get_file_client (missing env vars)
+        raise
     except Exception as e:
+        # Wrap all LlamaCloud API errors (network, auth, not found, etc.)
+        # in ValueError with preserved exception chain for debugging
         logger.error(f"Failed to download file {file_id} from LlamaCloud: {e}")
         raise ValueError(f"Failed to download file from LlamaCloud: {e}") from e
 
@@ -90,7 +101,8 @@ async def upload_file_to_llamacloud(
         The LlamaCloud file_id of the uploaded file
         
     Raises:
-        ValueError: If upload fails
+        ValueError: If upload fails due to any reason (network, auth, quota, etc.).
+            The original exception is preserved in the chain for debugging.
     """
     try:
         file_client = await get_file_client()
@@ -99,7 +111,12 @@ async def upload_file_to_llamacloud(
         )
         logger.info(f"Successfully uploaded file {filename} to LlamaCloud: {file.id}")
         return file.id
+    except ValueError:
+        # Re-raise ValueError from get_file_client (missing env vars)
+        raise
     except Exception as e:
+        # Wrap all LlamaCloud API errors (network, auth, quota, etc.)
+        # in ValueError with preserved exception chain for debugging
         logger.error(f"Failed to upload file {filename} to LlamaCloud: {e}")
         raise ValueError(f"Failed to upload file to LlamaCloud: {e}") from e
 
