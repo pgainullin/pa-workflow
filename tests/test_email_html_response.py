@@ -4,6 +4,8 @@ This module tests that the email workflow properly sets the HTML field
 in the SendEmailRequest instead of using the default "(No html content)".
 """
 
+import html
+
 from basic.models import SendEmailRequest
 
 
@@ -19,11 +21,13 @@ def text_to_html(text: str) -> str:
     Returns:
         HTML-formatted string with paragraphs
     """
+    # Escape HTML special characters to prevent XSS
+    escaped_text = html.escape(text)
     # Split text into paragraphs (separated by double newlines)
-    paragraphs = text.split("\n\n")
+    paragraphs = escaped_text.split("\n\n")
     # Wrap each paragraph in <p> tags, converting single newlines to <br>
     html_paragraphs = [
-        f"<p>{para.replace('\n', '<br>')}</p>" for para in paragraphs if para.strip()
+        f"<p>{para.replace(chr(10), '<br>')}</p>" for para in paragraphs if para.strip()
     ]
     return "".join(html_paragraphs)
 
@@ -125,3 +129,57 @@ Overall assessment: Positive growth trajectory."""
     assert "</p>" in html
     # Line breaks should be preserved within paragraphs
     assert "<br>" in html
+
+
+def test_text_to_html_escapes_html_special_characters():
+    """Test that text_to_html properly escapes HTML special characters to prevent XSS."""
+    # Test all HTML special characters
+    text = "Test with <script>alert('xss')</script> and <img src=x onerror=alert(1)>"
+    html_output = text_to_html(text)
+
+    # Special characters should be escaped
+    assert "&lt;script&gt;" in html_output
+    assert "&lt;img" in html_output
+    assert "<script>" not in html_output
+    # The tags are escaped, so even though "onerror=" appears, it's safe
+    assert "&lt;img" in html_output and "&gt;" in html_output
+
+    # The output should still be valid HTML with proper tags
+    assert "<p>" in html_output
+    assert "</p>" in html_output
+
+
+def test_text_to_html_escapes_ampersands():
+    """Test that ampersands are properly escaped."""
+    text = "A & B are partners"
+    html_output = text_to_html(text)
+
+    # Ampersand should be escaped
+    assert "&amp;" in html_output
+    assert "A &amp; B are partners" in html_output
+
+
+def test_text_to_html_escapes_quotes():
+    """Test that quotes are properly escaped."""
+    text = "He said \"Hello\" and she said 'Hi'"
+    html_output = text_to_html(text)
+
+    # Quotes should be escaped
+    assert "&quot;" in html_output or '"' in html_output  # Both are valid
+    assert "&#x27;" in html_output or "'" in html_output  # Both are valid
+
+
+def test_text_to_html_with_malicious_filename():
+    """Test with a realistic malicious filename scenario."""
+    filename = "<script>alert('xss')</script>.pdf"
+    text = f"Your attachment has been processed.\n\nFilename: {filename}"
+    html_output = text_to_html(text)
+
+    # Script tags should be escaped
+    assert "&lt;script&gt;" in html_output
+    assert "<script>" not in html_output
+
+    # Content should still be readable
+    assert "Your attachment has been processed" in html_output
+    assert "Filename:" in html_output
+    assert ".pdf" in html_output

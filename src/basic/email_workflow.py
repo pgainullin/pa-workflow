@@ -1,6 +1,7 @@
 """Email processing workflow for handling inbound emails."""
 
 import base64
+import html
 import logging
 import os
 import pathlib
@@ -32,11 +33,13 @@ def text_to_html(text: str) -> str:
     Returns:
         HTML-formatted string with paragraphs
     """
+    # Escape HTML special characters to prevent XSS
+    escaped_text = html.escape(text)
     # Split text into paragraphs (separated by double newlines)
-    paragraphs = text.split("\n\n")
+    paragraphs = escaped_text.split("\n\n")
     # Wrap each paragraph in <p> tags, converting single newlines to <br>
     html_paragraphs = [
-        f"<p>{para.replace('\n', '<br>')}</p>" for para in paragraphs if para.strip()
+        f"<p>{para.replace(chr(10), '<br>')}</p>" for para in paragraphs if para.strip()
     ]
     return "".join(html_paragraphs)
 
