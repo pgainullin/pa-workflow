@@ -84,6 +84,29 @@ def test_is_retryable_error_with_non_retryable():
     assert is_retryable_error(error) is False
 
 
+def test_is_retryable_error_avoids_false_positives():
+    """Test that error detection doesn't match unrelated strings."""
+    # Should not match numbers in non-HTTP contexts
+    error = Exception("Processing 503 items failed")
+    assert is_retryable_error(error) is False
+    
+    # Should not match partial words
+    error = Exception("The quotable phrase was disconnection warning")
+    assert is_retryable_error(error) is False
+    
+    # Should not match "timeout" in other contexts
+    error = Exception("No timeouts configured")
+    assert is_retryable_error(error) is False
+    
+    # Should match actual quota exceeded error
+    error = Exception("Quota exceeded for this API")
+    assert is_retryable_error(error) is True
+    
+    # Should match actual connection error
+    error = Exception("Connection refused by server")
+    assert is_retryable_error(error) is True
+
+
 def test_is_retryable_error_with_httpx_timeout():
     """Test that httpx timeout exceptions are identified as retryable."""
     try:

@@ -15,14 +15,14 @@ This ensures the workflow continues processing even when external services exper
 ## Retry Configuration
 
 ### Parameters
-- **Max Attempts**: 5 (including the initial attempt)
+- **Max Attempts**: 5 (1 initial attempt + 4 retries)
 - **Backoff Strategy**: Exponential with multiplier of 1
+  - Initial attempt: immediate
   - 1st retry: wait 1 second
   - 2nd retry: wait 2 seconds
   - 3rd retry: wait 4 seconds
   - 4th retry: wait 8 seconds
-  - 5th retry: wait 16 seconds (capped at 45 seconds max)
-- **Total Max Wait Time**: ~45 seconds across all retries
+- **Total Max Wait Time**: ~15 seconds of backoff (1+2+4+8) plus API call time
 
 ### Retryable Errors
 

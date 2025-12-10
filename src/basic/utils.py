@@ -38,26 +38,38 @@ def is_retryable_error(exception: Exception) -> bool:
     Returns:
         True if the error should be retried
     """
+    import re
+    
     # Convert exception to string for error message matching
-    error_str = str(exception).lower()
+    error_str = str(exception)
     
-    # Check for HTTP status codes in error messages
-    retryable_codes = ["429", "500", "503"]
-    if any(code in error_str for code in retryable_codes):
+    # Check for HTTP status codes with context to avoid false positives
+    # Matches patterns like "503 UNAVAILABLE", "HTTP 503", "status: 503", etc.
+    # But not "503 items"
+    if re.search(r'(http\s+)?[45]0[03](\s+(unavailable|error|server|internal|service|too\s+many)|\s*[:\-])', error_str, re.IGNORECASE):
         return True
     
-    # Check for common transient error messages
-    retryable_messages = [
-        "rate limit",
-        "quota",
-        "overload",
-        "unavailable",
-        "timeout",
-        "connection",
-        "temporarily",
+    # Also match common HTTP error formats
+    if re.search(r'\b(429|500|503)\s+(error|unavailable|too\s+many|internal|server)', error_str, re.IGNORECASE):
+        return True
+    
+    # Convert to lowercase for remaining checks
+    error_str_lower = error_str.lower()
+    
+    # Check for common transient error messages with word boundaries
+    retryable_patterns = [
+        r'\brate.?limit',  # rate limit, rate-limit
+        r'\bquota\s+(exceeded|limit)',  # quota exceeded/limit
+        r'\boverload(ed)?',
+        r'\bunavailable\b',  # unavailable (not unavailability)
+        r'\btimeout\b',  # timeout (not timeouts as part of other words)
+        r'\bconnection\s+(error|refused|failed|timeout)',  # connection error/refused/failed
+        r'\btemporarily\s+unavailable',
     ]
-    if any(msg in error_str for msg in retryable_messages):
-        return True
+    
+    for pattern in retryable_patterns:
+        if re.search(pattern, error_str_lower):
+            return True
     
     # Check for httpx-specific errors
     try:
