@@ -275,7 +275,8 @@ class EmailWorkflow(Workflow):
                         "Keep the summary concise and informative."
                     )
                     
-                    response = self.genai_client.models.generate_content(
+                    # Use async API to avoid blocking the event loop
+                    response = await self.genai_client.aio.models.generate_content(
                         model="gemini-2.0-flash-exp",  # Using vision-capable model
                         contents=[prompt_text, image_part]
                     )
@@ -285,8 +286,8 @@ class EmailWorkflow(Workflow):
                 elif (
                     "word" in mime_type
                     or "msword" in mime_type
-                    or "document" in mime_type
-                    or "officedocument" in mime_type
+                    or "wordprocessingml" in mime_type
+                    or "presentationml" in mime_type
                     or "presentation" in mime_type
                     or "powerpoint" in mime_type
                 ):
@@ -308,7 +309,8 @@ class EmailWorkflow(Workflow):
                     or "markdown" in mime_type
                     or "text" in mime_type
                 ):
-                    # Plain text, JSON, XML, Markdown - read directly and summarize
+                    # JSON, XML, Markdown, plain text - read directly and summarize
+                    # Note: Ordered from most specific to least specific
                     logger.info(f"Processing text file: {attachment.name} ({mime_type})")
                     try:
                         # Try to decode as UTF-8 text

@@ -60,12 +60,19 @@ async def test_image_attachment_processing():
         auth_token="test-token"
     )
     
-    # Mock the genai client
+    # Mock the genai client with async support
     mock_response = MagicMock()
     mock_response.text = "This image shows a simple 1x1 pixel test pattern."
     
+    # Create async mock for aio.models.generate_content
+    mock_aio_models = MagicMock()
+    mock_aio_models.generate_content = AsyncMock(return_value=mock_response)
+    
+    mock_aio = MagicMock()
+    mock_aio.models = mock_aio_models
+    
     mock_genai_client = MagicMock()
-    mock_genai_client.models.generate_content = MagicMock(return_value=mock_response)
+    mock_genai_client.aio = mock_aio
     
     # Mock httpx for callback
     mock_http_response = MagicMock()
@@ -82,15 +89,14 @@ async def test_image_attachment_processing():
             from basic.email_workflow import email_workflow
             
             # Run the workflow with the email data
-            from workflows.events import StartEvent
-            result = await email_workflow.run(
+            await email_workflow.run(
                 email_data=email_data,
                 callback=callback
             )
     
     # Verify that the genai client was called
-    assert mock_genai_client.models.generate_content.called
-    call_args = mock_genai_client.models.generate_content.call_args
+    assert mock_aio_models.generate_content.called
+    call_args = mock_aio_models.generate_content.call_args
     
     # Check that it was called with the right model
     assert call_args.kwargs["model"] == "gemini-2.0-flash-exp"
@@ -99,6 +105,7 @@ async def test_image_attachment_processing():
     contents = call_args.kwargs["contents"]
     assert len(contents) == 2
     assert isinstance(contents[0], str)  # Prompt text
+    # contents[1] should be a Part object with image data
     # contents[1] should be a Part object with image data
 
 
@@ -157,7 +164,7 @@ async def test_word_document_attachment():
             with patch.object(EmailWorkflow, "llm", mock_llm):
                 from basic.email_workflow import email_workflow
                 
-                result = await email_workflow.run(
+                await email_workflow.run(
                     email_data=email_data,
                     callback=callback
                 )
@@ -217,7 +224,7 @@ async def test_text_file_attachment():
         with patch.object(EmailWorkflow, "llm", mock_llm):
             from basic.email_workflow import email_workflow
             
-            result = await email_workflow.run(
+            await email_workflow.run(
                 email_data=email_data,
                 callback=callback
             )
@@ -279,7 +286,7 @@ async def test_json_file_attachment():
         with patch.object(EmailWorkflow, "llm", mock_llm):
             from basic.email_workflow import email_workflow
             
-            result = await email_workflow.run(
+            await email_workflow.run(
                 email_data=email_data,
                 callback=callback
             )
@@ -343,7 +350,7 @@ async def test_powerpoint_attachment():
             with patch.object(EmailWorkflow, "llm", mock_llm):
                 from basic.email_workflow import email_workflow
                 
-                result = await email_workflow.run(
+                await email_workflow.run(
                     email_data=email_data,
                     callback=callback
                 )
@@ -391,7 +398,7 @@ async def test_video_attachment_acknowledgment():
     with patch("httpx.AsyncClient", return_value=mock_http_client):
         from basic.email_workflow import email_workflow
         
-        result = await email_workflow.run(
+        await email_workflow.run(
             email_data=email_data,
             callback=callback
         )
@@ -445,7 +452,7 @@ async def test_unsupported_attachment_type():
     with patch("httpx.AsyncClient", return_value=mock_http_client):
         from basic.email_workflow import email_workflow
         
-        result = await email_workflow.run(
+        await email_workflow.run(
             email_data=email_data,
             callback=callback
         )
