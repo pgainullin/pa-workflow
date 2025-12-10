@@ -12,7 +12,7 @@ to avoid API connection errors during test collection.
 
 import base64
 import os
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
