@@ -36,7 +36,7 @@ def text_to_html(text: str) -> str:
     paragraphs = text.split("\n\n")
     # Wrap each paragraph in <p> tags, converting single newlines to <br>
     html_paragraphs = [
-        f"<p>{para.replace(chr(10), '<br>')}</p>" for para in paragraphs if para.strip()
+        f"<p>{para.replace('\n', '<br>')}</p>" for para in paragraphs if para.strip()
     ]
     return "".join(html_paragraphs)
 
