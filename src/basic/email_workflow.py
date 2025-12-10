@@ -23,6 +23,24 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
+def text_to_html(text: str) -> str:
+    """Convert plain text to simple HTML format.
+
+    Args:
+        text: Plain text string with newlines
+
+    Returns:
+        HTML-formatted string with paragraphs
+    """
+    # Split text into paragraphs (separated by double newlines)
+    paragraphs = text.split("\n\n")
+    # Wrap each paragraph in <p> tags, converting single newlines to <br>
+    html_paragraphs = [
+        f"<p>{para.replace(chr(10), '<br>')}</p>" for para in paragraphs if para.strip()
+    ]
+    return "".join(html_paragraphs)
+
+
 class EmailStartEvent(StartEvent):
     """Start event for email workflow containing email data and callback config.
 
@@ -125,11 +143,13 @@ class EmailWorkflow(Workflow):
                         f"from_email source={repr(email_data.to_email)}, "
                         f"from_email final={repr(email_data.to_email or None)}"
                     )
+                    response_text = f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments)."
                     response_email = SendEmailRequest(
                         to_email=email_data.from_email,
                         from_email=email_data.to_email or None,
                         subject=f"Re: {email_data.subject}",
-                        text=f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments).",
+                        text=response_text,
+                        html=text_to_html(response_text),
                     )
                     async with httpx.AsyncClient() as client:
                         response = await client.post(
@@ -316,11 +336,13 @@ class EmailWorkflow(Workflow):
                     f"from_email source={repr(email_data.to_email)}, "
                     f"from_email final={repr(email_data.to_email or None)}"
                 )
+                response_text = f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}"
                 response_email = SendEmailRequest(
                     to_email=email_data.from_email,
                     from_email=email_data.to_email or None,
                     subject=f"Re: {email_data.subject}",
-                    text=f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}",
+                    text=response_text,
+                    html=text_to_html(response_text),
                 )
 
                 async with httpx.AsyncClient() as client:
