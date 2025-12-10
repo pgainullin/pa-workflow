@@ -19,7 +19,7 @@ from .models import (
     EmailProcessingResult,
     SendEmailRequest,
 )
-from .utils import text_to_html
+from .utils import download_file_from_llamacloud, text_to_html
 
 logger = logging.getLogger(__name__)
 
@@ -202,9 +202,29 @@ class EmailWorkflow(Workflow):
             success = True
 
             try:
-                decoded_content = base64.b64decode(attachment.content)
-            except (ValueError, TypeError):
-                summary = f"Could not decode attachment: {attachment.name}"
+                # Get file content either from base64 or LlamaCloud
+                if attachment.file_id:
+                    # Download from LlamaCloud
+                    logger.info(
+                        f"Downloading attachment {attachment.name} from LlamaCloud (file_id: {attachment.file_id})"
+                    )
+                    decoded_content = await download_file_from_llamacloud(
+                        attachment.file_id
+                    )
+                elif attachment.content:
+                    # Decode from base64
+                    decoded_content = base64.b64decode(attachment.content)
+                else:
+                    summary = f"Attachment {attachment.name} has neither content nor file_id"
+                    return AttachmentSummaryEvent(
+                        summary=summary,
+                        filename=attachment.name,
+                        success=False,
+                        original_email=ev.original_email,
+                        callback=ev.callback,
+                    )
+            except (ValueError, TypeError) as e:
+                summary = f"Could not get attachment content: {attachment.name} - {e!s}"
                 return AttachmentSummaryEvent(
                     summary=summary,
                     filename=attachment.name,
