@@ -8,7 +8,7 @@ import os
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from llama_cloud_services.files import FileClient
+    from llama_cloud.client import AsyncLlamaCloud
 
     from .models import Attachment
 
@@ -35,17 +35,16 @@ def text_to_html(text: str) -> str:
     return "".join(html_paragraphs)
 
 
-async def get_file_client() -> FileClient:
-    """Get a FileClient instance for LlamaCloud operations.
+async def get_llama_cloud_client() -> tuple["AsyncLlamaCloud", str]:
+    """Get an AsyncLlamaCloud client instance for LlamaCloud operations.
     
     Returns:
-        FileClient: Configured with API key and project ID from environment
+        tuple: (AsyncLlamaCloud client, project_id)
         
     Raises:
         ValueError: If required environment variables are not set
     """
     from llama_cloud.client import AsyncLlamaCloud
-    from llama_cloud_services.files import FileClient
 
     api_key = os.getenv("LLAMA_CLOUD_API_KEY")
     if not api_key:
@@ -55,8 +54,8 @@ async def get_file_client() -> FileClient:
     if not project_id:
         raise ValueError("LLAMA_CLOUD_PROJECT_ID environment variable is required")
     
-    client = AsyncLlamaCloud(api_key=api_key)
-    return FileClient(client, project_id=project_id)
+    client = AsyncLlamaCloud(token=api_key)
+    return client, project_id
 
 
 async def download_file_from_llamacloud(file_id: str) -> bytes:
@@ -73,13 +72,27 @@ async def download_file_from_llamacloud(file_id: str) -> bytes:
             LlamaCloud API error occurs. The original exception is preserved
             in the chain for debugging.
     """
+    import httpx
+    
     try:
-        file_client = await get_file_client()
-        content = await file_client.read_file_content(file_id=file_id)
+        client, project_id = await get_llama_cloud_client()
+        
+        # Get presigned URL for the file
+        presigned_url_obj = await client.files.read_file_content(
+            id=file_id,
+            project_id=project_id
+        )
+        
+        # Fetch the actual file content from the presigned URL
+        async with httpx.AsyncClient() as http_client:
+            response = await http_client.get(presigned_url_obj.url)
+            response.raise_for_status()
+            content = response.content
+            
         logger.info(f"Successfully downloaded file {file_id} from LlamaCloud")
         return content
     except ValueError:
-        # Re-raise ValueError from get_file_client (missing env vars)
+        # Re-raise ValueError from get_llama_cloud_client (missing env vars)
         raise
     except Exception as e:
         # Wrap all LlamaCloud API errors (network, auth, not found, etc.)
@@ -105,17 +118,26 @@ async def upload_file_to_llamacloud(
         ValueError: If upload fails due to any reason (network, auth, quota, etc.).
             The original exception is preserved in the chain for debugging.
     """
+    import io
+    
     try:
-        file_client = await get_file_client()
-        # upload_bytes signature: upload_bytes(bytes, external_file_id)
-        # Use filename as external_file_id if no external_file_id is provided
-        file = await file_client.upload_bytes(
-            file_content, external_file_id or filename
+        client, project_id = await get_llama_cloud_client()
+        
+        # Create a file-like object from bytes
+        file_obj = io.BytesIO(file_content)
+        file_obj.name = filename
+        
+        # Upload the file
+        file = await client.files.upload_file(
+            upload_file=file_obj,
+            external_file_id=external_file_id or filename,
+            project_id=project_id
         )
+        
         logger.info(f"Successfully uploaded file {filename} to LlamaCloud: {file.id}")
         return file.id
     except ValueError:
-        # Re-raise ValueError from get_file_client (missing env vars)
+        # Re-raise ValueError from get_llama_cloud_client (missing env vars)
         raise
     except Exception as e:
         # Wrap all LlamaCloud API errors (network, auth, quota, etc.)

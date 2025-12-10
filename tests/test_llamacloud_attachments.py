@@ -197,17 +197,39 @@ async def test_download_file_from_llamacloud_success():
     from basic.utils import download_file_from_llamacloud
 
     mock_file_content = b"test file content"
+    presigned_url = "https://s3.amazonaws.com/bucket/file?signature=xyz"
     
-    # Mock the FileClient
-    mock_file_client = AsyncMock()
-    mock_file_client.read_file_content = AsyncMock(return_value=mock_file_content)
+    # Mock the presigned URL object
+    mock_presigned_url = MagicMock()
+    mock_presigned_url.url = presigned_url
     
-    # Mock get_file_client to return our mock
-    with patch("basic.utils.get_file_client", return_value=mock_file_client):
-        result = await download_file_from_llamacloud("file-test-123")
-        
-        assert result == mock_file_content
-        mock_file_client.read_file_content.assert_called_once_with(file_id="file-test-123")
+    # Mock the AsyncLlamaCloud client
+    mock_client = AsyncMock()
+    mock_client.files.read_file_content = AsyncMock(return_value=mock_presigned_url)
+    
+    # Mock get_llama_cloud_client to return our mock
+    with patch("basic.utils.get_llama_cloud_client", return_value=(mock_client, "test-project-id")):
+        # Mock httpx to return file content
+        with patch("httpx.AsyncClient") as mock_httpx:
+            mock_response = MagicMock()
+            mock_response.content = mock_file_content
+            mock_response.raise_for_status = MagicMock()
+            
+            mock_http_client = AsyncMock()
+            mock_http_client.get = AsyncMock(return_value=mock_response)
+            mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+            mock_http_client.__aexit__ = AsyncMock(return_value=None)
+            
+            mock_httpx.return_value = mock_http_client
+            
+            result = await download_file_from_llamacloud("file-test-123")
+            
+            assert result == mock_file_content
+            mock_client.files.read_file_content.assert_called_once_with(
+                id="file-test-123",
+                project_id="test-project-id"
+            )
+            mock_http_client.get.assert_called_once_with(presigned_url)
 
 
 @pytest.mark.asyncio
@@ -215,9 +237,9 @@ async def test_download_file_from_llamacloud_missing_env_vars():
     """Test download fails when environment variables are missing."""
     from basic.utils import download_file_from_llamacloud
 
-    # Mock get_file_client to raise ValueError for missing env vars
+    # Mock get_llama_cloud_client to raise ValueError for missing env vars
     with patch(
-        "basic.utils.get_file_client",
+        "basic.utils.get_llama_cloud_client",
         side_effect=ValueError("LLAMA_CLOUD_API_KEY environment variable is required")
     ):
         with pytest.raises(ValueError) as exc_info:
@@ -231,13 +253,13 @@ async def test_download_file_from_llamacloud_api_error():
     """Test error handling when LlamaCloud API fails."""
     from basic.utils import download_file_from_llamacloud
 
-    # Mock the FileClient to raise an exception
-    mock_file_client = AsyncMock()
-    mock_file_client.read_file_content = AsyncMock(
+    # Mock the AsyncLlamaCloud client to raise an exception
+    mock_client = AsyncMock()
+    mock_client.files.read_file_content = AsyncMock(
         side_effect=Exception("API Error: File not found")
     )
     
-    with patch("basic.utils.get_file_client", return_value=mock_file_client):
+    with patch("basic.utils.get_llama_cloud_client", return_value=(mock_client, "test-project-id")):
         with pytest.raises(ValueError) as exc_info:
             await download_file_from_llamacloud("file-nonexistent")
         
@@ -254,22 +276,25 @@ async def test_upload_file_to_llamacloud_success():
     filename = "test.pdf"
     expected_file_id = "file-uploaded-456"
     
-    # Mock the file object returned by upload_bytes
+    # Mock the file object returned by upload_file
     mock_file = MagicMock()
     mock_file.id = expected_file_id
     
-    # Mock the FileClient
-    mock_file_client = AsyncMock()
-    mock_file_client.upload_bytes = AsyncMock(return_value=mock_file)
+    # Mock the AsyncLlamaCloud client
+    mock_client = AsyncMock()
+    mock_client.files.upload_file = AsyncMock(return_value=mock_file)
     
-    with patch("basic.utils.get_file_client", return_value=mock_file_client):
+    with patch("basic.utils.get_llama_cloud_client", return_value=(mock_client, "test-project-id")):
         result = await upload_file_to_llamacloud(file_content, filename)
         
         assert result == expected_file_id
-        # upload_bytes now takes (bytes, external_file_id) - filename is used as external_file_id
-        mock_file_client.upload_bytes.assert_called_once_with(
-            file_content, filename
-        )
+        # Verify upload_file was called
+        assert mock_client.files.upload_file.call_count == 1
+        call_kwargs = mock_client.files.upload_file.call_args.kwargs
+        assert call_kwargs["external_file_id"] == filename
+        assert call_kwargs["project_id"] == "test-project-id"
+        # Check that upload_file is a file-like object
+        assert hasattr(call_kwargs["upload_file"], "read")
 
 
 @pytest.mark.asyncio
@@ -285,17 +310,17 @@ async def test_upload_file_to_llamacloud_with_external_id():
     mock_file = MagicMock()
     mock_file.id = expected_file_id
     
-    mock_file_client = AsyncMock()
-    mock_file_client.upload_bytes = AsyncMock(return_value=mock_file)
+    mock_client = AsyncMock()
+    mock_client.files.upload_file = AsyncMock(return_value=mock_file)
     
-    with patch("basic.utils.get_file_client", return_value=mock_file_client):
+    with patch("basic.utils.get_llama_cloud_client", return_value=(mock_client, "test-project-id")):
         result = await upload_file_to_llamacloud(file_content, filename, external_id)
         
         assert result == expected_file_id
-        # upload_bytes takes (bytes, external_file_id)
-        mock_file_client.upload_bytes.assert_called_once_with(
-            file_content, external_id
-        )
+        # Verify upload_file was called with external_id
+        call_kwargs = mock_client.files.upload_file.call_args.kwargs
+        assert call_kwargs["external_file_id"] == external_id
+        assert call_kwargs["project_id"] == "test-project-id"
 
 
 @pytest.mark.asyncio
@@ -303,12 +328,12 @@ async def test_upload_file_to_llamacloud_api_error():
     """Test error handling when upload fails."""
     from basic.utils import upload_file_to_llamacloud
 
-    mock_file_client = AsyncMock()
-    mock_file_client.upload_bytes = AsyncMock(
+    mock_client = AsyncMock()
+    mock_client.files.upload_file = AsyncMock(
         side_effect=Exception("API Error: Upload quota exceeded")
     )
     
-    with patch("basic.utils.get_file_client", return_value=mock_file_client):
+    with patch("basic.utils.get_llama_cloud_client", return_value=(mock_client, "test-project-id")):
         with pytest.raises(ValueError) as exc_info:
             await upload_file_to_llamacloud(b"content", "test.pdf")
         
