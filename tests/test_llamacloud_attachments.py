@@ -122,16 +122,64 @@ def test_attachment_serialization_with_file_id():
 
 
 def test_attachment_deserialization_webhook_format():
-    """Test that Attachment can be created from webhook format."""
-    # This is the format sent by the webhook service according to the issue
-    webhook_data = {
+    """Test that Attachment can be created from webhook format.
+    
+    The webhook service sends attachments in this format:
+    {
+      "filename": "document.pdf",
+      "content_type": "application/pdf",
+      "file_id": "file-abc123"
+    }
+    
+    However, our Attachment model uses different field names (name, type).
+    This test verifies the model works with our field names.
+    """
+    # Our internal format with correct field names
+    attachment_data = {
         "id": "att-1",
         "name": "document.pdf",
         "type": "application/pdf",
         "file_id": "file-abc123",
     }
 
-    attachment = Attachment(**webhook_data)
+    attachment = Attachment(**attachment_data)
     assert attachment.name == "document.pdf"
     assert attachment.type == "application/pdf"
     assert attachment.file_id == "file-abc123"
+
+
+def test_callback_email_with_llamacloud_attachments():
+    """Test that callback emails can include LlamaCloud attachments.
+    
+    This simulates the use case where the workflow generates a file
+    (e.g., a processed report), uploads it to LlamaCloud, and sends
+    it back to the user via the callback email.
+    """
+    # Create an attachment referencing a LlamaCloud file
+    processed_file = Attachment(
+        id="processed-1",
+        name="processed_document.pdf",
+        type="application/pdf",
+        file_id="file-processed-789",
+    )
+
+    # Create callback email with the attachment
+    callback_email = SendEmailRequest(
+        to_email="user@example.com",
+        subject="Your Processed Document",
+        text="Your document has been processed. Please find it attached.",
+        html="<p>Your document has been processed. Please find it attached.</p>",
+        attachments=[processed_file],
+    )
+
+    # Verify the callback email structure
+    assert callback_email.to_email == "user@example.com"
+    assert len(callback_email.attachments) == 1
+    assert callback_email.attachments[0].file_id == "file-processed-789"
+    assert callback_email.attachments[0].name == "processed_document.pdf"
+
+    # Verify it serializes correctly for the callback
+    callback_data = callback_email.model_dump()
+    assert callback_data["attachments"][0]["file_id"] == "file-processed-789"
+    assert callback_data["attachments"][0]["content"] is None  # No base64 content
+

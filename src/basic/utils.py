@@ -100,3 +100,65 @@ async def upload_file_to_llamacloud(
         logger.error(f"Failed to upload file {filename} to LlamaCloud: {e}")
         raise ValueError(f"Failed to upload file to LlamaCloud: {e}") from e
 
+
+async def create_llamacloud_attachment(
+    file_content: bytes,
+    filename: str,
+    content_type: str,
+    attachment_id: Optional[str] = None,
+    external_file_id: Optional[str] = None,
+) -> "Attachment":
+    """Create an Attachment with file uploaded to LlamaCloud.
+    
+    This is a convenience function for creating attachments that reference
+    files in LlamaCloud. The file is uploaded first, then an Attachment
+    object is created with the file_id.
+    
+    Use this when preparing attachments to send back in email callbacks.
+    
+    Args:
+        file_content: The file content as bytes
+        filename: The filename for the attachment
+        content_type: The MIME type (e.g., 'application/pdf')
+        attachment_id: Optional ID for the attachment (defaults to filename)
+        external_file_id: Optional external ID for the file in LlamaCloud
+        
+    Returns:
+        Attachment object with file_id pointing to the uploaded file
+        
+    Raises:
+        ValueError: If upload fails
+        
+    Example:
+        # Upload a generated report and create attachment for callback
+        report_data = generate_report()
+        attachment = await create_llamacloud_attachment(
+            file_content=report_data,
+            filename="report.pdf",
+            content_type="application/pdf"
+        )
+        
+        # Include in email response
+        response_email = SendEmailRequest(
+            to_email=user_email,
+            subject="Your Report",
+            text="Please find your report attached",
+            attachments=[attachment]
+        )
+    """
+    from .models import Attachment
+
+    # Upload file to LlamaCloud
+    file_id = await upload_file_to_llamacloud(
+        file_content, filename, external_file_id
+    )
+    
+    # Create Attachment with file_id
+    return Attachment(
+        id=attachment_id or filename,
+        name=filename,
+        type=content_type,
+        file_id=file_id,
+    )
+
+
