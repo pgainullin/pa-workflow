@@ -5,9 +5,6 @@ This module tests that attachments can be provided either as:
 2. LlamaCloud file_id (new behavior)
 """
 
-import pytest
-from pydantic import ValidationError
-
 from basic.models import Attachment, SendEmailRequest
 
 

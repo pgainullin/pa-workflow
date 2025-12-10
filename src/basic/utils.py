@@ -3,7 +3,10 @@
 import html
 import logging
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from .models import Attachment
 
 logger = logging.getLogger(__name__)
 
