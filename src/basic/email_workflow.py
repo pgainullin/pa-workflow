@@ -303,10 +303,10 @@ class EmailWorkflow(Workflow):
                     summary = str(response)
 
                 elif (
-                    "text" in mime_type
-                    or "json" in mime_type
+                    "json" in mime_type
                     or "xml" in mime_type
                     or "markdown" in mime_type
+                    or "text" in mime_type
                 ):
                     # Plain text, JSON, XML, Markdown - read directly and summarize
                     logger.info(f"Processing text file: {attachment.name} ({mime_type})")
