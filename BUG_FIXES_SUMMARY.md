@@ -87,7 +87,7 @@ instead of the actual content.
 
 **Fixes Applied:**
 
-1. **Enhanced Template Resolution** (`src/basic/email_workflow.py`, lines 571-593)
+1. **Enhanced Template Resolution** (`src/basic/email_workflow.py`, lines 584-621)
    - Added support for both `{{...}}` and `{step_X.field}` patterns
    - Uses regex to detect and replace both formats
    - Maintains backward compatibility with double-brace format
