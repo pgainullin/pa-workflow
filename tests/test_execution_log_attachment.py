@@ -256,5 +256,5 @@ async def test_user_response_with_no_successful_results():
     response = await workflow._generate_user_response(results, email_data)
 
     # Should indicate failure
-    assert "encountered issues" in response or "issues with all steps" in response
+    assert response == "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
     assert "execution log" in response.lower()
