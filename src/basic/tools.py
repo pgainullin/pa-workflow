@@ -175,17 +175,13 @@ class SheetsTool(Tool):
         Returns:
             Dictionary with 'success' and 'sheet_data' or 'error'
         """
-        try:
-            # Note: This is a placeholder implementation
-            return {
-                "success": True,
-                "sheet_data": {
-                    "note": "Sheets tool requires specific spreadsheet processing implementation"
-                },
-            }
-        except Exception as e:
-            logger.exception("Error processing spreadsheet")
-            return {"success": False, "error": str(e)}
+        # Note: This is a placeholder implementation
+        return {
+            "success": True,
+            "sheet_data": {
+                "note": "Sheets tool requires specific spreadsheet processing implementation"
+            },
+        }
 
 
 class SplitTool(Tool):
