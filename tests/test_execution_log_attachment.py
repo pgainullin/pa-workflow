@@ -142,7 +142,7 @@ async def test_user_response_is_natural_language():
     from workflows import Context
     ctx = Context(workflow)
     
-    result = await workflow.send_results(event, ctx)
+    await workflow.send_results(event, ctx)
 
     # Get the email request that was sent
     call_args = workflow._send_callback_email.call_args
