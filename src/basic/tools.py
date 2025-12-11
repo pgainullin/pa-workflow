@@ -22,6 +22,7 @@ from reportlab.pdfgen import canvas
 from .utils import (
     download_file_from_llamacloud,
     upload_file_to_llamacloud,
+    process_text_in_batches,
 )
 
 logger = logging.getLogger(__name__)
@@ -287,27 +288,51 @@ class ExtractTool(Tool):
 
             # Prepare the content for extraction
             if text:
-                # Extract from text
-                source = SourceText(text_content=text)
+                # For text-based extraction, use batch processing for long text
+                max_text_length = 100000
+                
+                async def extract_from_chunk(chunk: str) -> dict:
+                    source = SourceText(text_content=chunk)
+                    result = await extract_agent.aextract(source)
+                    return result.data if hasattr(result, "data") else result
+                
+                # Process text in batches if needed
+                if len(text) > max_text_length:
+                    logger.info(f"Processing text extraction in batches (length: {len(text)})")
+                    
+                    # Combine extracted data from all batches
+                    def combine_extractions(extractions: list[dict]) -> dict:
+                        if len(extractions) == 1:
+                            return extractions[0]
+                        # Return list of extractions for batch processing
+                        return {"batch_results": extractions, "batch_count": len(extractions)}
+                    
+                    extracted_data = await process_text_in_batches(
+                        text=text,
+                        max_length=max_text_length,
+                        processor=extract_from_chunk,
+                        combiner=combine_extractions,
+                    )
+                else:
+                    extracted_data = await extract_from_chunk(text)
+                    
             elif file_id:
                 # Download file from LlamaCloud
                 content = await download_file_from_llamacloud(file_id)
                 source = SourceText(file=content)
+                result = await extract_agent.aextract(source)
+                extracted_data = result.data if hasattr(result, "data") else result
             elif file_content or file_content_from_param:
                 # Use base64 content
                 content = base64.b64decode(file_content or file_content_from_param)
                 source = SourceText(file=content)
+                result = await extract_agent.aextract(source)
+                extracted_data = result.data if hasattr(result, "data") else result
             else:
                 return {
                     "success": False,
                     "error": "Either file_id, text, or file_content must be provided",
                 }
-
-            # Run extraction
-            result = await extract_agent.aextract(source)
-
-            # Extract the data from the result
-            extracted_data = result.data if hasattr(result, "data") else result
 
             return {"success": True, "extracted_data": extracted_data}
 
@@ -473,15 +498,8 @@ class SplitTool(Tool):
                     "error": "Either text or file_id must be provided",
                 }
 
-            # Limit text length to prevent excessive processing
-            max_length = 100000
-            if len(text) > max_length:
-                logger.warning(
-                    f"Text truncated from {len(text)} to {max_length} characters for splitting"
-                )
-                text = text[:max_length]
-
             # Use LlamaIndex SentenceSplitter for intelligent text splitting
+            # No truncation needed - the purpose of this tool is to split long text
             splitter = SentenceSplitter(
                 chunk_size=chunk_size, chunk_overlap=chunk_overlap
             )
@@ -536,13 +554,21 @@ class ClassifyTool(Tool):
             }
 
         try:
-            # Limit text length to prevent prompt injection and excessive costs
             max_length = 10000
+            
+            # For classification, if text is too long, we extract representative samples
+            # from beginning, middle, and end
             if len(text) > max_length:
-                logger.warning(
-                    f"Text truncated from {len(text)} to {max_length} characters for classification"
+                sample_size = max_length // 3
+                beginning = text[:sample_size]
+                middle_start = len(text) // 2 - sample_size // 2
+                middle = text[middle_start:middle_start + sample_size]
+                end = text[-sample_size:]
+                
+                text = f"{beginning}\n\n[...middle section...]\n\n{middle}\n\n[...end section...]\n\n{end}"
+                logger.info(
+                    f"Text sampled from {len(kwargs.get('text'))} to {len(text)} characters for classification"
                 )
-                text = text[:max_length]
 
             # Create a dynamic Pydantic model for classification
             # Using Literal type for the category field would be ideal but requires dynamic creation
@@ -623,14 +649,6 @@ class TranslateTool(Tool):
         try:
             import asyncio
 
-            # Limit text length to prevent excessive API usage
-            max_length = 50000
-            if len(text) > max_length:
-                logger.warning(
-                    f"Text truncated from {len(text)} to {max_length} characters for translation"
-                )
-                text = text[:max_length]
-
             # Validate language codes
             # Create a temporary instance to get supported languages
             temp_translator = GoogleTranslator(source="auto", target="en")
@@ -652,11 +670,23 @@ class TranslateTool(Tool):
                     "success": False,
                     "error": f"Invalid target_lang '{target_lang}'. Supported codes: {sorted(supported_codes)}",
                 }
+            
             # Create translator instance for this translation
             translator = GoogleTranslator(source=source_lang, target=target_lang)
 
-            # Run translation in thread pool since deep-translator is synchronous
-            translated = await asyncio.to_thread(translator.translate, text)
+            # Define processor for a single batch
+            async def translate_chunk(chunk: str) -> str:
+                # Run translation in thread pool since deep-translator is synchronous
+                return await asyncio.to_thread(translator.translate, chunk)
+
+            # Process text in batches if it's too long
+            max_length = 50000
+            translated = await process_text_in_batches(
+                text=text,
+                max_length=max_length,
+                processor=translate_chunk,
+                combiner=lambda chunks: "".join(chunks),
+            )
 
             return {"success": True, "translated_text": translated}
         except Exception as e:
@@ -699,21 +729,33 @@ class SummariseTool(Tool):
             return {"success": False, "error": "Missing required parameter: text"}
 
         try:
-            # Limit text length to prevent excessive LLM costs and prompt injection
-            max_input_length = 50000
-            if len(text) > max_input_length:
-                logger.warning(
-                    f"Text truncated from {len(text)} to {max_input_length} characters for summarization"
-                )
-                text = text[:max_input_length]
-
             length_instruction = f" in about {max_length} words" if max_length else ""
-            prompt = (
-                f"Provide a concise summary{length_instruction} of the following text:\n\n"
-                f"{text}"
+
+            # Define processor for a single batch
+            async def summarise_chunk(chunk: str) -> str:
+                prompt = (
+                    f"Provide a concise summary{length_instruction} of the following text:\n\n"
+                    f"{chunk}"
+                )
+                response = await self.llm.acomplete(prompt)
+                return str(response).strip()
+
+            # Process text in batches if it's too long
+            max_input_length = 50000
+            
+            # For summarization, we want to combine batch summaries into a final summary
+            def combine_summaries(summaries: list[str]) -> str:
+                if len(summaries) == 1:
+                    return summaries[0]
+                # Join all summaries and return
+                return "\n\n".join(f"Part {i+1}: {s}" for i, s in enumerate(summaries))
+            
+            summary = await process_text_in_batches(
+                text=text,
+                max_length=max_input_length,
+                processor=summarise_chunk,
+                combiner=combine_summaries,
             )
-            response = await self.llm.acomplete(prompt)
-            summary = str(response).strip()
 
             return {"success": True, "summary": summary}
         except Exception as e:
