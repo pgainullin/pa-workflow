@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import logging
 import os
-from typing import TYPE_CHECKING, Optional, Callable, Any, TypeVar
+from typing import TYPE_CHECKING, Optional, Callable, Any, Awaitable
 
 from tenacity import (
     retry,
@@ -111,7 +111,7 @@ api_retry = retry(
 async def process_text_in_batches(
     text: str,
     max_length: int,
-    processor: Callable[[str], Any],
+    processor: Callable[[str], Awaitable[Any]],
     combiner: Optional[Callable[[list[Any]], Any]] = None,
 ) -> Any:
     """Process long text in batches when it exceeds max_length.
@@ -120,12 +120,17 @@ async def process_text_in_batches(
     processes each chunk using the provided processor function,
     and optionally combines the results using the combiner function.
     
+    Note: If processing a batch fails, the entire operation fails and
+    previously processed batches are not returned. This is an all-or-nothing
+    operation. Consider implementing custom error handling in the processor
+    function if partial results are needed.
+    
     Args:
         text: The text to process
         max_length: Maximum length for each batch
         processor: Async function that processes a single text chunk
         combiner: Optional function to combine results from all batches.
-                 If None, results are concatenated with newlines (for strings)
+                 If None, results are concatenated with empty string (for strings)
                  or returned as a list (for other types).
     
     Returns:
@@ -169,13 +174,14 @@ async def process_text_in_batches(
                 space_pos = text.rfind(' ', current_pos, end_pos)
                 if space_pos > current_pos:
                     end_pos = space_pos + 1  # Include the space
-                else:
-                    # No boundary found, force split but guarantee forward progress
-                    end_pos = min(current_pos + max_length, len(text))
-                    if end_pos <= current_pos:
-                        end_pos = min(current_pos + max_length, len(text))
+                # If no boundary found, end_pos remains at current_pos + max_length
         else:
             end_pos = len(text)
+        
+        # Safeguard: ensure forward progress to avoid infinite loops
+        if end_pos <= current_pos:
+            # Force progress by moving at least one character forward
+            end_pos = min(current_pos + 1, len(text))
         
         chunk = text[current_pos:end_pos]
         if chunk.strip():  # Only add non-empty chunks
