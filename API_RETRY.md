@@ -195,4 +195,4 @@ To adjust these parameters, modify the values in the `retry()` decorator.
 ## References
 
 - [Tenacity Documentation](https://tenacity.readthedocs.io/) - Retry library used
-- [Issue: API quota or overload handling is not consistent](https://github.com/pgainullin/pa-workflow/issues/XXX)
+- [Issue: API quota or overload handling is not consistent](https://github.com/pgainullin/pa-workflow/issues/20)
