@@ -1,6 +1,5 @@
 """Tests for workflow tools."""
 
-import base64
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
