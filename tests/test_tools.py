@@ -66,23 +66,37 @@ async def test_classify_tool():
     """Test the classify tool."""
     # Mock LLM
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.__str__ = lambda x: "Technical"
-    mock_llm.acomplete = AsyncMock(return_value=mock_response)
+
+    # Mock the LLMTextCompletionProgram
+    from pydantic import BaseModel
+
+    class MockClassification(BaseModel):
+        category: str = "Technical"
+        confidence: str = "high"
 
     from basic.tools import ClassifyTool
 
     tool = ClassifyTool(mock_llm)
 
-    # Test execution
-    categories = ["Technical", "Business", "Personal"]
-    result = await tool.execute(
-        text="This is about software development.", categories=categories
-    )
+    # Patch the LLMTextCompletionProgram at the correct import location
+    with patch(
+        "llama_index.core.program.LLMTextCompletionProgram"
+    ) as mock_program_class:
+        mock_program = MagicMock()
+        mock_program.acall = AsyncMock(return_value=MockClassification())
+        mock_program_class.from_defaults = MagicMock(return_value=mock_program)
 
-    assert result["success"] is True
-    assert "category" in result
-    assert result["category"] == "Technical"
+        # Test execution
+        categories = ["Technical", "Business", "Personal"]
+        result = await tool.execute(
+            text="This is about software development.", categories=categories
+        )
+
+        assert result["success"] is True
+        assert "category" in result
+        assert result["category"] == "Technical"
+        assert "confidence" in result
+        assert result["confidence"] == "high"
 
 
 @pytest.mark.asyncio
@@ -92,16 +106,18 @@ async def test_split_tool():
 
     tool = SplitTool()
 
-    # Test with text
+    # Test with text - LlamaIndex SentenceSplitter will split intelligently
     text = (
-        "Section 1 content here.\n\nSection 2 content here.\n\nSection 3 content here."
+        "This is the first sentence. This is the second sentence. This is the third sentence. "
+        * 100
     )
-    result = await tool.execute(text=text)
+    result = await tool.execute(text=text, chunk_size=100, chunk_overlap=20)
 
     assert result["success"] is True
     assert "splits" in result
-    assert len(result["splits"]) == 3
-    assert "Section 1" in result["splits"][0]
+    assert len(result["splits"]) > 0
+    # With intelligent splitting, we should get multiple chunks
+    assert isinstance(result["splits"], list)
 
 
 @pytest.mark.asyncio

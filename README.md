@@ -19,8 +19,8 @@ The workflow includes the following tools that can be used by the triage agent:
 1. **Parse** - Parse documents (PDF, Word, PowerPoint) using LlamaParse
 2. **Extract** - Extract structured data using LlamaCloud Extract
 3. **Sheets** - Process spreadsheet files (Excel, CSV) using pandas
-4. **Split** - Split documents into logical sections
-5. **Classify** - Classify text into categories using an LLM
+4. **Split** - Split documents into logical sections using LlamaIndex SentenceSplitter
+5. **Classify** - Classify text into categories using LlamaIndex structured outputs
 6. **Translate** - Translate text using Google Translate
 7. **Summarise** - Summarize text using an LLM
 8. **Print to PDF** - Convert text to PDF format

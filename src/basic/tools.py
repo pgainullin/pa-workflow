@@ -411,7 +411,17 @@ class SheetsTool(Tool):
 
 
 class SplitTool(Tool):
-    """Tool for splitting documents into sections using LlamaCloud."""
+    """Tool for splitting documents into sections using LlamaIndex."""
+
+    def __init__(self, chunk_size: int = 1024, chunk_overlap: int = 200):
+        """Initialize the SplitTool.
+
+        Args:
+            chunk_size: Maximum size of each chunk in tokens (default: 1024)
+            chunk_overlap: Number of tokens to overlap between chunks (default: 200)
+        """
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     @property
     def name(self) -> str:
@@ -420,59 +430,65 @@ class SplitTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Split documents into logical sections or chunks. "
-            "Input: text or file_id, split_strategy (e.g., 'by_section', 'by_page'). "
+            "Split documents into logical sections or chunks using LlamaIndex. "
+            "Input: text or file_id, chunk_size (optional, default: 1024), chunk_overlap (optional, default: 200). "
             "Output: splits (list of document sections)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Split a document into sections.
+        """Split a document into sections using LlamaIndex SentenceSplitter.
 
         Args:
             **kwargs: Keyword arguments including:
                 - text: Text content to split (optional)
                 - file_id: LlamaCloud file ID (optional)
-                - split_strategy: Strategy for splitting (optional, default: 'by_section')
+                - chunk_size: Maximum chunk size in tokens (optional, default: 1024)
+                - chunk_overlap: Overlap between chunks in tokens (optional, default: 200)
 
         Returns:
             Dictionary with 'success' and 'splits' or 'error'
         """
+        from llama_index.core.node_parser import SentenceSplitter
+
         text = kwargs.get("text")
         file_id = kwargs.get("file_id")
-        # split_strategy could be used in future for different splitting strategies
-        # Currently using simple split by double newlines
+        chunk_size = kwargs.get("chunk_size", self.chunk_size)
+        chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
 
         try:
+            # Get text content
+            if file_id:
+                content = await download_file_from_llamacloud(file_id)
+                text = content.decode("utf-8", errors="ignore")
+            elif not text:
+                return {
+                    "success": False,
+                    "error": "Either text or file_id must be provided",
+                }
+
             # Limit text length to prevent excessive processing
             max_length = 100000
-            if text and len(text) > max_length:
+            if len(text) > max_length:
                 logger.warning(
                     f"Text truncated from {len(text)} to {max_length} characters for splitting"
                 )
                 text = text[:max_length]
 
-            if text:
-                # Simple split by double newlines as placeholder
-                splits = text.split("\n\n")
-                return {"success": True, "splits": splits}
-            elif file_id:
-                # Download and split
-                content = await download_file_from_llamacloud(file_id)
-                text = content.decode("utf-8", errors="ignore")
-                splits = text.split("\n\n")
-                return {"success": True, "splits": splits}
-            else:
-                return {
-                    "success": False,
-                    "error": "Either text or file_id must be provided",
-                }
+            # Use LlamaIndex SentenceSplitter for intelligent text splitting
+            splitter = SentenceSplitter(
+                chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
+            splits = splitter.split_text(text)
+
+            return {"success": True, "splits": splits}
+
         except Exception as e:
             logger.exception("Error splitting document")
             return {"success": False, "error": str(e)}
 
 
 class ClassifyTool(Tool):
-    """Tool for classifying content using LlamaCloud."""
+    """Tool for classifying content using LlamaIndex."""
 
     def __init__(self, llm):
         self.llm = llm
@@ -484,13 +500,13 @@ class ClassifyTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Classify text or documents into categories. "
+            "Classify text or documents into categories using LlamaIndex. "
             "Input: text, categories (list of possible categories). "
             "Output: category (selected category)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Classify text into one of the given categories.
+        """Classify text into one of the given categories using LlamaIndex.
 
         Args:
             **kwargs: Keyword arguments including:
@@ -500,6 +516,9 @@ class ClassifyTool(Tool):
         Returns:
             Dictionary with 'success', 'category' or 'error'
         """
+        from llama_index.core.program import LLMTextCompletionProgram
+        from pydantic import BaseModel, Field
+
         text = kwargs.get("text")
         categories = kwargs.get("categories")
 
@@ -518,15 +537,44 @@ class ClassifyTool(Tool):
                 )
                 text = text[:max_length]
 
-            prompt = (
-                f"Classify the following text into one of these categories: {', '.join(categories)}\n\n"
-                f"Text: {text}\n\n"
-                "Respond with only the category name."
-            )
-            response = await self.llm.acomplete(prompt)
-            category = str(response).strip()
+            # Create a dynamic Pydantic model for classification
+            # Using Literal type for the category field would be ideal but requires dynamic creation
+            class Classification(BaseModel):
+                """Classification result."""
 
-            return {"success": True, "category": category}
+                category: str = Field(
+                    description=f"The category that best matches the text. Must be one of: {', '.join(categories)}"
+                )
+                confidence: str = Field(
+                    description="Confidence level: high, medium, or low",
+                    default="medium",
+                )
+
+            # Create a LlamaIndex program for structured output
+            prompt_template = """
+            Classify the following text into one of these categories: {categories}
+            
+            Text to classify:
+            {text}
+            
+            Return the category that best matches the text along with your confidence level.
+            """
+
+            program = LLMTextCompletionProgram.from_defaults(
+                output_cls=Classification,
+                prompt_template_str=prompt_template,
+                llm=self.llm,
+                verbose=False,
+            )
+
+            # Run the classification
+            result = await program.acall(text=text, categories=", ".join(categories))
+
+            return {
+                "success": True,
+                "category": result.category,
+                "confidence": result.confidence,
+            }
         except Exception as e:
             logger.exception("Error classifying text")
             return {"success": False, "error": str(e)}
