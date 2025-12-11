@@ -202,7 +202,7 @@ async def process_text_in_batches(
     
     # If results are strings, concatenate them
     if isinstance(results[0], str):
-        return "\n".join(results)
+        return "".join(results)
     
     # Otherwise return as list
     return results
