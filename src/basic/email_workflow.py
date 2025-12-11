@@ -512,16 +512,29 @@ Plan:"""
 
         referenced_steps = set()
         for key, value in params.items():
-            if isinstance(value, str) and "{{" in value and "}}" in value:
-                # Find all template references
-                matches = re.finditer(r"\{\{([^}]+)\}\}", value)
-                for match in matches:
-                    ref = match.group(1).strip()
-                    parts = ref.split(".")
-                    if len(parts) >= 1:
-                        step_key = parts[0]
-                        if step_key.startswith("step_"):
-                            referenced_steps.add(step_key)
+            if isinstance(value, str):
+                # Check for both {{...}} and {step_X.field} template patterns
+                has_template = (
+                    ("{{" in value and "}}" in value) or 
+                    (re.search(r'\{step_\d+\.[a-zA-Z_]+\}', value) is not None)
+                )
+                
+                if has_template:
+                    # Find all double-brace template references
+                    matches = re.finditer(r"\{\{([^}]+)\}\}", value)
+                    for match in matches:
+                        ref = match.group(1).strip()
+                        parts = ref.split(".")
+                        if len(parts) >= 1:
+                            step_key = parts[0]
+                            if step_key.startswith("step_"):
+                                referenced_steps.add(step_key)
+                    
+                    # Find all single-brace template references like {step_1.field}
+                    matches = re.finditer(r"\{(step_\d+)\.[a-zA-Z_]+\}", value)
+                    for match in matches:
+                        step_key = match.group(1)
+                        referenced_steps.add(step_key)
 
         # Check if any referenced steps have failed
         for step_key in referenced_steps:
@@ -570,8 +583,14 @@ Plan:"""
 
         for key, value in params.items():
             if isinstance(value, str):
-                # Check for template references like {{step_1.parsed_text}}
-                if "{{" in value and "}}" in value:
+                # Check for template references like {{step_1.parsed_text}} or {step_1.parsed_text}
+                # Support both single and double braces since LLMs sometimes use single braces
+                has_template = (
+                    ("{{" in value and "}}" in value) or 
+                    (re.search(r'\{step_\d+\.[a-zA-Z_]+\}', value) is not None)
+                )
+                
+                if has_template:
                     # Simple template resolution
                     def template_replacer(match):
                         ref = match.group(1).strip()
@@ -592,8 +611,12 @@ Plan:"""
                             )
                             return match.group(0)
 
+                    # Replace both double-brace {{...}} and single-brace {step_X.field} templates
                     resolved_value = re.sub(
                         r"\{\{([^}]+)\}\}", template_replacer, value
+                    )
+                    resolved_value = re.sub(
+                        r"\{(step_\d+\.[a-zA-Z_]+)\}", template_replacer, resolved_value
                     )
                     resolved[key] = resolved_value
                 # Attachment reference resolution: if value starts with "att-" or matches a filename
@@ -736,6 +759,9 @@ Plan:"""
                     output += f"  Translation: {result['translated_text']}\n"
                 elif "category" in result:
                     output += f"  Category: {result['category']}\n"
+                elif "file_id" in result:
+                    # For tools that generate files (like print_to_pdf)
+                    output += f"  Generated file ID: {result['file_id']}\n"
             else:
                 error = result.get("error", "Unknown error")
                 output += f"  Error: {error}\n"
