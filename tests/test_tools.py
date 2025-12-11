@@ -46,8 +46,9 @@ async def test_translate_tool():
         mock_translator = MagicMock()
         mock_translator.translate = MagicMock(return_value="Bonjour le monde")
         # Mock get_supported_languages as instance method
+        # get_supported_languages returns dict with names as keys and codes as values
         mock_translator.get_supported_languages = MagicMock(
-            return_value={"en": "English", "fr": "French", "es": "Spanish"}
+            return_value={"english": "en", "french": "fr", "spanish": "es"}
         )
         mock_translator_class.return_value = mock_translator
 
