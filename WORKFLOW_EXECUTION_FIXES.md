@@ -175,7 +175,7 @@ Enhanced the triage prompt with:
 - No mechanism to identify and attach generated files
 
 **Fix Applied:**
-(`src/basic/email_workflow.py`, lines 684-686, 797-835)
+(`src/basic/email_workflow.py`, lines 710-712, 816-856)
 
 1. **Added attachment collection to send_results:**
    ```python
