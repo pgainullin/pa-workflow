@@ -307,6 +307,9 @@ Plan:"""
             tool_name = step_def.get("tool")
             params = step_def.get("params", {})
             description = step_def.get("description", "")
+            critical = step_def.get(
+                "critical", False
+            )  # Optional: mark step as critical
 
             logger.info(
                 f"Executing step {i + 1}/{len(plan)}: {tool_name} - {description}"
@@ -317,6 +320,11 @@ Plan:"""
                 tool = self.tool_registry.get_tool(tool_name)
                 if not tool:
                     logger.warning(f"Tool '{tool_name}' not found, skipping step")
+                    # Store failed result in context so dependent steps can detect failure
+                    execution_context[f"step_{i + 1}"] = {
+                        "success": False,
+                        "error": f"Tool '{tool_name}' not found",
+                    }
                     results.append(
                         {
                             "step": i + 1,
@@ -325,6 +333,43 @@ Plan:"""
                             "error": f"Tool '{tool_name}' not found",
                         }
                     )
+                    # If this is a critical step, stop execution
+                    if critical:
+                        logger.error(
+                            f"Critical step {i + 1} failed (tool not found). Stopping execution."
+                        )
+                        break
+                    continue
+
+                # Validate dependencies: check if any referenced steps have failed
+                dependency_failed = self._check_step_dependencies(
+                    params, execution_context, i + 1
+                )
+                if dependency_failed:
+                    logger.warning(
+                        f"Step {i + 1} depends on failed step(s). Skipping execution."
+                    )
+                    # Store skipped result in context
+                    execution_context[f"step_{i + 1}"] = {
+                        "success": False,
+                        "error": "Dependent step(s) failed",
+                        "skipped": True,
+                    }
+                    results.append(
+                        {
+                            "step": i + 1,
+                            "tool": tool_name,
+                            "success": False,
+                            "error": "Dependent step(s) failed",
+                            "skipped": True,
+                        }
+                    )
+                    # If this is a critical step, stop execution
+                    if critical:
+                        logger.error(
+                            f"Critical step {i + 1} skipped due to dependency failure. Stopping execution."
+                        )
+                        break
                     continue
 
                 # Resolve parameter references from execution context
@@ -349,8 +394,20 @@ Plan:"""
 
                 logger.info(f"Step {i + 1} completed: {result.get('success', False)}")
 
+                # If this is a critical step and it failed, stop execution
+                if critical and not result.get("success", False):
+                    logger.error(
+                        f"Critical step {i + 1} failed. Stopping execution of remaining steps."
+                    )
+                    break
+
             except Exception as e:
                 logger.exception(f"Error executing step {i + 1}")
+                # Store failed result in context so dependent steps can detect failure
+                execution_context[f"step_{i + 1}"] = {
+                    "success": False,
+                    "error": str(e),
+                }
                 results.append(
                     {
                         "step": i + 1,
@@ -359,10 +416,59 @@ Plan:"""
                         "error": str(e),
                     }
                 )
+                # If this is a critical step, stop execution
+                if critical:
+                    logger.error(
+                        f"Critical step {i + 1} encountered exception. Stopping execution."
+                    )
+                    break
 
         return PlanExecutionEvent(
             results=results, email_data=email_data, callback=callback
         )
+
+    def _check_step_dependencies(
+        self, params: dict, context: dict, current_step: int
+    ) -> bool:
+        """Check if any steps that this step depends on have failed.
+
+        Args:
+            params: Step parameters that may contain references to previous steps
+            context: Execution context with previous step results
+            current_step: Current step number (1-indexed)
+
+        Returns:
+            True if any dependency has failed, False otherwise
+        """
+        # Extract step references from parameters
+        import re
+
+        referenced_steps = set()
+        for key, value in params.items():
+            if isinstance(value, str) and "{{" in value and "}}" in value:
+                # Find all template references
+                matches = re.finditer(r"\{\{([^}]+)\}\}", value)
+                for match in matches:
+                    ref = match.group(1).strip()
+                    parts = ref.split(".")
+                    if len(parts) >= 1:
+                        step_key = parts[0]
+                        if step_key.startswith("step_"):
+                            referenced_steps.add(step_key)
+
+        # Check if any referenced steps have failed
+        for step_key in referenced_steps:
+            if step_key in context:
+                step_result = context[step_key]
+                if isinstance(step_result, dict) and not step_result.get(
+                    "success", False
+                ):
+                    logger.warning(
+                        f"Step {current_step} depends on {step_key} which failed"
+                    )
+                    return True
+
+        return False
 
     def _resolve_params(
         self, params: dict, context: dict, email_data: EmailData
@@ -403,7 +509,9 @@ Plan:"""
                             )
                             return match.group(0)
 
-                    resolved_value = re.sub(r"\{\{([^}]+)\}\}", template_replacer, value)
+                    resolved_value = re.sub(
+                        r"\{\{([^}]+)\}\}", template_replacer, value
+                    )
                     resolved[key] = resolved_value
                 else:
                     resolved[key] = value

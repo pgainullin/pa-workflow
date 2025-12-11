@@ -305,3 +305,92 @@ async def test_workflow_with_unknown_tool():
     assert len(result.results) == 1
     assert result.results[0]["success"] is False
     assert "not found" in result.results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_critical_step_stops_execution():
+    """Test that critical step failure stops subsequent steps."""
+    email_data = EmailData(
+        from_email="user@example.com", subject="Test", text="Test content"
+    )
+
+    callback = CallbackConfig(
+        callback_url="http://test.local/callback", auth_token="test-token"
+    )
+
+    workflow = EmailWorkflow(timeout=60)
+
+    from basic.email_workflow import TriageEvent
+
+    # Create a plan where step 1 is critical and will fail
+    plan = [
+        {
+            "tool": "unknown_tool",
+            "params": {},
+            "description": "Critical step that will fail",
+            "critical": True,  # Mark as critical
+        },
+        {
+            "tool": "summarise",
+            "params": {"text": "This should not execute"},
+            "description": "This step should be skipped",
+        },
+    ]
+
+    triage_event = TriageEvent(
+        plan=plan, email_data=email_data, callback=callback
+    )
+
+    # Execute the plan
+    result = await workflow.execute_plan(triage_event, MagicMock())
+
+    # Should only have result for first step (critical step stopped execution)
+    assert len(result.results) == 1
+    assert result.results[0]["success"] is False
+    assert "not found" in result.results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_dependency_checking_skips_dependent_steps():
+    """Test that steps depending on failed steps are skipped."""
+    email_data = EmailData(
+        from_email="user@example.com", subject="Test", text="Test content"
+    )
+
+    callback = CallbackConfig(
+        callback_url="http://test.local/callback", auth_token="test-token"
+    )
+
+    workflow = EmailWorkflow(timeout=60)
+
+    from basic.email_workflow import TriageEvent
+
+    # Create a plan where step 2 depends on step 1, but step 1 will fail
+    plan = [
+        {
+            "tool": "unknown_tool",
+            "params": {},
+            "description": "This step will fail",
+        },
+        {
+            "tool": "summarise",
+            "params": {"text": "{{step_1.parsed_text}}"},  # Depends on step 1
+            "description": "This step depends on step 1",
+        },
+    ]
+
+    triage_event = TriageEvent(
+        plan=plan, email_data=email_data, callback=callback
+    )
+
+    # Execute the plan
+    result = await workflow.execute_plan(triage_event, MagicMock())
+
+    # Should have two results
+    assert len(result.results) == 2
+    # First step failed
+    assert result.results[0]["success"] is False
+    # Second step should be skipped due to dependency failure
+    assert result.results[1]["success"] is False
+    assert "Dependent step(s) failed" in result.results[1]["error"]
+    assert result.results[1].get("skipped") is True
