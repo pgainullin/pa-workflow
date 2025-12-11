@@ -846,7 +846,8 @@ Response:"""
                 elif "category" in result:
                     output += f"Category: {result['category']}\n\n"
             
-            output += "See the attached execution_log.md for detailed information about the processing steps."
+            if execution_log_attached:
+                output += "See the attached execution_log.md for detailed information about the processing steps."
             return output
 
     def _create_execution_log(self, results: list[dict], email_data: EmailData) -> str:
