@@ -8,7 +8,7 @@ This module tests the fixes for the PDF workflow processing errors:
 """
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
