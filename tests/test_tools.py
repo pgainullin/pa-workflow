@@ -203,10 +203,6 @@ async def test_extract_tool():
     from pydantic import BaseModel
 
     # Define a test schema
-    class TestSchema(BaseModel):
-        name: str
-        age: int
-
     # Mock LlamaExtract and agent
     mock_llama_extract = MagicMock()
     mock_agent = MagicMock()
