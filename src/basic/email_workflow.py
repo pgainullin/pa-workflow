@@ -284,11 +284,6 @@ class EmailWorkflow(Workflow):
                     callback=ev.callback,
                 )
 
-            # Create a temporary file to store the decoded content
-            with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                tmp.write(decoded_content)
-                tmp_path = tmp.name
-
             try:
                 # Classification and processing based on MIME type
                 mime_type = attachment.type.lower()
@@ -321,6 +316,11 @@ class EmailWorkflow(Workflow):
                 
                 elif "sheet" in mime_type or "csv" in mime_type:
                     # Use LlamaParse for spreadsheet types
+                    # Create a temporary file for LlamaParse
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(decoded_content)
+                        tmp_path = tmp.name
+                    
                     documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
@@ -362,9 +362,14 @@ class EmailWorkflow(Workflow):
                     or "powerpoint" in mime_type
                 ):
                     # Word documents, PowerPoint - use LlamaParse
+                    # Create a temporary file for LlamaParse
                     logger.info(
                         f"Processing office document: {attachment.name} ({mime_type})"
                     )
+                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                        tmp.write(decoded_content)
+                        tmp_path = tmp.name
+                    
                     documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
