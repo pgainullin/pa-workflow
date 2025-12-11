@@ -685,6 +685,7 @@ class TranslateTool(Tool):
                 text=text,
                 max_length=max_length,
                 processor=translate_chunk,
+                combiner=lambda chunks: "".join(chunks),
             )
 
             return {"success": True, "translated_text": translated}
