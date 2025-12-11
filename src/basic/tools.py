@@ -462,6 +462,9 @@ class PrintToPDFTool(Tool):
                     current_line = word
                 else:
                     # Single word is too long, we need to break it
+                    logger.warning(
+                        f"Truncating extremely long word in PDF output: '{word}' to '{word[:100]}'"
+                    )
                     lines.append(word[:100])  # Fallback: truncate extremely long words
                     current_line = ""
 
