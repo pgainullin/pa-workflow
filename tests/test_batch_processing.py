@@ -184,7 +184,7 @@ async def test_classify_tool_long_text_sampling():
         # Sampled text should be much shorter than original
         assert len(called_text) < len(long_text)
         # Should contain sampling indicators
-        assert "middle section" in called_text or "end section" in called_text
+        assert "middle section" in called_text and "end section" in called_text
 
 
 @pytest.mark.asyncio
