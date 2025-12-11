@@ -70,7 +70,6 @@ async def demo_summarise_tool():
     async def mock_acomplete(prompt):
         nonlocal call_count
         call_count += 1
-        chunk_size = len(prompt.split("following text:")[1][:100])
         print(f"  - Batch {call_count}: Generating summary")
         mock_response = MagicMock()
         mock_response.__str__ = lambda x: f"Summary of batch {call_count}"
