@@ -177,12 +177,6 @@ async def test_dependency_checking_single_and_double_braces():
 
         workflow = EmailWorkflow()
 
-        email_data = EmailData(
-            from_email="test@example.com",
-            to_email="workflow@example.com",
-            subject="Test",
-            text="Test email",
-        )
 
         context = {
             "step_1": {"success": True, "parsed_text": "This is parsed text"},
