@@ -44,11 +44,11 @@ async def test_translate_tool():
     with patch("basic.tools.GoogleTranslator") as mock_translator_class:
         mock_translator = MagicMock()
         mock_translator.translate = MagicMock(return_value="Bonjour le monde")
-        mock_translator_class.return_value = mock_translator
-        # Mock the get_supported_languages method
-        mock_translator_class.get_supported_languages = MagicMock(
-            return_value={"en": "English", "fr": "French", "auto": "Auto-detect"}
+        # Mock get_supported_languages as instance method
+        mock_translator.get_supported_languages = MagicMock(
+            return_value={"en": "English", "fr": "French", "es": "Spanish"}
         )
+        mock_translator_class.return_value = mock_translator
 
         # Test execution
         result = await tool.execute(
@@ -142,8 +142,8 @@ async def test_parse_tool():
     with patch("basic.tools.download_file_from_llamacloud") as mock_download:
         mock_download.return_value = b"PDF content"
 
-        # Test execution with file_id
-        result = await tool.execute(file_id="file-123")
+        # Test execution with valid UUID file_id
+        result = await tool.execute(file_id="550e8400-e29b-41d4-a716-446655440000")
 
         assert result["success"] is True
         assert "parsed_text" in result

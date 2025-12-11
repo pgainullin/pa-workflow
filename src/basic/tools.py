@@ -67,6 +67,22 @@ class ParseTool(Tool):
             "Output: parsed_text (markdown format)"
         )
 
+    def _is_valid_uuid(self, value: str) -> bool:
+        """Check if a string is a valid UUID.
+
+        Args:
+            value: String to check
+
+        Returns:
+            True if the string is a valid UUID format
+        """
+        try:
+            import uuid
+            uuid.UUID(value)
+            return True
+        except (ValueError, AttributeError):
+            return False
+
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Parse a document using LlamaParse.
 
@@ -85,14 +101,32 @@ class ParseTool(Tool):
 
         file_id = kwargs.get("file_id")
         file_content = kwargs.get("file_content")
-        filename = kwargs.get("filename")
+        file_content_from_param = kwargs.get("file_id_content")  # Added by _resolve_params when file_id is None
+        filename = kwargs.get("filename") or kwargs.get("file_id_filename")  # Also check for filename from _resolve_params
 
         try:
             # Get file content
             if file_id:
-                content = await download_file_from_llamacloud(file_id)
-            elif file_content:
-                content = base64.b64decode(file_content)
+                # Validate file_id looks like a UUID
+                if not self._is_valid_uuid(file_id):
+                    # file_id doesn't look like a UUID - might be a filename
+                    # Try to use file_content as fallback if available
+                    if file_content or file_content_from_param:
+                        logger.warning(
+                            f"file_id '{file_id}' doesn't appear to be a valid UUID. "
+                            f"Using base64 content instead."
+                        )
+                        content = base64.b64decode(file_content or file_content_from_param)
+                    else:
+                        return {
+                            "success": False,
+                            "error": f"file_id '{file_id}' is not a valid UUID and no file_content available. "
+                            f"The file reference might not have been resolved correctly.",
+                        }
+                else:
+                    content = await download_file_from_llamacloud(file_id)
+            elif file_content or file_content_from_param:
+                content = base64.b64decode(file_content or file_content_from_param)
             else:
                 return {
                     "success": False,
@@ -371,7 +405,9 @@ class TranslateTool(Tool):
                 text = text[:max_length]
 
             # Validate language codes
-            supported_langs = GoogleTranslator.get_supported_languages(as_dict=True)
+            # Create a temporary instance to get supported languages
+            temp_translator = GoogleTranslator(source='auto', target='en')
+            supported_langs = temp_translator.get_supported_languages(as_dict=True)
             supported_codes = set(supported_langs.keys())
             # "auto" is allowed for source_lang
             if source_lang != "auto" and source_lang not in supported_codes:
