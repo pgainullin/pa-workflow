@@ -9,6 +9,9 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import os
+import pathlib
+import tempfile
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -256,7 +259,9 @@ class ExtractTool(Tool):
             try:
                 extract_agent = self.llama_extract.get_agent(name=agent_name)
             except Exception as e:
-                logger.warning(f"Failed to get agent '{agent_name}': {e}. Creating a new agent.")
+                logger.warning(
+                    f"Failed to get agent '{agent_name}': {e}. Creating a new agent."
+                )
                 # Agent doesn't exist, create it
                 from llama_cloud import ExtractConfig, ExtractMode
 
@@ -334,9 +339,6 @@ class SheetsTool(Tool):
         Returns:
             Dictionary with 'success' and 'sheet_data' or 'error'
         """
-        import tempfile
-        import pathlib
-
         file_id = kwargs.get("file_id")
         file_content = kwargs.get("file_content")
         file_content_from_param = kwargs.get("file_id_content")
@@ -363,20 +365,20 @@ class SheetsTool(Tool):
             # Determine file extension from filename
             file_extension = ".xlsx"  # Default to Excel
             if filename:
-                import os
-
                 _, ext = os.path.splitext(filename.lower())
                 if ext:
                     file_extension = ext
 
-            # Create temporary file for LlamaParse
-            with tempfile.NamedTemporaryFile(
-                delete=False, suffix=file_extension
-            ) as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-
+            # Create temporary file for LlamaParse and ensure cleanup
+            tmp_path = None
             try:
+                # Create temporary file for LlamaParse
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=file_extension
+                ) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+
                 # Parse the spreadsheet using LlamaParse
                 # LlamaParse returns JSON representation of tables
                 json_result = await self.llama_parser.aget_json(tmp_path)
@@ -393,8 +395,9 @@ class SheetsTool(Tool):
                 return {"success": True, "sheet_data": sheet_data}
 
             finally:
-                # Clean up temp file
-                pathlib.Path(tmp_path).unlink()
+                # Clean up temp file if it was created
+                if tmp_path and pathlib.Path(tmp_path).exists():
+                    pathlib.Path(tmp_path).unlink()
 
         except Exception as e:
             logger.exception("Error processing spreadsheet")
@@ -493,7 +496,7 @@ class ClassifyTool(Tool):
         return (
             "Classify text or documents into categories using LlamaIndex. "
             "Input: text, categories (list of possible categories). "
-            "Output: category (selected category)"
+            "Output: category (selected category), confidence (high, medium, or low)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
@@ -542,14 +545,12 @@ class ClassifyTool(Tool):
                 )
 
             # Create a LlamaIndex program for structured output
-            prompt_template = """
-            Classify the following text into one of these categories: {categories}
-            
-            Text to classify:
-            {text}
-            
-            Return the category that best matches the text along with your confidence level.
-            """
+            prompt_template = """Classify the following text into one of these categories: {categories}
+
+Text to classify:
+{text}
+
+Return the category that best matches the text along with your confidence level."""
 
             program = LLMTextCompletionProgram.from_defaults(
                 output_cls=Classification,

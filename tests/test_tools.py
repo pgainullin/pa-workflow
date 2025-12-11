@@ -200,9 +200,7 @@ async def test_tool_registry():
 async def test_extract_tool():
     """Test the extract tool."""
     from basic.tools import ExtractTool
-    from pydantic import BaseModel
 
-    # Define a test schema
     # Mock LlamaExtract and agent
     mock_llama_extract = MagicMock()
     mock_agent = MagicMock()
