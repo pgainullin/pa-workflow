@@ -141,18 +141,14 @@ class ExtractTool(Tool):
         Returns:
             Dictionary with 'success' and 'extracted_data' or 'error'
         """
-        try:
-            # Note: This is a placeholder implementation
-            # Real implementation would use LlamaCloud Extract API
-            return {
-                "success": True,
-                "extracted_data": {
-                    "note": "Extract tool requires LlamaCloud Extract API integration"
-                },
-            }
-        except Exception as e:
-            logger.exception("Error extracting data")
-            return {"success": False, "error": str(e)}
+        # Note: This is a placeholder implementation
+        # Real implementation would use LlamaCloud Extract API
+        return {
+            "success": True,
+            "extracted_data": {
+                "note": "Extract tool requires LlamaCloud Extract API integration"
+            },
+        }
 
 
 class SheetsTool(Tool):
