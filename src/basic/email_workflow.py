@@ -293,8 +293,34 @@ class EmailWorkflow(Workflow):
                 # Classification and processing based on MIME type
                 mime_type = attachment.type.lower()
                 
-                if "pdf" in mime_type or "sheet" in mime_type or "csv" in mime_type:
-                    # Use LlamaParse for document types
+                if "pdf" in mime_type:
+                    # Use Gemini's native PDF understanding capabilities
+                    logger.info(f"Processing PDF attachment with Gemini multi-modal: {attachment.name}")
+                    
+                    # Create a Part object with the PDF data
+                    pdf_part = types.Part.from_bytes(
+                        data=decoded_content,
+                        mime_type=mime_type
+                    )
+                    
+                    # Generate content with both text prompt and PDF
+                    prompt_text = (
+                        f"Analyze this PDF document (filename: {attachment.name}) and provide:\n"
+                        "1. A brief summary of the main content and purpose\n"
+                        "2. Key points, findings, or conclusions\n"
+                        "3. Any notable data, tables, charts, or images\n"
+                        "4. The document structure and organization\n\n"
+                        "Provide a concise, bullet-point summary."
+                    )
+                    
+                    # Use async API with multi-modal model that supports PDFs
+                    summary = await self._genai_generate_content_with_retry(
+                        model="gemini-2.0-flash-exp",
+                        contents=[prompt_text, pdf_part]
+                    )
+                
+                elif "sheet" in mime_type or "csv" in mime_type:
+                    # Use LlamaParse for spreadsheet types
                     documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 

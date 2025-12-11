@@ -5,7 +5,7 @@ The email workflow now supports processing various types of attachments with int
 ## Supported Attachment Types
 
 ### 📄 Documents
-- **PDF files** - Parsed with LlamaParse, summarized with LLM
+- **PDF files** - Analyzed using Google Gemini's native PDF understanding (gemini-2.0-flash-exp) for comprehensive analysis including text, images, tables, and formatting
 - **Spreadsheets** (Excel, Google Sheets) - Parsed with LlamaParse, summarized with LLM
 - **CSV files** - Parsed with LlamaParse, summarized with LLM
 - **Word documents** (.doc, .docx) - Parsed with LlamaParse, summarized with LLM
@@ -33,9 +33,11 @@ The email workflow now supports processing various types of attachments with int
 1. **Attachment Detection**: When an email arrives with attachments, the workflow fans out to process each attachment in parallel
 2. **MIME Type Classification**: Each attachment is classified based on its MIME type
 3. **Processing**:
-   - **Documents**: LlamaParse extracts content → LLM summarizes
+   - **PDFs**: Google Gemini's multi-modal API analyzes the complete document → Returns comprehensive summary
+   - **Spreadsheets/CSV**: LlamaParse extracts content → LLM summarizes
    - **Images**: Google Gemini Vision API analyzes → Returns description
    - **Text files**: Direct UTF-8 decoding → LLM summarizes
+   - **Other document types**: LlamaParse extracts content → LLM summarizes
    - **Other types**: Appropriate handler or acknowledgment message
 4. **Response**: User receives email with attachment analysis
 
@@ -87,6 +89,32 @@ Configuration file containing:
 
 ## Technical Implementation
 
+### PDF Processing Code
+```python
+# Create a Part object with the PDF data
+pdf_part = types.Part.from_bytes(
+    data=decoded_content,
+    mime_type=mime_type  # e.g., "application/pdf"
+)
+
+# Generate content with both text prompt and PDF
+prompt_text = (
+    f"Analyze this PDF document (filename: {attachment.name}) and provide:\n"
+    "1. A brief summary of the main content and purpose\n"
+    "2. Key points, findings, or conclusions\n"
+    "3. Any notable data, tables, charts, or images\n"
+    "4. The document structure and organization\n\n"
+    "Provide a concise, bullet-point summary."
+)
+
+response = await self.genai_client.aio.models.generate_content(
+    model="gemini-2.0-flash-exp",  # Using multi-modal model with PDF support
+    contents=[prompt_text, pdf_part]
+)
+
+summary = response.text
+```
+
 ### Image Processing Code
 ```python
 # Create a Part object with the image data
@@ -104,7 +132,7 @@ prompt_text = (
     "Keep the summary concise and informative."
 )
 
-response = self.genai_client.models.generate_content(
+response = await self.genai_client.aio.models.generate_content(
     model="gemini-2.0-flash-exp",  # Using vision-capable model
     contents=[prompt_text, image_part]
 )
