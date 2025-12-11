@@ -10,21 +10,23 @@ from pydantic import BaseModel, Field, model_validator
 
 class Attachment(BaseModel):
     """Represents a single email attachment.
-    
+
     Supports two modes:
     1. Base64 content mode: content field contains base64-encoded data
     2. LlamaCloud file mode: file_id references a file in LlamaCloud
-    
+
     At least one of 'content' or 'file_id' must be provided.
     """
 
     id: str  # Or 'content-id'
     name: str  # Filename
     type: str  # MIME type (e.g., 'application/pdf')
-    content: str | None = None  # Base64-encoded content (optional if file_id is provided)
+    content: str | None = (
+        None  # Base64-encoded content (optional if file_id is provided)
+    )
     file_id: str | None = None  # LlamaCloud file ID (optional if content is provided)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def check_content_or_file_id(self):
         if self.content is None and self.file_id is None:
             raise ValueError("Attachment must have either 'content' or 'file_id'")

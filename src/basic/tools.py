@@ -379,6 +379,12 @@ class SummariseTool(Tool):
 class PrintToPDFTool(Tool):
     """Tool for converting text to PDF."""
 
+    # PDF layout constants
+    PDF_MARGIN_INCHES = 1  # 1 inch margins
+    PDF_MARGIN_POINTS = 72  # 72 points = 1 inch
+    PDF_LINE_SPACING = 15  # Points between lines
+    PDF_MAX_LINE_LENGTH = 100  # Maximum characters per line
+
     @property
     def name(self) -> str:
         return "print_to_pdf"
@@ -408,21 +414,20 @@ class PrintToPDFTool(Tool):
 
             # Set up text
             width, height = letter
-            margin = 72  # 1 inch margins
-            y_position = height - margin
+            y_position = height - self.PDF_MARGIN_POINTS
 
             # Split text into lines and write to PDF
             lines = text.split("\n")
             for line in lines:
-                if y_position < margin:
+                if y_position < self.PDF_MARGIN_POINTS:
                     # Start new page
                     pdf_canvas.showPage()
-                    y_position = height - margin
+                    y_position = height - self.PDF_MARGIN_POINTS
 
-                pdf_canvas.drawString(
-                    margin, y_position, line[:100]
-                )  # Truncate long lines
-                y_position -= 15  # Move down for next line
+                # Truncate long lines to prevent overflow
+                display_line = line[: self.PDF_MAX_LINE_LENGTH]
+                pdf_canvas.drawString(self.PDF_MARGIN_POINTS, y_position, display_line)
+                y_position -= self.PDF_LINE_SPACING  # Move down for next line
 
             pdf_canvas.save()
 

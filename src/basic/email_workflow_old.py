@@ -22,7 +22,11 @@ from .models import (
     EmailProcessingResult,
     SendEmailRequest,
 )
-from .utils import download_file_from_llamacloud, text_to_html, is_retryable_error, api_retry
+from .utils import (
+    download_file_from_llamacloud,
+    text_to_html,
+    api_retry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +37,9 @@ llm_api_retry = api_retry
 
 # Gemini model configuration
 # Using latest Gemini 3 models as per https://ai.google.dev/gemini-api/docs/gemini-3
-GEMINI_MULTIMODAL_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for multi-modal (images, PDFs, videos)
+GEMINI_MULTIMODAL_MODEL = (
+    "gemini-3-pro-preview"  # Latest Gemini 3 for multi-modal (images, PDFs, videos)
+)
 GEMINI_TEXT_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for text processing
 
 # Alternative cheaper model configuration (not currently in use)
@@ -99,10 +105,10 @@ class EmailWorkflow(Workflow):
     @llm_api_retry
     async def _llm_complete_with_retry(self, prompt: str) -> str:
         """Execute LLM completion with automatic retry on transient errors.
-        
+
         Args:
             prompt: The prompt to send to the LLM
-            
+
         Returns:
             The LLM response as a string
         """
@@ -110,29 +116,30 @@ class EmailWorkflow(Workflow):
         return str(response)
 
     @llm_api_retry
-    async def _genai_generate_content_with_retry(self, model: str, contents: list) -> str:
+    async def _genai_generate_content_with_retry(
+        self, model: str, contents: list
+    ) -> str:
         """Execute Gemini multi-modal content generation with automatic retry.
-        
+
         Args:
             model: The model name (e.g., "gemini-3-pro-preview")
             contents: List of content parts (text, images, etc.)
-            
+
         Returns:
             The generated text response
         """
         response = await self.genai_client.aio.models.generate_content(
-            model=model,
-            contents=contents
+            model=model, contents=contents
         )
         return response.text
 
     @llm_api_retry
     async def _parse_document_with_retry(self, file_path: str) -> list:
         """Parse a document using LlamaParse with automatic retry.
-        
+
         Args:
             file_path: Path to the file to parse
-            
+
         Returns:
             List of parsed documents
         """
@@ -276,7 +283,9 @@ class EmailWorkflow(Workflow):
                     # Decode from base64
                     decoded_content = base64.b64decode(attachment.content)
                 else:
-                    summary = f"Attachment {attachment.name} has neither content nor file_id"
+                    summary = (
+                        f"Attachment {attachment.name} has neither content nor file_id"
+                    )
                     return AttachmentSummaryEvent(
                         summary=summary,
                         filename=attachment.name,
@@ -297,17 +306,18 @@ class EmailWorkflow(Workflow):
             try:
                 # Classification and processing based on MIME type
                 mime_type = attachment.type.lower()
-                
+
                 if "pdf" in mime_type:
                     # Use Gemini's native PDF understanding capabilities
-                    logger.info(f"Processing PDF attachment with Gemini multi-modal: {attachment.name}")
-                    
+                    logger.info(
+                        f"Processing PDF attachment with Gemini multi-modal: {attachment.name}"
+                    )
+
                     # Create a Part object with the PDF data
                     pdf_part = types.Part.from_bytes(
-                        data=decoded_content,
-                        mime_type=mime_type
+                        data=decoded_content, mime_type=mime_type
                     )
-                    
+
                     # Generate content with both text prompt and PDF
                     prompt_text = (
                         f"Analyze this PDF document (filename: {attachment.name}) and provide:\n"
@@ -317,20 +327,19 @@ class EmailWorkflow(Workflow):
                         "4. The document structure and organization\n\n"
                         "Provide a concise, bullet-point summary."
                     )
-                    
+
                     # Use async API with multi-modal model that supports PDFs
                     summary = await self._genai_generate_content_with_retry(
-                        model=GEMINI_MULTIMODAL_MODEL,
-                        contents=[prompt_text, pdf_part]
+                        model=GEMINI_MULTIMODAL_MODEL, contents=[prompt_text, pdf_part]
                     )
-                
+
                 elif "sheet" in mime_type or "csv" in mime_type:
                     # Use LlamaParse for spreadsheet types
                     # Create a temporary file for LlamaParse
                     with tempfile.NamedTemporaryFile(delete=False) as tmp:
                         tmp.write(decoded_content)
                         tmp_path = tmp.name
-                    
+
                     documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
@@ -341,13 +350,12 @@ class EmailWorkflow(Workflow):
                 elif "image" in mime_type:
                     # Use Google Gemini's vision capabilities for image analysis
                     logger.info(f"Processing image attachment: {attachment.name}")
-                    
+
                     # Create a Part object with the image data
                     image_part = types.Part.from_bytes(
-                        data=decoded_content,
-                        mime_type=mime_type
+                        data=decoded_content, mime_type=mime_type
                     )
-                    
+
                     # Generate content with both text prompt and image
                     prompt_text = (
                         f"Analyze this image (filename: {attachment.name}) and provide:\n"
@@ -356,11 +364,11 @@ class EmailWorkflow(Workflow):
                         "3. The general context or setting\n\n"
                         "Keep the summary concise and informative."
                     )
-                    
+
                     # Use async API to avoid blocking the event loop
                     summary = await self._genai_generate_content_with_retry(
                         model=GEMINI_MULTIMODAL_MODEL,
-                        contents=[prompt_text, image_part]
+                        contents=[prompt_text, image_part],
                     )
 
                 elif (
@@ -379,7 +387,7 @@ class EmailWorkflow(Workflow):
                     with tempfile.NamedTemporaryFile(delete=False) as tmp:
                         tmp.write(decoded_content)
                         tmp_path = tmp.name
-                    
+
                     documents = await self._parse_document_with_retry(tmp_path)
                     content = "\n".join([doc.get_content() for doc in documents])
 
@@ -395,21 +403,25 @@ class EmailWorkflow(Workflow):
                 ):
                     # JSON, XML, Markdown, plain text - read directly and summarize
                     # Note: Ordered from most specific to least specific
-                    logger.info(f"Processing text file: {attachment.name} ({mime_type})")
+                    logger.info(
+                        f"Processing text file: {attachment.name} ({mime_type})"
+                    )
                     try:
                         # Try to decode as UTF-8 text
                         content = decoded_content.decode("utf-8")
-                        
+
                         # Truncate if too long (to avoid token limits)
                         max_chars = 50000
                         if len(content) > max_chars:
                             content = content[:max_chars] + "\n... (truncated)"
-                        
+
                         # Summarize with LLM
                         prompt = f"Provide a short, bullet-point summary of the following {mime_type} content:\n\n{content}"
                         summary = await self._llm_complete_with_retry(prompt)
                     except UnicodeDecodeError:
-                        summary = f"Could not decode text file {attachment.name} as UTF-8"
+                        summary = (
+                            f"Could not decode text file {attachment.name} as UTF-8"
+                        )
                         success = False
 
                 elif "video" in mime_type or "audio" in mime_type:
@@ -419,7 +431,7 @@ class EmailWorkflow(Workflow):
                         "Video and audio summarization requires uploading to Gemini's File API "
                         "and is not yet implemented in this workflow."
                     )
-                    
+
                 else:
                     summary = (
                         f"Unsupported attachment type: {mime_type} (filename: {attachment.name}). "
