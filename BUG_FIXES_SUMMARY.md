@@ -116,7 +116,7 @@ Step 4: print_to_pdf - Convert the translated text into a PDF file. (✓ Success
 - Users couldn't see that a PDF was actually generated
 
 **Fix Applied:**
-(`src/basic/email_workflow.py`, lines 741-744)
+(`src/basic/email_workflow.py`, lines 762-764)
 
 **Before:**
 ```python
