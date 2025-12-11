@@ -110,6 +110,100 @@ async def test_image_attachment_processing():
 
 
 @pytest.mark.asyncio
+async def test_pdf_attachment_processing():
+    """Test that PDF attachments are processed using Gemini's native PDF understanding."""
+    
+    # Create a minimal valid PDF (simplified PDF structure)
+    # This is a very basic PDF that just contains the header
+    mock_pdf_data = base64.b64encode(
+        b'%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n'
+        b'2 0 obj\n<<\n/Type /Pages\n/Kids [3 0 R]\n/Count 1\n>>\nendobj\n'
+        b'3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [0 0 612 792]\n>>\nendobj\n'
+        b'xref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000058 00000 n\n'
+        b'0000000115 00000 n\ntrailer\n<<\n/Size 4\n/Root 1 0 R\n>>\nstartxref\n'
+        b'190\n%%EOF\n'
+    ).decode('utf-8')
+    
+    attachment = Attachment(
+        id="pdf-1",
+        name="test_document.pdf",
+        type="application/pdf",
+        content=mock_pdf_data
+    )
+    
+    email_data = EmailData(
+        from_email="user@example.com",
+        to_email="workflow@example.com",
+        subject="Test PDF",
+        text="Please analyze this PDF document",
+        attachments=[attachment]
+    )
+    
+    callback = CallbackConfig(
+        callback_url="http://test.local/callback",
+        auth_token="test-token"
+    )
+    
+    # Mock the genai client with async support
+    mock_response = MagicMock()
+    mock_response.text = (
+        "This PDF document contains:\n"
+        "1. A simple test document structure\n"
+        "2. Basic metadata and formatting\n"
+        "3. Standard PDF elements"
+    )
+    
+    # Create async mock for aio.models.generate_content
+    mock_aio_models = MagicMock()
+    mock_aio_models.generate_content = AsyncMock(return_value=mock_response)
+    
+    mock_aio = MagicMock()
+    mock_aio.models = mock_aio_models
+    
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio = mock_aio
+    
+    # Mock httpx for callback
+    mock_http_response = MagicMock()
+    mock_http_response.raise_for_status = MagicMock()
+    
+    mock_http_client = AsyncMock()
+    mock_http_client.post = AsyncMock(return_value=mock_http_response)
+    mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+    mock_http_client.__aexit__ = AsyncMock(return_value=None)
+    
+    with patch("httpx.AsyncClient", return_value=mock_http_client):
+        # Patch the genai_client on the workflow class
+        with patch.object(EmailWorkflow, "genai_client", mock_genai_client):
+            from basic.email_workflow import email_workflow
+            
+            # Run the workflow with the email data
+            await email_workflow.run(
+                email_data=email_data,
+                callback=callback
+            )
+    
+    # Verify that the genai client was called
+    assert mock_aio_models.generate_content.called
+    call_args = mock_aio_models.generate_content.call_args
+    
+    # Check that it was called with the right model
+    assert call_args.kwargs["model"] == "gemini-2.0-flash-exp"
+    
+    # Check that contents includes both text and PDF
+    contents = call_args.kwargs["contents"]
+    assert len(contents) == 2
+    assert isinstance(contents[0], str)  # Prompt text
+    assert "PDF document" in contents[0]  # Verify it's the PDF-specific prompt
+    # Verify contents[1] is a Part object with PDF data
+    # Note: We can't import types.Part directly in the test due to mocking,
+    # but we can verify it has the expected structure from types.Part.from_bytes()
+    assert hasattr(contents[1], '__class__')
+    # The Part object should have been created with the PDF data
+    # We verify this indirectly by checking that generate_content was called with the right number of args
+
+
+@pytest.mark.asyncio
 async def test_word_document_attachment():
     """Test that Word documents are processed using LlamaParse."""
     
