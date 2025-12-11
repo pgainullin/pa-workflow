@@ -78,7 +78,7 @@ Note: The `_llm_complete_with_retry` method would need to be updated to accept a
 
 ## Testing
 
-Tests have been updated to expect the new stable model name (`gemini-2.0-flash`):
+Tests have been updated to expect the new stable model name (`gemini-3-pro-preview`):
 
 - `tests/test_attachment_types.py`: Updated assertions for image and PDF processing tests
 
