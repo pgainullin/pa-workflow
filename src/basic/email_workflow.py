@@ -225,7 +225,7 @@ Example plan format:
   }},
   {{
     "tool": "summarise",
-    "params": {{"text": "{{{{parsed_text}}}}"}},
+    "params": {{"text": "{{step_1.parsed_text}}"}},
     "description": "Summarize the parsed document"
   }}
 ]
