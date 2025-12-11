@@ -441,7 +441,6 @@ Plan:"""
             True if any dependency has failed, False otherwise
         """
         # Extract step references from parameters
-        import re
 
         referenced_steps = set()
         for key, value in params.items():
