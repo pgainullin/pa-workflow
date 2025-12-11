@@ -1,15 +1,29 @@
 # PA Workflow
 
-Email processing workflow with LlamaCloud integration for intelligent document handling.
+Email processing workflow with LlamaCloud integration and AI-powered triage for intelligent document handling.
 
 ## Features
 
-- **Email Processing Workflow**: Handles inbound emails with attachments
+- **Agent Triage System**: LLM-powered triage agent analyzes emails and creates execution plans
+- **Tool-Based Processing**: Modular tools for parsing, extraction, translation, summarization, and more
 - **LlamaCloud Integration**: Pull and store attachments using LlamaCloud file storage
 - **Document Processing**: Parse PDFs, spreadsheets, and other documents using LlamaParse
-- **AI Summarization**: Summarize documents using Google Gemini
+- **AI Capabilities**: Summarization, classification, and translation using Google Gemini
 - **Callback System**: Send processed results back via webhook callbacks
 - **Automatic Retry**: Handles API overload and rate limits with exponential backoff
+
+## Available Tools
+
+The workflow includes the following tools that can be used by the triage agent:
+
+1. **Parse** - Parse documents (PDF, Word, PowerPoint) using LlamaParse
+2. **Extract** - Extract structured data using LlamaCloud Extract (placeholder)
+3. **Sheets** - Process spreadsheet files (Excel, CSV) (placeholder)
+4. **Split** - Split documents into logical sections
+5. **Classify** - Classify text into categories using an LLM
+6. **Translate** - Translate text using Google Translate
+7. **Summarise** - Summarize text using an LLM
+8. **Print to PDF** - Convert text to PDF format
 
 ## Installation
 
@@ -47,6 +61,45 @@ python -m basic.server
 ```
 
 The server will start on `http://127.0.0.1:8080` and expose the email workflow via the LlamaCloud API endpoints.
+
+## How It Works
+
+### Agent Triage Workflow
+
+The email workflow now uses an AI-powered triage system:
+
+1. **Triage Step**: An LLM analyzes the email (subject, body, attachments) and creates a step-by-step execution plan using available tools
+2. **Plan Execution**: The workflow executes each step in the plan, passing results between steps
+3. **Result Formatting**: Results are formatted and sent back via the callback email
+
+### Example Workflow
+
+When you send an email with a PDF attachment and subject "Translate this document to French":
+
+1. Triage agent analyzes the email and creates a plan:
+   ```json
+   [
+     {
+       "tool": "parse",
+       "params": {"file_id": "att-1"},
+       "description": "Parse the PDF attachment"
+     },
+     {
+       "tool": "translate",
+       "params": {
+         "text": "{{step_1.parsed_text}}",
+         "target_lang": "fr"
+       },
+       "description": "Translate to French"
+     }
+   ]
+   ```
+
+2. The workflow executes each step:
+   - Step 1: Parses the PDF and extracts text
+   - Step 2: Translates the extracted text to French
+
+3. Results are sent back via email with a summary of each step
 
 ## LlamaCloud File Integration
 
