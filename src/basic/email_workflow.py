@@ -32,9 +32,9 @@ llm_api_retry = api_retry
 
 
 # Gemini model configuration
-# Using latest stable Gemini 3.0 models as per https://ai.google.dev/gemini-api/docs/gemini-3
-GEMINI_MULTIMODAL_MODEL = "gemini-3.0-flash"  # Latest stable for multi-modal (images, PDFs, videos)
-GEMINI_TEXT_MODEL = "gemini-3.0-flash"  # Latest stable for text processing
+# Using latest Gemini 3 models as per https://ai.google.dev/gemini-api/docs/gemini-3
+GEMINI_MULTIMODAL_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for multi-modal (images, PDFs, videos)
+GEMINI_TEXT_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for text processing
 
 # Alternative cheaper model configuration (not currently in use)
 # Gemini 2.5 Flash is optimized for cost-effective simple requests
@@ -114,7 +114,7 @@ class EmailWorkflow(Workflow):
         """Execute Gemini multi-modal content generation with automatic retry.
         
         Args:
-            model: The model name (e.g., "gemini-2.0-flash")
+            model: The model name (e.g., "gemini-3-pro-preview")
             contents: List of content parts (text, images, etc.)
             
         Returns:
