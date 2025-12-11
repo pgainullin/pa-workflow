@@ -21,7 +21,7 @@ found `S` at 1', type='uuid_parsing')]
 
 **Fixes Applied:**
 
-1. **Enhanced Attachment Resolution** (`src/basic/email_workflow.py`, lines 600-622)
+1. **Enhanced Attachment Resolution** (`src/basic/email_workflow.py`, lines 553-567, 622-642)
    - Added `_is_attachment_reference()` helper method to detect filename references
    - Modified `_resolve_params()` to match attachments by:
      - ID (e.g., "att-1")
