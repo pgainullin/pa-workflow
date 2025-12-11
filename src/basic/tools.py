@@ -596,7 +596,7 @@ class TranslateTool(Tool):
     def description(self) -> str:
         return (
             "Translate text from one language to another using Google Translate. "
-            "Input: text, source_lang (default: 'auto'), target_lang (default: 'english'). "
+            "Input: text, source_lang (default: 'auto'), target_lang (default: 'en'). "
             "Languages can be specified as codes (e.g., 'en', 'fr') or full names (e.g., 'english', 'french'). "
             "Output: translated_text"
         )
