@@ -6,6 +6,7 @@ Email processing workflow with LlamaCloud integration and AI-powered triage for 
 
 - **Agent Triage System**: LLM-powered triage agent analyzes emails and creates execution plans
 - **Tool-Based Processing**: Modular tools for parsing, extraction, translation, summarization, and more
+- **Batch Processing**: Intelligent handling of long text with automatic chunking and reassembly
 - **LlamaCloud Integration**: Pull and store attachments using LlamaCloud file storage
 - **Document Processing**: Parse PDFs, spreadsheets, and other documents using LlamaParse
 - **AI Capabilities**: Summarization, classification, and translation using Google Gemini
@@ -186,12 +187,26 @@ pytest tests/test_llamacloud_attachments.py -v
 │   ├── workflow.py           # Basic template workflow
 │   ├── server.py             # Workflow server
 │   ├── models.py             # Pydantic models
-│   └── utils.py              # Utility functions (LlamaCloud, HTML, retry)
+│   ├── tools.py              # Tool implementations with batch processing
+│   └── utils.py              # Utility functions (LlamaCloud, HTML, retry, batching)
 ├── tests/                    # Test suite
 ├── API_RETRY.md              # API retry mechanism documentation
+├── BATCH_PROCESSING.md       # Batch processing documentation
 ├── LLAMACLOUD_FILES.md       # LlamaCloud integration docs
 └── README.md                 # This file
 ```
+
+## Long Text Processing
+
+The workflow now supports intelligent batch processing for long text inputs. Instead of truncating text, tools automatically split it into manageable chunks, process each sequentially, and reassemble results. This ensures complete processing of large documents.
+
+**Key features:**
+- Automatic chunking at sentence/word boundaries
+- Tool-specific batch sizes (10KB-100KB)
+- No data loss from truncation
+- Transparent to end users
+
+See [BATCH_PROCESSING.md](BATCH_PROCESSING.md) for detailed documentation.
 
 ## API Reliability
 

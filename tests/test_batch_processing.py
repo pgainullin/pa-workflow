@@ -194,8 +194,8 @@ async def test_extract_tool_text_batching():
 
     tool = ExtractTool()
 
-    # Mock LlamaExtract
-    with patch("basic.tools.LlamaExtract") as mock_extract_class:
+    # Mock LlamaExtract at the correct import location
+    with patch("llama_cloud_services.LlamaExtract") as mock_extract_class:
         mock_extract = MagicMock()
         mock_agent = MagicMock()
 
