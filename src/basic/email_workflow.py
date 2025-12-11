@@ -1,14 +1,15 @@
-"""Email processing workflow for handling inbound emails."""
+"""Email processing workflow for handling inbound emails with agent triage.
 
-import asyncio
-import base64
+This workflow uses an LLM-powered triage agent to analyze emails and create
+execution plans using available tools.
+"""
+
+import json
 import logging
 import os
-import pathlib
-import tempfile
+import re
 
 import google.genai as genai
-from google.genai import types
 import httpx
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_parse import LlamaParse
@@ -16,13 +17,26 @@ from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
 from .models import (
-    Attachment,
     CallbackConfig,
     EmailData,
     EmailProcessingResult,
     SendEmailRequest,
 )
-from .utils import download_file_from_llamacloud, text_to_html, is_retryable_error, api_retry
+from .tools import (
+    ParseTool,
+    ExtractTool,
+    SheetsTool,
+    SplitTool,
+    ClassifyTool,
+    TranslateTool,
+    SummariseTool,
+    PrintToPDFTool,
+    ToolRegistry,
+)
+from .utils import (
+    text_to_html,
+    api_retry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +47,9 @@ llm_api_retry = api_retry
 
 # Gemini model configuration
 # Using latest Gemini 3 models as per https://ai.google.dev/gemini-api/docs/gemini-3
-GEMINI_MULTIMODAL_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for multi-modal (images, PDFs, videos)
+GEMINI_MULTIMODAL_MODEL = (
+    "gemini-3-pro-preview"  # Latest Gemini 3 for multi-modal (images, PDFs, videos)
+)
 GEMINI_TEXT_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for text processing
 
 # Alternative cheaper model configuration (not currently in use)
@@ -52,9 +68,18 @@ class EmailStartEvent(StartEvent):
     callback: CallbackConfig
 
 
-class EmailReceivedEvent(Event):
-    """Event triggered when an email is received."""
+class TriageEvent(Event):
+    """Event triggered when triage agent creates an execution plan."""
 
+    plan: list[dict]  # List of tool execution steps
+    email_data: EmailData
+    callback: CallbackConfig
+
+
+class PlanExecutionEvent(Event):
+    """Event triggered when plan execution is complete."""
+
+    results: list[dict]  # Results from each tool execution
     email_data: EmailData
     callback: CallbackConfig
 
@@ -65,30 +90,12 @@ class EmailProcessedEvent(Event):
     result: EmailProcessingResult
 
 
-class AttachmentFoundEvent(Event):
-    """Event triggered when an email attachment is found."""
-
-    attachment: Attachment
-    original_email: EmailData
-    callback: CallbackConfig
-
-
-class AttachmentSummaryEvent(Event):
-    """Event triggered when an attachment has been summarized."""
-
-    summary: str
-    filename: str
-    success: bool
-    original_email: EmailData
-    callback: CallbackConfig
-
-
 class EmailWorkflow(Workflow):
-    """Workflow for processing inbound emails from SendGrid Inbound Parse.
+    """Workflow for processing inbound emails with LLM-powered triage.
 
-    This workflow receives email data and a callback configuration.
-    When processing is complete, it calls back to the webhook server
-    to send a response email.
+    This workflow uses an LLM triage agent to analyze emails and create
+    execution plans using available tools. The plan is then executed
+    and results are sent back via callback.
     """
 
     llama_parser = LlamaParse(result_type="markdown")
@@ -96,485 +103,439 @@ class EmailWorkflow(Workflow):
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Initialize tool registry
+        self.tool_registry = ToolRegistry()
+        self._register_tools()
+
+    def _register_tools(self):
+        """Register all available tools."""
+        self.tool_registry.register(ParseTool(self.llama_parser))
+        self.tool_registry.register(ExtractTool())
+        self.tool_registry.register(SheetsTool())
+        self.tool_registry.register(SplitTool())
+        self.tool_registry.register(ClassifyTool(self.llm))
+        self.tool_registry.register(TranslateTool())
+        self.tool_registry.register(SummariseTool(self.llm))
+        self.tool_registry.register(PrintToPDFTool())
+
     @llm_api_retry
     async def _llm_complete_with_retry(self, prompt: str) -> str:
         """Execute LLM completion with automatic retry on transient errors.
-        
+
         Args:
             prompt: The prompt to send to the LLM
-            
+
         Returns:
             The LLM response as a string
         """
         response = await self.llm.acomplete(prompt)
         return str(response)
 
-    @llm_api_retry
-    async def _genai_generate_content_with_retry(self, model: str, contents: list) -> str:
-        """Execute Gemini multi-modal content generation with automatic retry.
-        
-        Args:
-            model: The model name (e.g., "gemini-3-pro-preview")
-            contents: List of content parts (text, images, etc.)
-            
-        Returns:
-            The generated text response
-        """
-        response = await self.genai_client.aio.models.generate_content(
-            model=model,
-            contents=contents
-        )
-        return response.text
-
-    @llm_api_retry
-    async def _parse_document_with_retry(self, file_path: str) -> list:
-        """Parse a document using LlamaParse with automatic retry.
-        
-        Args:
-            file_path: Path to the file to parse
-            
-        Returns:
-            List of parsed documents
-        """
-        return await asyncio.to_thread(self.llama_parser.load_data, file_path)
-
     @step
-    async def receive_email(
-        self, ev: EmailStartEvent, ctx: Context
-    ) -> EmailReceivedEvent:
-        """Receive and validate incoming email data.
-
-        The WorkflowServer deserializes the JSON payload into EmailStartEvent.
-        The payload should have 'email_data' and 'callback' fields at the top level.
+    async def triage_email(self, ev: EmailStartEvent, ctx: Context) -> TriageEvent:
+        """Triage the email and create an execution plan using available tools.
 
         Args:
-            ev: EmailStartEvent containing email_data and callback config
+            ev: EmailStartEvent containing email data and callback config
             ctx: Workflow context
 
         Returns:
-            EmailReceivedEvent with validated email data and callback
+            TriageEvent with execution plan
         """
-        # EmailStartEvent already has the validated email_data and callback
         email_data = ev.email_data
         callback = ev.callback
 
-        # Debug logging to see incoming email data
+        # Debug logging
         logger.info(
-            f"Received email: from={email_data.from_email}, "
-            f"to={repr(email_data.to_email)}, "
-            f"subject={email_data.subject}"
+            f"Triaging email: from={email_data.from_email}, "
+            f"subject={email_data.subject}, "
+            f"attachments={len(email_data.attachments)}"
         )
 
-        event = EmailReceivedEvent(email_data=email_data, callback=callback)
-        ctx.write_event_to_stream(event)
-        return event
+        # Build triage prompt
+        triage_prompt = self._build_triage_prompt(email_data)
+
+        try:
+            # Get plan from LLM
+            response = await self._llm_complete_with_retry(triage_prompt)
+
+            # Parse plan from response
+            plan = self._parse_plan(response)
+
+            logger.info(f"Triage complete. Generated plan with {len(plan)} steps")
+
+            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+        except Exception:
+            logger.exception("Error during email triage")
+            # Create a simple fallback plan
+            plan = [
+                {
+                    "tool": "summarise",
+                    "params": {
+                        "text": f"Email subject: {email_data.subject}\n\nBody: {email_data.text}"
+                    },
+                }
+            ]
+            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+
+    def _build_triage_prompt(self, email_data: EmailData) -> str:
+        """Build the triage prompt for the LLM.
+
+        Args:
+            email_data: Email data to triage
+
+        Returns:
+            Triage prompt string
+        """
+        tool_descriptions = self.tool_registry.get_tool_descriptions()
+
+        attachment_info = ""
+        if email_data.attachments:
+            attachment_info = "\n\nAttachments:\n"
+            for att in email_data.attachments:
+                attachment_info += f"- {att.name} ({att.type})\n"
+
+        prompt = f"""You are an email processing triage agent. Analyze the email below and create a step-by-step execution plan using the available tools.
+
+Email Subject: {email_data.subject}
+
+Email Body:
+{email_data.text or email_data.html or "(empty)"}
+{attachment_info}
+
+Available Tools:
+{tool_descriptions}
+
+Create a step-by-step plan to process this email. Each step should use one of the available tools.
+The plan can include loops (repeating steps) where needed.
+
+Respond with a JSON array of steps. Each step should have:
+- "tool": the tool name
+- "params": a dictionary of parameters for that tool
+- "description": a brief description of what this step does
+
+Example plan format:
+[
+  {{
+    "tool": "parse",
+    "params": {{"file_id": "att-1"}},
+    "description": "Parse the PDF attachment"
+  }},
+  {{
+    "tool": "summarise",
+    "params": {{"text": "{{{{parsed_text}}}}"}},
+    "description": "Summarize the parsed document"
+  }}
+]
+
+IMPORTANT: Respond ONLY with the JSON array, no other text.
+
+Plan:"""
+
+        return prompt
+
+    def _parse_plan(self, response: str) -> list[dict]:
+        """Parse the execution plan from LLM response.
+
+        Args:
+            response: LLM response containing the plan
+
+        Returns:
+            List of plan steps
+        """
+        try:
+            # Try to extract JSON from the response
+            # Look for content between first [ and last ]
+            start = response.find("[")
+            end = response.rfind("]") + 1
+
+            if start >= 0 and end > start:
+                json_str = response[start:end]
+                plan = json.loads(json_str)
+
+                # Validate plan structure
+                if isinstance(plan, list):
+                    for step in plan:
+                        if not isinstance(step, dict):
+                            raise ValueError("Each step must be a dictionary")
+                        if "tool" not in step or "params" not in step:
+                            raise ValueError("Each step must have 'tool' and 'params'")
+                    return plan
+
+            # If parsing failed, create a simple summarize plan
+            logger.warning("Could not parse plan from LLM response, using fallback")
+            return [
+                {
+                    "tool": "summarise",
+                    "params": {"text": response},
+                    "description": "Summarize the content",
+                }
+            ]
+        except Exception:
+            logger.exception("Error parsing plan")
+            return [
+                {
+                    "tool": "summarise",
+                    "params": {"text": str(response)},
+                    "description": "Summarize the content",
+                }
+            ]
 
     @step
-    async def process_email(
-        self, ev: EmailReceivedEvent, ctx: Context
-    ) -> AttachmentFoundEvent | StopEvent | None:
-        """Classify email attachments and dispatch to next steps."""
+    async def execute_plan(self, ev: TriageEvent, ctx: Context) -> PlanExecutionEvent:
+        """Execute the plan created by triage agent.
+
+        Args:
+            ev: TriageEvent with the execution plan
+            ctx: Workflow context
+
+        Returns:
+            PlanExecutionEvent with execution results
+        """
+        plan = ev.plan
         email_data = ev.email_data
         callback = ev.callback
 
-        try:
-            if not email_data.attachments:
-                # No attachments, send response email via callback
-                try:
-                    # Debug logging to track from_email value
-                    logger.info(
-                        f"Creating SendEmailRequest: to_email={email_data.from_email}, "
-                        f"from_email source={repr(email_data.to_email)}, "
-                        f"from_email final={repr(email_data.to_email or None)}"
-                    )
-                    response_text = f"Your email has been processed.\n\nResult: Email from {email_data.from_email} processed successfully (no attachments)."
-                    response_email = SendEmailRequest(
-                        to_email=email_data.from_email,
-                        from_email=email_data.to_email or None,
-                        subject=f"Re: {email_data.subject}",
-                        text=response_text,
-                        html=text_to_html(response_text),
-                    )
-                    async with httpx.AsyncClient() as client:
-                        response = await client.post(
-                            callback.callback_url,
-                            json=response_email.model_dump(),
-                            headers={
-                                "Content-Type": "application/json",
-                                "X-Auth-Token": callback.auth_token,
-                            },
-                            timeout=30.0,
-                        )
-                        response.raise_for_status()
-                        logger.info("Callback email sent successfully")
-                    # Only write success event after callback succeeds
-                    result = EmailProcessingResult(
-                        success=True,
-                        message=f"Email from {email_data.from_email} processed successfully (no attachments).",
-                        from_email=email_data.from_email,
-                        email_subject=email_data.subject,
-                    )
-                    ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-                    return StopEvent(result=result)
+        logger.info(f"Executing plan with {len(plan)} steps")
 
-                except httpx.HTTPError as e:
-                    logger.error("Failed to send callback email: %s", str(e))
-                    failure = EmailProcessingResult(
-                        success=False,
-                        message=f"Email processed but callback failed: {e!s}",
-                        from_email=email_data.from_email,
-                        email_subject=email_data.subject,
-                    )
-                    ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
-                    return StopEvent(result=failure)
+        results = []
+        execution_context = {}  # Store results from previous steps
 
-            # Got attachments, fan out events for each one
-            for attachment in email_data.attachments:
-                ctx.send_event(
-                    AttachmentFoundEvent(
-                        attachment=attachment,
-                        original_email=email_data,
-                        callback=callback,
+        for i, step_def in enumerate(plan):
+            tool_name = step_def.get("tool")
+            params = step_def.get("params", {})
+            description = step_def.get("description", "")
+
+            logger.info(
+                f"Executing step {i + 1}/{len(plan)}: {tool_name} - {description}"
+            )
+
+            try:
+                # Get the tool
+                tool = self.tool_registry.get_tool(tool_name)
+                if not tool:
+                    logger.warning(f"Tool '{tool_name}' not found, skipping step")
+                    results.append(
+                        {
+                            "step": i + 1,
+                            "tool": tool_name,
+                            "success": False,
+                            "error": f"Tool '{tool_name}' not found",
+                        }
                     )
+                    continue
+
+                # Resolve parameter references from execution context
+                resolved_params = self._resolve_params(
+                    params, execution_context, email_data
                 )
-            return None  # The workflow continues with the fanned-out events
 
-        except Exception as e:  # Catch-all to keep response format stable
-            logger.exception("Unexpected error while processing email")
+                # Execute the tool
+                result = await tool.execute(**resolved_params)
+
+                # Store result in context for future steps
+                execution_context[f"step_{i + 1}"] = result
+
+                results.append(
+                    {
+                        "step": i + 1,
+                        "tool": tool_name,
+                        "description": description,
+                        **result,
+                    }
+                )
+
+                logger.info(f"Step {i + 1} completed: {result.get('success', False)}")
+
+            except Exception as e:
+                logger.exception(f"Error executing step {i + 1}")
+                results.append(
+                    {
+                        "step": i + 1,
+                        "tool": tool_name,
+                        "success": False,
+                        "error": str(e),
+                    }
+                )
+
+        return PlanExecutionEvent(
+            results=results, email_data=email_data, callback=callback
+        )
+
+    def _resolve_params(
+        self, params: dict, context: dict, email_data: EmailData
+    ) -> dict:
+        """Resolve parameter references from execution context.
+
+        Args:
+            params: Raw parameters that may contain references
+            context: Execution context with previous results
+            email_data: Original email data
+
+        Returns:
+            Resolved parameters
+        """
+        resolved = {}
+
+        for key, value in params.items():
+            if isinstance(value, str):
+                # Check for template references like {{step_1.parsed_text}}
+                if "{{" in value and "}}" in value:
+                    # Simple template resolution
+                    resolved_value = value
+                    for match in re.finditer(r"\{\{([^}]+)\}\}", value):
+                        ref = match.group(1).strip()
+                        # Split on . to get step and field
+                        parts = ref.split(".")
+                        if len(parts) == 2:
+                            step_key, field = parts
+                            if step_key in context and field in context[step_key]:
+                                resolved_value = resolved_value.replace(
+                                    match.group(0), str(context[step_key][field])
+                                )
+                    resolved[key] = resolved_value
+                else:
+                    resolved[key] = value
+            else:
+                resolved[key] = value
+
+        # Add attachment file_ids if referenced
+        if "file_id" in params and params["file_id"].startswith("att-"):
+            # Find attachment by index or id
+            att_index = params["file_id"]
+            for att in email_data.attachments:
+                if att.id == att_index or att.name == att_index:
+                    resolved["file_id"] = att.file_id or None
+                    if not resolved["file_id"] and att.content:
+                        resolved["file_content"] = att.content
+                    break
+
+        return resolved
+
+    @step
+    async def send_results(self, ev: PlanExecutionEvent, ctx: Context) -> StopEvent:
+        """Send the execution results via callback email.
+
+        Args:
+            ev: PlanExecutionEvent with execution results
+            ctx: Workflow context
+
+        Returns:
+            StopEvent with final result
+        """
+        email_data = ev.email_data
+        callback = ev.callback
+        results = ev.results
+
+        # Format results for email
+        result_text = self._format_results(results, email_data)
+
+        # Send response email via callback
+        try:
+            logger.info(f"Sending results email to {email_data.from_email}")
+
+            response_email = SendEmailRequest(
+                to_email=email_data.from_email,
+                from_email=email_data.to_email or None,
+                subject=f"Re: {email_data.subject}",
+                text=result_text,
+                html=text_to_html(result_text),
+            )
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    callback.callback_url,
+                    json=response_email.model_dump(),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Auth-Token": callback.auth_token,
+                    },
+                    timeout=30.0,
+                )
+                response.raise_for_status()
+                logger.info("Callback email sent successfully")
+
+            # Create success result
             result = EmailProcessingResult(
-                success=False,
-                message=f"Failed to process email: {e!s}",
+                success=True,
+                message=f"Email processed successfully with {len(results)} steps",
                 from_email=email_data.from_email,
                 email_subject=email_data.subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=result))
             return StopEvent(result=result)
 
-    @step
-    async def process_attachment(
-        self, ev: AttachmentFoundEvent, ctx: Context
-    ) -> AttachmentSummaryEvent:
-        """Process a single attachment, classify and summarize it."""
-        # Wrap entire step in try-except to ensure we always return AttachmentSummaryEvent
-        tmp_path = None  # Track temp file path for cleanup
-        try:
-            attachment = ev.attachment
-            summary = ""
-            success = True
-
-            try:
-                # Get file content either from base64 or LlamaCloud
-                if attachment.file_id:
-                    # Download from LlamaCloud
-                    logger.info(
-                        f"Downloading attachment {attachment.name} from LlamaCloud (file_id: {attachment.file_id})"
-                    )
-                    decoded_content = await download_file_from_llamacloud(
-                        attachment.file_id
-                    )
-                elif attachment.content:
-                    # Decode from base64
-                    decoded_content = base64.b64decode(attachment.content)
-                else:
-                    summary = f"Attachment {attachment.name} has neither content nor file_id"
-                    return AttachmentSummaryEvent(
-                        summary=summary,
-                        filename=attachment.name,
-                        success=False,
-                        original_email=ev.original_email,
-                        callback=ev.callback,
-                    )
-            except (ValueError, TypeError) as e:
-                summary = f"Could not get attachment content: {attachment.name} - {e!s}"
-                return AttachmentSummaryEvent(
-                    summary=summary,
-                    filename=attachment.name,
-                    success=False,
-                    original_email=ev.original_email,
-                    callback=ev.callback,
-                )
-
-            try:
-                # Classification and processing based on MIME type
-                mime_type = attachment.type.lower()
-                
-                if "pdf" in mime_type:
-                    # Use Gemini's native PDF understanding capabilities
-                    logger.info(f"Processing PDF attachment with Gemini multi-modal: {attachment.name}")
-                    
-                    # Create a Part object with the PDF data
-                    pdf_part = types.Part.from_bytes(
-                        data=decoded_content,
-                        mime_type=mime_type
-                    )
-                    
-                    # Generate content with both text prompt and PDF
-                    prompt_text = (
-                        f"Analyze this PDF document (filename: {attachment.name}) and provide:\n"
-                        "1. A brief summary of the main content and purpose\n"
-                        "2. Key points, findings, or conclusions\n"
-                        "3. Any notable data, tables, charts, or images\n"
-                        "4. The document structure and organization\n\n"
-                        "Provide a concise, bullet-point summary."
-                    )
-                    
-                    # Use async API with multi-modal model that supports PDFs
-                    summary = await self._genai_generate_content_with_retry(
-                        model=GEMINI_MULTIMODAL_MODEL,
-                        contents=[prompt_text, pdf_part]
-                    )
-                
-                elif "sheet" in mime_type or "csv" in mime_type:
-                    # Use LlamaParse for spreadsheet types
-                    # Create a temporary file for LlamaParse
-                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                        tmp.write(decoded_content)
-                        tmp_path = tmp.name
-                    
-                    documents = await self._parse_document_with_retry(tmp_path)
-                    content = "\n".join([doc.get_content() for doc in documents])
-
-                    # Summarize with LLM
-                    prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
-                    summary = await self._llm_complete_with_retry(prompt)
-
-                elif "image" in mime_type:
-                    # Use Google Gemini's vision capabilities for image analysis
-                    logger.info(f"Processing image attachment: {attachment.name}")
-                    
-                    # Create a Part object with the image data
-                    image_part = types.Part.from_bytes(
-                        data=decoded_content,
-                        mime_type=mime_type
-                    )
-                    
-                    # Generate content with both text prompt and image
-                    prompt_text = (
-                        f"Analyze this image (filename: {attachment.name}) and provide:\n"
-                        "1. A brief description of what the image shows\n"
-                        "2. Any notable objects, people, or text visible\n"
-                        "3. The general context or setting\n\n"
-                        "Keep the summary concise and informative."
-                    )
-                    
-                    # Use async API to avoid blocking the event loop
-                    summary = await self._genai_generate_content_with_retry(
-                        model=GEMINI_MULTIMODAL_MODEL,
-                        contents=[prompt_text, image_part]
-                    )
-
-                elif (
-                    "word" in mime_type
-                    or "msword" in mime_type
-                    or "wordprocessingml" in mime_type
-                    or "presentationml" in mime_type
-                    or "presentation" in mime_type
-                    or "powerpoint" in mime_type
-                ):
-                    # Word documents, PowerPoint - use LlamaParse
-                    # Create a temporary file for LlamaParse
-                    logger.info(
-                        f"Processing office document: {attachment.name} ({mime_type})"
-                    )
-                    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                        tmp.write(decoded_content)
-                        tmp_path = tmp.name
-                    
-                    documents = await self._parse_document_with_retry(tmp_path)
-                    content = "\n".join([doc.get_content() for doc in documents])
-
-                    # Summarize with LLM
-                    prompt = f"Provide a short, bullet-point summary of the following document:\n\n{content}"
-                    summary = await self._llm_complete_with_retry(prompt)
-
-                elif (
-                    "json" in mime_type
-                    or "xml" in mime_type
-                    or "markdown" in mime_type
-                    or "text" in mime_type
-                ):
-                    # JSON, XML, Markdown, plain text - read directly and summarize
-                    # Note: Ordered from most specific to least specific
-                    logger.info(f"Processing text file: {attachment.name} ({mime_type})")
-                    try:
-                        # Try to decode as UTF-8 text
-                        content = decoded_content.decode("utf-8")
-                        
-                        # Truncate if too long (to avoid token limits)
-                        max_chars = 50000
-                        if len(content) > max_chars:
-                            content = content[:max_chars] + "\n... (truncated)"
-                        
-                        # Summarize with LLM
-                        prompt = f"Provide a short, bullet-point summary of the following {mime_type} content:\n\n{content}"
-                        summary = await self._llm_complete_with_retry(prompt)
-                    except UnicodeDecodeError:
-                        summary = f"Could not decode text file {attachment.name} as UTF-8"
-                        success = False
-
-                elif "video" in mime_type or "audio" in mime_type:
-                    # Videos and audio - note that these require special handling
-                    summary = (
-                        f"This is a {mime_type} file named '{attachment.name}'. "
-                        "Video and audio summarization requires uploading to Gemini's File API "
-                        "and is not yet implemented in this workflow."
-                    )
-                    
-                else:
-                    summary = (
-                        f"Unsupported attachment type: {mime_type} (filename: {attachment.name}). "
-                        "Supported types: PDF, images, spreadsheets, CSV, Word documents, "
-                        "PowerPoint presentations, text files, JSON, XML, and Markdown."
-                    )
-                    success = False
-
-            except Exception as e:
-                logger.exception("Failed to process attachment %s", attachment.name)
-                summary = f"Error processing attachment {attachment.name}: {e!s}"
-                success = False
-            finally:
-                # Clean up the temporary file if it was created
-                if tmp_path:
-                    pathlib.Path(tmp_path).unlink()
-
-            return AttachmentSummaryEvent(
-                summary=summary,
-                filename=attachment.name,
-                success=success,
-                original_email=ev.original_email,
-                callback=ev.callback,
-            )
-        except Exception as e:
-            # Catch any unhandled exceptions (e.g., event validation, attribute access)
-            logger.exception("Critical error in process_attachment step")
-            # Clean up temp file if it was created before the exception
-            if tmp_path:
-                try:
-                    pathlib.Path(tmp_path).unlink()
-                except Exception as cleanup_error:
-                    logger.warning(
-                        "Failed to cleanup temporary file %s: %s",
-                        tmp_path,
-                        cleanup_error,
-                    )
-            # Try to extract what information we can for the error event
-            try:
-                filename = ev.attachment.name
-            except Exception:
-                # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
-                filename = "unknown"
-            try:
-                original_email = ev.original_email
-                callback = ev.callback
-            except Exception:
-                # Catch AttributeError, KeyError, etc. for graceful degradation when event is malformed
-                # If we can't access the event data, create minimal valid instances
-                # to ensure we always return AttachmentSummaryEvent (never raise)
-                logger.error(
-                    "Cannot access event data in process_attachment error handler, using placeholder values"
-                )
-                original_email = EmailData(
-                    from_email="error@placeholder.invalid",
-                    subject="Error: Unable to access original email data",
-                )
-                callback = CallbackConfig(
-                    callback_url="http://error-placeholder.invalid/callback",
-                    auth_token="INVALID-PLACEHOLDER-TOKEN",
-                )
-
-            return AttachmentSummaryEvent(
-                summary=f"Critical error processing attachment: {e!s}",
-                filename=filename,
+        except httpx.HTTPError as e:
+            logger.error(f"Failed to send callback email: {e}")
+            failure = EmailProcessingResult(
                 success=False,
-                original_email=original_email,
-                callback=callback,
+                message=f"Email processed but callback failed: {e!s}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
             )
-
-    @step
-    async def send_summary_email(
-        self, ev: AttachmentSummaryEvent, ctx: Context
-    ) -> StopEvent:
-        """Send an email with the attachment summary."""
-        # Wrap entire step in try-except to ensure we always return StopEvent with EmailProcessingResult
-        try:
-            email_data = ev.original_email
-            callback = ev.callback
-
-            # Send response email via callback
-            try:
-                # Debug logging to track from_email value
-                logger.info(
-                    f"Creating SendEmailRequest for attachment: to_email={email_data.from_email}, "
-                    f"from_email source={repr(email_data.to_email)}, "
-                    f"from_email final={repr(email_data.to_email or None)}"
-                )
-                response_text = f"Your email attachment has been processed.\n\nAttachment: {ev.filename}\n\nSummary:\n{ev.summary}"
-                response_email = SendEmailRequest(
-                    to_email=email_data.from_email,
-                    from_email=email_data.to_email or None,
-                    subject=f"Re: {email_data.subject}",
-                    text=response_text,
-                    html=text_to_html(response_text),
-                )
-
-                async with httpx.AsyncClient() as client:
-                    response = await client.post(
-                        callback.callback_url,
-                        json=response_email.model_dump(),
-                        headers={
-                            "Content-Type": "application/json",
-                            "X-Auth-Token": callback.auth_token,
-                        },
-                        timeout=30.0,
-                    )
-                    response.raise_for_status()
-                    logger.info(
-                        f"Callback email for attachment {ev.filename} sent successfully"
-                    )
-
-                # Only write success event after callback succeeds
-                result = EmailProcessingResult(
-                    success=True,
-                    message=f"Processed attachment '{ev.filename}': {ev.summary}",
-                    from_email=email_data.from_email,
-                    email_subject=email_data.subject,
-                )
-                ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-                return StopEvent(result=result)
-
-            except httpx.HTTPError as e:
-                logger.error(
-                    f"Failed to send callback email for attachment {ev.filename}: {e!s}"
-                )
-                failure = EmailProcessingResult(
-                    success=False,
-                    message=f"Attachment processed but callback failed: {e!s}",
-                    from_email=email_data.from_email,
-                    email_subject=email_data.subject,
-                )
-                ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
-                return StopEvent(result=failure)
-
+            ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+            return StopEvent(result=failure)
         except Exception as e:
-            # Catch any unhandled exceptions (e.g., event validation, attribute access, validation errors)
-            logger.exception("Critical error in send_summary_email step")
-            # Try to extract what information we can for the error result
-            try:
-                from_email = ev.original_email.from_email
-                subject = ev.original_email.subject
-            except Exception:
-                # Catch AttributeError, KeyError, validation errors, etc. for graceful degradation when event is malformed
-                from_email = "unknown"
-                subject = "unknown"
-
-            result = EmailProcessingResult(
+            logger.exception("Unexpected error sending results")
+            failure = EmailProcessingResult(
                 success=False,
-                message=f"Critical error sending summary email: {e!s}",
-                from_email=from_email,
-                email_subject=subject,
+                message=f"Failed to send results: {e!s}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
             )
-            ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-            return StopEvent(result=result)
+            ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+            return StopEvent(result=failure)
+
+    def _format_results(self, results: list[dict], email_data: EmailData) -> str:
+        """Format execution results for email display.
+
+        Args:
+            results: List of execution results
+            email_data: Original email data
+
+        Returns:
+            Formatted result text
+        """
+        output = "Your email has been processed.\n\n"
+        output += f"Original subject: {email_data.subject}\n"
+        output += f"Processed with {len(results)} steps:\n\n"
+
+        for result in results:
+            step_num = result.get("step", "?")
+            tool = result.get("tool", "unknown")
+            desc = result.get("description", "")
+            success = result.get("success", False)
+
+            output += f"Step {step_num}: {tool}"
+            if desc:
+                output += f" - {desc}"
+            output += f" ({'✓ Success' if success else '✗ Failed'})\n"
+
+            # Add relevant output from each step
+            if success:
+                if "summary" in result:
+                    output += f"  Summary: {result['summary']}\n"
+                elif "parsed_text" in result:
+                    # Truncate long text
+                    text = result["parsed_text"]
+                    if len(text) > 200:
+                        text = text[:200] + "..."
+                    output += f"  Parsed: {text}\n"
+                elif "translated_text" in result:
+                    output += f"  Translation: {result['translated_text']}\n"
+                elif "category" in result:
+                    output += f"  Category: {result['category']}\n"
+            else:
+                error = result.get("error", "Unknown error")
+                output += f"  Error: {error}\n"
+
+            output += "\n"
+
+        output += "\nProcessing complete."
+
+        return output
 
 
 email_workflow = EmailWorkflow(timeout=60)

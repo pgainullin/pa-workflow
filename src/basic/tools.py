@@ -1,0 +1,483 @@
+"""Tool implementations for the agent triage workflow.
+
+This module provides tool implementations that can be used by the triage agent
+to process email attachments and content.
+"""
+
+from __future__ import annotations
+
+import base64
+import io
+import logging
+from abc import ABC, abstractmethod
+from typing import Any
+
+from deep_translator import GoogleTranslator
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+
+from .utils import (
+    download_file_from_llamacloud,
+    upload_file_to_llamacloud,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class Tool(ABC):
+    """Abstract base class for workflow tools."""
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Return the tool name."""
+        pass
+
+    @property
+    @abstractmethod
+    def description(self) -> str:
+        """Return the tool description for the LLM."""
+        pass
+
+    @abstractmethod
+    async def execute(self, **kwargs) -> dict[str, Any]:
+        """Execute the tool with the given parameters.
+
+        Returns:
+            Dictionary containing the tool execution results
+        """
+        pass
+
+
+class ParseTool(Tool):
+    """Tool for parsing documents using LlamaCloud Parse."""
+
+    def __init__(self, llama_parser):
+        self.llama_parser = llama_parser
+
+    @property
+    def name(self) -> str:
+        return "parse"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Parse documents (PDF, Word, PowerPoint, etc.) into structured text using LlamaParse. "
+            "Input: file_id (LlamaCloud file ID) or file_content (base64-encoded). "
+            "Output: parsed_text (markdown format)"
+        )
+
+    async def execute(
+        self, file_id: str | None = None, file_content: str | None = None
+    ) -> dict[str, Any]:
+        """Parse a document using LlamaParse.
+
+        Args:
+            file_id: LlamaCloud file ID
+            file_content: Base64-encoded file content
+
+        Returns:
+            Dictionary with 'success' and 'parsed_text' or 'error'
+        """
+        import asyncio
+        import tempfile
+        import pathlib
+
+        try:
+            # Get file content
+            if file_id:
+                content = await download_file_from_llamacloud(file_id)
+            elif file_content:
+                content = base64.b64decode(file_content)
+            else:
+                return {
+                    "success": False,
+                    "error": "Either file_id or file_content must be provided",
+                }
+
+            # Create temporary file for LlamaParse
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+
+            try:
+                # Parse the document
+                documents = await asyncio.to_thread(
+                    self.llama_parser.load_data, tmp_path
+                )
+                parsed_text = "\n".join([doc.get_content() for doc in documents])
+                return {"success": True, "parsed_text": parsed_text}
+            finally:
+                # Clean up temp file
+                pathlib.Path(tmp_path).unlink()
+
+        except Exception as e:
+            logger.exception("Error parsing document")
+            return {"success": False, "error": str(e)}
+
+
+class ExtractTool(Tool):
+    """Tool for extracting structured data using LlamaCloud Extract."""
+
+    @property
+    def name(self) -> str:
+        return "extract"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Extract structured data from documents using LlamaCloud Extract. "
+            "Input: file_id, schema (JSON schema definition). "
+            "Output: extracted_data (structured JSON)"
+        )
+
+    async def execute(self, file_id: str, schema: dict) -> dict[str, Any]:
+        """Extract structured data from a document.
+
+        Args:
+            file_id: LlamaCloud file ID
+            schema: JSON schema for extraction
+
+        Returns:
+            Dictionary with 'success' and 'extracted_data' or 'error'
+        """
+        try:
+            # Note: This is a placeholder implementation
+            # Real implementation would use LlamaCloud Extract API
+            return {
+                "success": True,
+                "extracted_data": {
+                    "note": "Extract tool requires LlamaCloud Extract API integration"
+                },
+            }
+        except Exception as e:
+            logger.exception("Error extracting data")
+            return {"success": False, "error": str(e)}
+
+
+class SheetsTool(Tool):
+    """Tool for processing spreadsheets using LlamaCloud."""
+
+    @property
+    def name(self) -> str:
+        return "sheets"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Process spreadsheet files (Excel, CSV, Google Sheets). "
+            "Input: file_id. "
+            "Output: sheet_data (parsed spreadsheet content)"
+        )
+
+    async def execute(self, file_id: str) -> dict[str, Any]:
+        """Process a spreadsheet file.
+
+        Args:
+            file_id: LlamaCloud file ID
+
+        Returns:
+            Dictionary with 'success' and 'sheet_data' or 'error'
+        """
+        try:
+            # Note: This is a placeholder implementation
+            return {
+                "success": True,
+                "sheet_data": {
+                    "note": "Sheets tool requires specific spreadsheet processing implementation"
+                },
+            }
+        except Exception as e:
+            logger.exception("Error processing spreadsheet")
+            return {"success": False, "error": str(e)}
+
+
+class SplitTool(Tool):
+    """Tool for splitting documents into sections using LlamaCloud."""
+
+    @property
+    def name(self) -> str:
+        return "split"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Split documents into logical sections or chunks. "
+            "Input: text or file_id, split_strategy (e.g., 'by_section', 'by_page'). "
+            "Output: splits (list of document sections)"
+        )
+
+    async def execute(
+        self,
+        text: str | None = None,
+        file_id: str | None = None,
+        split_strategy: str = "by_section",
+    ) -> dict[str, Any]:
+        """Split a document into sections.
+
+        Args:
+            text: Text content to split
+            file_id: LlamaCloud file ID
+            split_strategy: Strategy for splitting
+
+        Returns:
+            Dictionary with 'success' and 'splits' or 'error'
+        """
+        try:
+            if text:
+                # Simple split by double newlines as placeholder
+                splits = text.split("\n\n")
+                return {"success": True, "splits": splits}
+            elif file_id:
+                # Download and split
+                content = await download_file_from_llamacloud(file_id)
+                text = content.decode("utf-8", errors="ignore")
+                splits = text.split("\n\n")
+                return {"success": True, "splits": splits}
+            else:
+                return {
+                    "success": False,
+                    "error": "Either text or file_id must be provided",
+                }
+        except Exception as e:
+            logger.exception("Error splitting document")
+            return {"success": False, "error": str(e)}
+
+
+class ClassifyTool(Tool):
+    """Tool for classifying content using LlamaCloud."""
+
+    def __init__(self, llm):
+        self.llm = llm
+
+    @property
+    def name(self) -> str:
+        return "classify"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Classify text or documents into categories. "
+            "Input: text, categories (list of possible categories). "
+            "Output: category (selected category), confidence (0-1)"
+        )
+
+    async def execute(self, text: str, categories: list[str]) -> dict[str, Any]:
+        """Classify text into one of the given categories.
+
+        Args:
+            text: Text to classify
+            categories: List of possible categories
+
+        Returns:
+            Dictionary with 'success', 'category', 'confidence' or 'error'
+        """
+        try:
+            prompt = (
+                f"Classify the following text into one of these categories: {', '.join(categories)}\n\n"
+                f"Text: {text}\n\n"
+                "Respond with only the category name."
+            )
+            response = await self.llm.acomplete(prompt)
+            category = str(response).strip()
+
+            # Simple confidence based on exact match
+            confidence = 1.0 if category in categories else 0.5
+
+            return {"success": True, "category": category, "confidence": confidence}
+        except Exception as e:
+            logger.exception("Error classifying text")
+            return {"success": False, "error": str(e)}
+
+
+class TranslateTool(Tool):
+    """Tool for translating text using Google Translate."""
+
+    @property
+    def name(self) -> str:
+        return "translate"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Translate text from one language to another using Google Translate. "
+            "Input: text, source_lang (default: 'auto'), target_lang (default: 'en'). "
+            "Output: translated_text"
+        )
+
+    async def execute(
+        self, text: str, source_lang: str = "auto", target_lang: str = "en"
+    ) -> dict[str, Any]:
+        """Translate text to target language.
+
+        Args:
+            text: Text to translate
+            source_lang: Source language code (auto-detect if 'auto')
+            target_lang: Target language code
+
+        Returns:
+            Dictionary with 'success', 'translated_text' or 'error'
+        """
+        try:
+            import asyncio
+
+            # Create translator instance for this translation
+            translator = GoogleTranslator(source=source_lang, target=target_lang)
+
+            # Run translation in thread pool since deep-translator is synchronous
+            translated = await asyncio.to_thread(translator.translate, text)
+
+            return {"success": True, "translated_text": translated}
+        except Exception as e:
+            logger.exception("Error translating text")
+            return {"success": False, "error": str(e)}
+
+
+class SummariseTool(Tool):
+    """Tool for summarising text using an LLM."""
+
+    def __init__(self, llm):
+        self.llm = llm
+
+    @property
+    def name(self) -> str:
+        return "summarise"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Summarise long text into a concise summary using an LLM. "
+            "Input: text, max_length (optional, target summary length in words). "
+            "Output: summary"
+        )
+
+    async def execute(self, text: str, max_length: int | None = None) -> dict[str, Any]:
+        """Summarise text using an LLM.
+
+        Args:
+            text: Text to summarise
+            max_length: Target summary length in words
+
+        Returns:
+            Dictionary with 'success' and 'summary' or 'error'
+        """
+        try:
+            length_instruction = f" in about {max_length} words" if max_length else ""
+            prompt = (
+                f"Provide a concise summary{length_instruction} of the following text:\n\n"
+                f"{text}"
+            )
+            response = await self.llm.acomplete(prompt)
+            summary = str(response).strip()
+
+            return {"success": True, "summary": summary}
+        except Exception as e:
+            logger.exception("Error summarising text")
+            return {"success": False, "error": str(e)}
+
+
+class PrintToPDFTool(Tool):
+    """Tool for converting text to PDF."""
+
+    @property
+    def name(self) -> str:
+        return "print_to_pdf"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Convert text content to a PDF file. "
+            "Input: text, filename (optional). "
+            "Output: file_id (LlamaCloud file ID of generated PDF)"
+        )
+
+    async def execute(self, text: str, filename: str = "output.pdf") -> dict[str, Any]:
+        """Convert text to PDF and upload to LlamaCloud.
+
+        Args:
+            text: Text content to convert
+            filename: Output PDF filename
+
+        Returns:
+            Dictionary with 'success' and 'file_id' or 'error'
+        """
+        try:
+            # Create PDF in memory
+            pdf_buffer = io.BytesIO()
+            pdf_canvas = canvas.Canvas(pdf_buffer, pagesize=letter)
+
+            # Set up text
+            width, height = letter
+            margin = 72  # 1 inch margins
+            y_position = height - margin
+
+            # Split text into lines and write to PDF
+            lines = text.split("\n")
+            for line in lines:
+                if y_position < margin:
+                    # Start new page
+                    pdf_canvas.showPage()
+                    y_position = height - margin
+
+                pdf_canvas.drawString(
+                    margin, y_position, line[:100]
+                )  # Truncate long lines
+                y_position -= 15  # Move down for next line
+
+            pdf_canvas.save()
+
+            # Get PDF bytes
+            pdf_bytes = pdf_buffer.getvalue()
+
+            # Upload to LlamaCloud
+            file_id = await upload_file_to_llamacloud(pdf_bytes, filename)
+
+            return {"success": True, "file_id": file_id}
+        except Exception as e:
+            logger.exception("Error creating PDF")
+            return {"success": False, "error": str(e)}
+
+
+class ToolRegistry:
+    """Registry for managing available tools."""
+
+    def __init__(self):
+        self.tools: dict[str, Tool] = {}
+
+    def register(self, tool: Tool) -> None:
+        """Register a tool.
+
+        Args:
+            tool: Tool instance to register
+        """
+        self.tools[tool.name] = tool
+
+    def get_tool(self, name: str) -> Tool | None:
+        """Get a tool by name.
+
+        Args:
+            name: Tool name
+
+        Returns:
+            Tool instance or None if not found
+        """
+        return self.tools.get(name)
+
+    def get_tool_descriptions(self) -> str:
+        """Get descriptions of all registered tools.
+
+        Returns:
+            Formatted string with all tool descriptions
+        """
+        descriptions = []
+        for tool in self.tools.values():
+            descriptions.append(f"- **{tool.name}**: {tool.description}")
+        return "\n".join(descriptions)
+
+    def list_tool_names(self) -> list[str]:
+        """Get list of all registered tool names.
+
+        Returns:
+            List of tool names
+        """
+        return list(self.tools.keys())
