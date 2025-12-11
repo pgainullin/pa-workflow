@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
 
 
 def is_retryable_error(exception: Exception) -> bool:
