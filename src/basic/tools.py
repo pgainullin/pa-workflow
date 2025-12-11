@@ -9,6 +9,9 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import os
+import pathlib
+import tempfile
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -78,6 +81,7 @@ class ParseTool(Tool):
         """
         try:
             import uuid
+
             uuid.UUID(value)
             return True
         except (ValueError, AttributeError):
@@ -101,8 +105,12 @@ class ParseTool(Tool):
 
         file_id = kwargs.get("file_id")
         file_content = kwargs.get("file_content")
-        file_content_from_param = kwargs.get("file_id_content")  # Added by _resolve_params when file_id is None
-        filename = kwargs.get("filename") or kwargs.get("file_id_filename")  # Also check for filename from _resolve_params
+        file_content_from_param = kwargs.get(
+            "file_id_content"
+        )  # Added by _resolve_params when file_id is None
+        filename = kwargs.get("filename") or kwargs.get(
+            "file_id_filename"
+        )  # Also check for filename from _resolve_params
 
         try:
             # Get file content
@@ -116,7 +124,9 @@ class ParseTool(Tool):
                             f"file_id '{file_id}' doesn't appear to be a valid UUID. "
                             f"Using base64 content instead."
                         )
-                        content = base64.b64decode(file_content or file_content_from_param)
+                        content = base64.b64decode(
+                            file_content or file_content_from_param
+                        )
                     else:
                         return {
                             "success": False,
@@ -168,6 +178,15 @@ class ParseTool(Tool):
 class ExtractTool(Tool):
     """Tool for extracting structured data using LlamaCloud Extract."""
 
+    def __init__(self, llama_extract=None):
+        """Initialize the ExtractTool.
+
+        Args:
+            llama_extract: Optional LlamaExtract instance. If not provided,
+                          one will be created using environment variables.
+        """
+        self.llama_extract = llama_extract
+
     @property
     def name(self) -> str:
         return "extract"
@@ -176,7 +195,7 @@ class ExtractTool(Tool):
     def description(self) -> str:
         return (
             "Extract structured data from documents using LlamaCloud Extract. "
-            "Input: file_id, schema (JSON schema definition). "
+            "Input: file_id or text, schema (JSON schema definition). "
             "Output: extracted_data (structured JSON)"
         )
 
@@ -184,26 +203,117 @@ class ExtractTool(Tool):
         """Extract structured data from a document.
 
         Args:
-            file_id: LlamaCloud file ID (from kwargs)
-            schema: JSON schema for extraction (from kwargs)
+            **kwargs: Keyword arguments including:
+                - file_id: LlamaCloud file ID (optional)
+                - text: Text content to extract from (optional)
+                - file_content: Base64-encoded file content (optional)
+                - schema: JSON schema for extraction (required)
 
         Returns:
             Dictionary with 'success' and 'extracted_data' or 'error'
         """
-        # Note: This is a placeholder implementation
-        # Real implementation would use LlamaCloud Extract API
-        file_id = kwargs.get("file_id")
-        schema = kwargs.get("schema")
-        return {
-            "success": True,
-            "extracted_data": {
-                "note": "Extract tool requires LlamaCloud Extract API integration"
-            },
-        }
+        try:
+            from llama_cloud_services import LlamaExtract
+            from llama_cloud_services.extract.extract import SourceText
+            from pydantic import BaseModel
+
+            file_id = kwargs.get("file_id")
+            text = kwargs.get("text")
+            file_content = kwargs.get("file_content")
+            file_content_from_param = kwargs.get("file_id_content")
+            schema = kwargs.get("schema")
+
+            if not schema:
+                return {
+                    "success": False,
+                    "error": "Missing required parameter: schema",
+                }
+
+            # Get or create LlamaExtract instance
+            if self.llama_extract is None:
+                self.llama_extract = LlamaExtract()
+
+            # Create a dynamic Pydantic model from the schema
+            # Schema can be a dict or already a Pydantic model
+            if isinstance(schema, dict):
+                # Create a Pydantic model from dict schema
+                # The schema should have field definitions
+                data_schema = schema
+            elif isinstance(schema, type) and issubclass(schema, BaseModel):
+                # Already a Pydantic model
+                data_schema = schema
+            else:
+                return {
+                    "success": False,
+                    "error": "Schema must be a dict or Pydantic BaseModel class",
+                }
+
+            # Create or get extraction agent
+            # Use a generic agent name based on schema hash
+            import hashlib
+
+            schema_str = str(schema)
+            schema_hash = hashlib.sha256(schema_str.encode()).hexdigest()[:8]
+            agent_name = f"extract_agent_{schema_hash}"
+
+            try:
+                extract_agent = self.llama_extract.get_agent(name=agent_name)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to get agent '{agent_name}': {e}. Creating a new agent."
+                )
+                # Agent doesn't exist, create it
+                from llama_cloud import ExtractConfig, ExtractMode
+
+                extract_config = ExtractConfig(
+                    extraction_mode=ExtractMode.BALANCED,
+                )
+                extract_agent = self.llama_extract.create_agent(
+                    agent_name, data_schema=data_schema, config=extract_config
+                )
+
+            # Prepare the content for extraction
+            if text:
+                # Extract from text
+                source = SourceText(text_content=text)
+            elif file_id:
+                # Download file from LlamaCloud
+                content = await download_file_from_llamacloud(file_id)
+                source = SourceText(file=content)
+            elif file_content or file_content_from_param:
+                # Use base64 content
+                content = base64.b64decode(file_content or file_content_from_param)
+                source = SourceText(file=content)
+            else:
+                return {
+                    "success": False,
+                    "error": "Either file_id, text, or file_content must be provided",
+                }
+
+            # Run extraction
+            result = await extract_agent.aextract(source)
+
+            # Extract the data from the result
+            extracted_data = result.data if hasattr(result, "data") else result
+
+            return {"success": True, "extracted_data": extracted_data}
+
+        except Exception as e:
+            logger.exception("Error extracting data")
+            return {"success": False, "error": str(e)}
 
 
 class SheetsTool(Tool):
-    """Tool for processing spreadsheets using LlamaCloud."""
+    """Tool for processing spreadsheets using LlamaParse."""
+
+    def __init__(self, llama_parser=None):
+        """Initialize the SheetsTool.
+
+        Args:
+            llama_parser: Optional LlamaParse instance. If not provided,
+                         one will be created using environment variables.
+        """
+        self.llama_parser = llama_parser
 
     @property
     def name(self) -> str:
@@ -212,34 +322,100 @@ class SheetsTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Process spreadsheet files (Excel, CSV, Google Sheets). "
-            "Input: file_id. "
-            "Output: sheet_data (parsed spreadsheet content)"
+            "Process spreadsheet files (Excel, CSV) using LlamaParse. "
+            "Input: file_id or file_content (base64), filename (optional). "
+            "Output: sheet_data (parsed spreadsheet content as JSON)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Process a spreadsheet file.
+        """Process a spreadsheet file using LlamaParse.
 
         Args:
-            file_id: LlamaCloud file ID (passed via kwargs)
+            **kwargs: Keyword arguments including:
+                - file_id: LlamaCloud file ID (optional)
+                - file_content: Base64-encoded file content (optional)
+                - filename: Filename for format detection (optional)
 
         Returns:
             Dictionary with 'success' and 'sheet_data' or 'error'
         """
         file_id = kwargs.get("file_id")
-        if not file_id:
-            return {"success": False, "error": "Missing required argument: file_id"}
-        # Note: This is a placeholder implementation
-        return {
-            "success": True,
-            "sheet_data": {
-                "note": "Sheets tool requires specific spreadsheet processing implementation"
-            },
-        }
+        file_content = kwargs.get("file_content")
+        file_content_from_param = kwargs.get("file_id_content")
+        filename = kwargs.get("filename") or kwargs.get("file_id_filename")
+
+        try:
+            from llama_parse import LlamaParse
+
+            # Get or create LlamaParse instance
+            if self.llama_parser is None:
+                self.llama_parser = LlamaParse(result_type="markdown")
+
+            # Get file content
+            if file_id:
+                content = await download_file_from_llamacloud(file_id)
+            elif file_content or file_content_from_param:
+                content = base64.b64decode(file_content or file_content_from_param)
+            else:
+                return {
+                    "success": False,
+                    "error": "Either file_id or file_content must be provided",
+                }
+
+            # Determine file extension from filename
+            file_extension = ".xlsx"  # Default to Excel
+            if filename:
+                _, ext = os.path.splitext(filename.lower())
+                if ext:
+                    file_extension = ext
+
+            # Create temporary file for LlamaParse and ensure cleanup
+            tmp_path = None
+            try:
+                # Create temporary file for LlamaParse
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=file_extension
+                ) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+
+                # Parse the spreadsheet using LlamaParse
+                # LlamaParse returns JSON representation of tables
+                json_result = await self.llama_parser.aget_json(tmp_path)
+
+                # Extract table data from the JSON result
+                # The json_result contains parsed table data in a structured format
+                sheet_data = {
+                    "tables": json_result,
+                    "table_count": len(json_result)
+                    if isinstance(json_result, list)
+                    else 1,
+                }
+
+                return {"success": True, "sheet_data": sheet_data}
+
+            finally:
+                # Clean up temp file if it was created
+                if tmp_path and pathlib.Path(tmp_path).exists():
+                    pathlib.Path(tmp_path).unlink()
+
+        except Exception as e:
+            logger.exception("Error processing spreadsheet")
+            return {"success": False, "error": str(e)}
 
 
 class SplitTool(Tool):
-    """Tool for splitting documents into sections using LlamaCloud."""
+    """Tool for splitting documents into sections using LlamaIndex."""
+
+    def __init__(self, chunk_size: int = 1024, chunk_overlap: int = 200):
+        """Initialize the SplitTool.
+
+        Args:
+            chunk_size: Maximum size of each chunk in tokens (default: 1024)
+            chunk_overlap: Number of tokens to overlap between chunks (default: 200)
+        """
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     @property
     def name(self) -> str:
@@ -248,58 +424,65 @@ class SplitTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Split documents into logical sections or chunks. "
-            "Input: text or file_id, split_strategy (e.g., 'by_section', 'by_page'). "
+            "Split documents into logical sections or chunks using LlamaIndex. "
+            "Input: text or file_id, chunk_size (optional, default: 1024), chunk_overlap (optional, default: 200). "
             "Output: splits (list of document sections)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Split a document into sections.
+        """Split a document into sections using LlamaIndex SentenceSplitter.
 
         Args:
             **kwargs: Keyword arguments including:
                 - text: Text content to split (optional)
                 - file_id: LlamaCloud file ID (optional)
-                - split_strategy: Strategy for splitting (optional, default: 'by_section')
+                - chunk_size: Maximum chunk size in tokens (optional, default: 1024)
+                - chunk_overlap: Overlap between chunks in tokens (optional, default: 200)
 
         Returns:
             Dictionary with 'success' and 'splits' or 'error'
         """
+        from llama_index.core.node_parser import SentenceSplitter
+
         text = kwargs.get("text")
         file_id = kwargs.get("file_id")
-        split_strategy = kwargs.get("split_strategy", "by_section")
+        chunk_size = kwargs.get("chunk_size", self.chunk_size)
+        chunk_overlap = kwargs.get("chunk_overlap", self.chunk_overlap)
 
         try:
+            # Get text content
+            if file_id:
+                content = await download_file_from_llamacloud(file_id)
+                text = content.decode("utf-8", errors="ignore")
+            elif not text:
+                return {
+                    "success": False,
+                    "error": "Either text or file_id must be provided",
+                }
+
             # Limit text length to prevent excessive processing
             max_length = 100000
-            if text and len(text) > max_length:
+            if len(text) > max_length:
                 logger.warning(
                     f"Text truncated from {len(text)} to {max_length} characters for splitting"
                 )
                 text = text[:max_length]
 
-            if text:
-                # Simple split by double newlines as placeholder
-                splits = text.split("\n\n")
-                return {"success": True, "splits": splits}
-            elif file_id:
-                # Download and split
-                content = await download_file_from_llamacloud(file_id)
-                text = content.decode("utf-8", errors="ignore")
-                splits = text.split("\n\n")
-                return {"success": True, "splits": splits}
-            else:
-                return {
-                    "success": False,
-                    "error": "Either text or file_id must be provided",
-                }
+            # Use LlamaIndex SentenceSplitter for intelligent text splitting
+            splitter = SentenceSplitter(
+                chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
+            splits = splitter.split_text(text)
+
+            return {"success": True, "splits": splits}
+
         except Exception as e:
             logger.exception("Error splitting document")
             return {"success": False, "error": str(e)}
 
 
 class ClassifyTool(Tool):
-    """Tool for classifying content using LlamaCloud."""
+    """Tool for classifying content using LlamaIndex."""
 
     def __init__(self, llm):
         self.llm = llm
@@ -311,13 +494,13 @@ class ClassifyTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Classify text or documents into categories. "
+            "Classify text or documents into categories using LlamaIndex. "
             "Input: text, categories (list of possible categories). "
-            "Output: category (selected category)"
+            "Output: category (selected category), confidence (high, medium, or low)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Classify text into one of the given categories.
+        """Classify text into one of the given categories using LlamaIndex.
 
         Args:
             **kwargs: Keyword arguments including:
@@ -327,6 +510,9 @@ class ClassifyTool(Tool):
         Returns:
             Dictionary with 'success', 'category' or 'error'
         """
+        from llama_index.core.program import LLMTextCompletionProgram
+        from pydantic import BaseModel, Field
+
         text = kwargs.get("text")
         categories = kwargs.get("categories")
 
@@ -345,15 +531,42 @@ class ClassifyTool(Tool):
                 )
                 text = text[:max_length]
 
-            prompt = (
-                f"Classify the following text into one of these categories: {', '.join(categories)}\n\n"
-                f"Text: {text}\n\n"
-                "Respond with only the category name."
-            )
-            response = await self.llm.acomplete(prompt)
-            category = str(response).strip()
+            # Create a dynamic Pydantic model for classification
+            # Using Literal type for the category field would be ideal but requires dynamic creation
+            class Classification(BaseModel):
+                """Classification result."""
 
-            return {"success": True, "category": category}
+                category: str = Field(
+                    description=f"The category that best matches the text. Must be one of: {', '.join(categories)}"
+                )
+                confidence: str = Field(
+                    description="Confidence level: high, medium, or low",
+                    default="medium",
+                )
+
+            # Create a LlamaIndex program for structured output
+            prompt_template = """Classify the following text into one of these categories: {categories}
+
+Text to classify:
+{text}
+
+Return the category that best matches the text along with your confidence level."""
+
+            program = LLMTextCompletionProgram.from_defaults(
+                output_cls=Classification,
+                prompt_template_str=prompt_template,
+                llm=self.llm,
+                verbose=False,
+            )
+
+            # Run the classification
+            result = await program.acall(text=text, categories=", ".join(categories))
+
+            return {
+                "success": True,
+                "category": result.category,
+                "confidence": result.confidence,
+            }
         except Exception as e:
             logger.exception("Error classifying text")
             return {"success": False, "error": str(e)}
@@ -406,7 +619,7 @@ class TranslateTool(Tool):
 
             # Validate language codes
             # Create a temporary instance to get supported languages
-            temp_translator = GoogleTranslator(source='auto', target='en')
+            temp_translator = GoogleTranslator(source="auto", target="en")
             supported_langs = temp_translator.get_supported_languages(as_dict=True)
             supported_codes = set(supported_langs.keys())
             # "auto" is allowed for source_lang

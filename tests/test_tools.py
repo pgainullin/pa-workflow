@@ -1,5 +1,6 @@
 """Tests for workflow tools."""
 
+import base64
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -65,23 +66,37 @@ async def test_classify_tool():
     """Test the classify tool."""
     # Mock LLM
     mock_llm = MagicMock()
-    mock_response = MagicMock()
-    mock_response.__str__ = lambda x: "Technical"
-    mock_llm.acomplete = AsyncMock(return_value=mock_response)
+
+    # Mock the LLMTextCompletionProgram
+    from pydantic import BaseModel
+
+    class MockClassification(BaseModel):
+        category: str = "Technical"
+        confidence: str = "high"
 
     from basic.tools import ClassifyTool
 
     tool = ClassifyTool(mock_llm)
 
-    # Test execution
-    categories = ["Technical", "Business", "Personal"]
-    result = await tool.execute(
-        text="This is about software development.", categories=categories
-    )
+    # Patch the LLMTextCompletionProgram at the correct import location
+    with patch(
+        "llama_index.core.program.LLMTextCompletionProgram"
+    ) as mock_program_class:
+        mock_program = MagicMock()
+        mock_program.acall = AsyncMock(return_value=MockClassification())
+        mock_program_class.from_defaults = MagicMock(return_value=mock_program)
 
-    assert result["success"] is True
-    assert "category" in result
-    assert result["category"] == "Technical"
+        # Test execution
+        categories = ["Technical", "Business", "Personal"]
+        result = await tool.execute(
+            text="This is about software development.", categories=categories
+        )
+
+        assert result["success"] is True
+        assert "category" in result
+        assert result["category"] == "Technical"
+        assert "confidence" in result
+        assert result["confidence"] == "high"
 
 
 @pytest.mark.asyncio
@@ -91,16 +106,18 @@ async def test_split_tool():
 
     tool = SplitTool()
 
-    # Test with text
+    # Test with text - LlamaIndex SentenceSplitter will split intelligently
     text = (
-        "Section 1 content here.\n\nSection 2 content here.\n\nSection 3 content here."
+        "This is the first sentence. This is the second sentence. This is the third sentence. "
+        * 100
     )
-    result = await tool.execute(text=text)
+    result = await tool.execute(text=text, chunk_size=100, chunk_overlap=20)
 
     assert result["success"] is True
     assert "splits" in result
-    assert len(result["splits"]) == 3
-    assert "Section 1" in result["splits"][0]
+    assert len(result["splits"]) > 0
+    # With intelligent splitting, we should get multiple chunks
+    assert isinstance(result["splits"], list)
 
 
 @pytest.mark.asyncio
@@ -177,3 +194,135 @@ async def test_tool_registry():
     # Test tool descriptions
     descriptions = registry.get_tool_descriptions()
     assert "summarise" in descriptions.lower()
+
+
+@pytest.mark.asyncio
+async def test_extract_tool():
+    """Test the extract tool."""
+    from basic.tools import ExtractTool
+
+    # Mock LlamaExtract and agent
+    mock_llama_extract = MagicMock()
+    mock_agent = MagicMock()
+    mock_result = MagicMock()
+    mock_result.data = {"name": "John Doe", "age": 30}
+    mock_agent.aextract = AsyncMock(return_value=mock_result)
+    mock_llama_extract.get_agent = MagicMock(return_value=mock_agent)
+
+    tool = ExtractTool(llama_extract=mock_llama_extract)
+
+    # Test with text input
+    result = await tool.execute(
+        text="John Doe is 30 years old.", schema={"name": "str", "age": "int"}
+    )
+
+    assert result["success"] is True
+    assert "extracted_data" in result
+    assert result["extracted_data"]["name"] == "John Doe"
+    assert result["extracted_data"]["age"] == 30
+
+
+@pytest.mark.asyncio
+async def test_extract_tool_missing_schema():
+    """Test extract tool with missing schema."""
+    from basic.tools import ExtractTool
+
+    tool = ExtractTool()
+
+    # Test without schema
+    result = await tool.execute(text="Some text")
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "schema" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_sheets_tool_csv():
+    """Test the sheets tool with CSV content using LlamaParse."""
+    from basic.tools import SheetsTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_parser.aget_json = AsyncMock(
+        return_value=[
+            {
+                "table": [
+                    {"Name": "Alice", "Age": 30, "City": "New York"},
+                    {"Name": "Bob", "Age": 25, "City": "London"},
+                    {"Name": "Charlie", "Age": 35, "City": "Paris"},
+                ]
+            }
+        ]
+    )
+
+    tool = SheetsTool(llama_parser=mock_parser)
+
+    # Create a simple CSV in memory
+    csv_content = "Name,Age,City\nAlice,30,New York\nBob,25,London\nCharlie,35,Paris"
+    csv_bytes = csv_content.encode("utf-8")
+    base64_content = base64.b64encode(csv_bytes).decode("utf-8")
+
+    # Mock download function (won't be called since we're using file_content)
+    with patch("basic.tools.download_file_from_llamacloud"):
+        # Test with base64 content
+        result = await tool.execute(file_content=base64_content, filename="test.csv")
+
+        assert result["success"] is True
+        assert "sheet_data" in result
+        assert "tables" in result["sheet_data"]
+        assert "table_count" in result["sheet_data"]
+        assert result["sheet_data"]["table_count"] == 1
+        assert len(result["sheet_data"]["tables"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_sheets_tool_excel():
+    """Test the sheets tool with Excel content using LlamaParse."""
+    from basic.tools import SheetsTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_parser.aget_json = AsyncMock(
+        return_value=[
+            {
+                "table": [
+                    {"Product": "Widget", "Price": 10.99, "Quantity": 100},
+                    {"Product": "Gadget", "Price": 25.50, "Quantity": 50},
+                    {"Product": "Doohickey", "Price": 5.00, "Quantity": 200},
+                ]
+            }
+        ]
+    )
+
+    tool = SheetsTool(llama_parser=mock_parser)
+
+    # Create mock Excel content
+    excel_bytes = b"mock excel content"
+    base64_content = base64.b64encode(excel_bytes).decode("utf-8")
+
+    # Test with base64 content
+    result = await tool.execute(file_content=base64_content, filename="test.xlsx")
+
+    assert result["success"] is True
+    assert "sheet_data" in result
+    assert "tables" in result["sheet_data"]
+    assert result["sheet_data"]["table_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sheets_tool_missing_file():
+    """Test sheets tool with missing file input."""
+    from basic.tools import SheetsTool
+
+    tool = SheetsTool()
+
+    # Test without file_id or file_content
+    result = await tool.execute()
+
+    assert result["success"] is False
+    assert "error" in result
+    assert (
+        "file_id" in result["error"].lower()
+        or "file_content" in result["error"].lower()
+    )
