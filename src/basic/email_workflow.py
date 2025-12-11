@@ -616,7 +616,7 @@ Plan:"""
                         r"\{\{([^}]+)\}\}", template_replacer, value
                     )
                     resolved_value = re.sub(
-                        r"\{(step_\d+\.[a-zA-Z_]+)\}", template_replacer, resolved_value
+                        r"\{(step_\d+\.[a-zA-Z0-9_]+)\}", template_replacer, resolved_value
                     )
                     resolved[key] = resolved_value
                 # Attachment reference resolution: if value starts with "att-" or matches a filename
