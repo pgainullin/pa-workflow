@@ -256,7 +256,8 @@ class ExtractTool(Tool):
 
             try:
                 extract_agent = self.llama_extract.get_agent(name=agent_name)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Failed to get agent '{agent_name}': {e}. Creating a new agent.")
                 # Agent doesn't exist, create it
                 from llama_cloud import ExtractConfig, ExtractMode
 
