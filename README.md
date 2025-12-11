@@ -9,6 +9,7 @@ Email processing workflow with LlamaCloud integration for intelligent document h
 - **Document Processing**: Parse PDFs, spreadsheets, and other documents using LlamaParse
 - **AI Summarization**: Summarize documents using Google Gemini
 - **Callback System**: Send processed results back via webhook callbacks
+- **Automatic Retry**: Handles API overload and rate limits with exponential backoff
 
 ## Installation
 
@@ -132,11 +133,23 @@ pytest tests/test_llamacloud_attachments.py -v
 │   ├── workflow.py           # Basic template workflow
 │   ├── server.py             # Workflow server
 │   ├── models.py             # Pydantic models
-│   └── utils.py              # Utility functions (LlamaCloud, HTML)
+│   └── utils.py              # Utility functions (LlamaCloud, HTML, retry)
 ├── tests/                    # Test suite
+├── API_RETRY.md              # API retry mechanism documentation
 ├── LLAMACLOUD_FILES.md       # LlamaCloud integration docs
 └── README.md                 # This file
 ```
+
+## API Reliability
+
+The workflow includes automatic retry logic for handling transient API errors:
+
+- **503 Service Unavailable** - API overload
+- **429 Rate Limit** - Too many requests
+- **500 Server Error** - Temporary failures
+- **Connection/Timeout** - Network issues
+
+Retries use exponential backoff (up to 5 attempts) to handle temporary service disruptions gracefully. See [API_RETRY.md](API_RETRY.md) for details.
 
 ## References
 

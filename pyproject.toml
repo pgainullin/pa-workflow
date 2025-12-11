@@ -16,6 +16,7 @@ dependencies = [
     "llama-parse>=0.6.54",
     "llama-cloud-services>=0.0.17",
     "httpx",  # Required for LlamaCloud presigned URL downloads and email callbacks
+    "tenacity>=8.0.0",  # Required for retry logic with exponential backoff
 ]
 
 [dependency-groups]

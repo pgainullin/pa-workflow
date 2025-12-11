@@ -7,12 +7,93 @@ import logging
 import os
 from typing import TYPE_CHECKING, Optional
 
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+    before_sleep_log,
+)
+
 if TYPE_CHECKING:
     from llama_cloud.client import AsyncLlamaCloud
 
     from .models import Attachment
 
 logger = logging.getLogger(__name__)
+
+
+def is_retryable_error(exception: Exception) -> bool:
+    """Check if an exception is retryable (transient API errors).
+    
+    This includes:
+    - HTTP 429 (Too Many Requests / Rate Limit)
+    - HTTP 500 (Internal Server Error)
+    - HTTP 503 (Service Unavailable / Overloaded)
+    - Connection errors and timeouts
+    
+    Args:
+        exception: The exception to check
+        
+    Returns:
+        True if the error should be retried
+    """
+    import re
+    
+    # Convert exception to string for error message matching
+    error_str = str(exception)
+    
+    # Check for HTTP status codes with context to avoid false positives
+    # Pattern 1: Matches HTTP status codes with error keywords
+    #   Examples: "503 UNAVAILABLE", "500 internal error", "429 too many requests"
+    # Pattern 2: Also matches status codes with punctuation
+    #   Examples: "status: 503", "HTTP 500 - error", "error-503"
+    if re.search(r'(http\s+)?(429|500|503)(\s+(unavailable|error|server|internal|service|too\s+many)|\s*[:\-])', error_str, re.IGNORECASE):
+        return True
+    
+    # Matches common HTTP error message formats
+    # Examples: "429 error", "503 unavailable", "500 internal server error"
+    if re.search(r'\b(429|500|503)\s+(error|unavailable|too\s+many|internal|server)', error_str, re.IGNORECASE):
+        return True
+    
+    # Convert to lowercase for remaining checks
+    error_str_lower = error_str.lower()
+    
+    # Check for common transient error messages with word boundaries
+    retryable_patterns = [
+        r'\brate.?limit',  # rate limit, rate-limit
+        r'\bquota\s+(exceeded|limit)',  # quota exceeded/limit
+        r'\boverload(ed)?\b',
+        r'\bunavailable\b',  # unavailable (not unavailability)
+        r'\btimeout\b',  # timeout (not timeouts as part of other words)
+        r'\bconnection\s+(error|refused|failed|timeout)',  # connection error/refused/failed
+        r'\btemporarily\s+unavailable',
+    ]
+    
+    for pattern in retryable_patterns:
+        if re.search(pattern, error_str_lower):
+            return True
+    
+    # Check for httpx-specific errors
+    try:
+        import httpx
+        if isinstance(exception, (httpx.TimeoutException, httpx.ConnectError)):
+            return True
+    except ImportError:
+        # httpx is optional; if not installed, just skip httpx-specific checks
+        pass
+    
+    return False
+
+
+# Create a reusable retry decorator for API calls
+api_retry = retry(
+    retry=retry_if_exception(is_retryable_error),
+    stop=stop_after_attempt(5),  # Max 5 attempts total (1 initial + 4 retries)
+    wait=wait_exponential(multiplier=1, min=1, max=45),  # Exponential backoff: 1s, 2s, 4s, 8s
+    before_sleep=before_sleep_log(logger, logging.WARNING),  # Log retry attempts
+    reraise=True,  # Re-raise the exception after all retries exhausted
+)
 
 
 def text_to_html(text: str) -> str:
@@ -58,8 +139,12 @@ async def get_llama_cloud_client() -> tuple["AsyncLlamaCloud", str]:
     return client, project_id
 
 
+@api_retry
 async def download_file_from_llamacloud(file_id: str) -> bytes:
     """Download a file from LlamaCloud using its file_id.
+    
+    This function automatically retries on transient errors (503, 429, 500)
+    with exponential backoff.
     
     Args:
         file_id: The LlamaCloud file ID
@@ -101,10 +186,14 @@ async def download_file_from_llamacloud(file_id: str) -> bytes:
         raise ValueError(f"Failed to download file {file_id} from LlamaCloud: {e}") from e
 
 
+@api_retry
 async def upload_file_to_llamacloud(
     file_content: bytes, filename: str, external_file_id: Optional[str] = None
 ) -> str:
     """Upload a file to LlamaCloud.
+    
+    This function automatically retries on transient errors (503, 429, 500)
+    with exponential backoff.
     
     Args:
         file_content: The file content as bytes
