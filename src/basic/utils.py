@@ -63,7 +63,7 @@ def is_retryable_error(exception: Exception) -> bool:
     retryable_patterns = [
         r'\brate.?limit',  # rate limit, rate-limit
         r'\bquota\s+(exceeded|limit)',  # quota exceeded/limit
-        r'\boverload(ed)?',
+        r'\boverload(ed)?\b',
         r'\bunavailable\b',  # unavailable (not unavailability)
         r'\btimeout\b',  # timeout (not timeouts as part of other words)
         r'\bconnection\s+(error|refused|failed|timeout)',  # connection error/refused/failed
