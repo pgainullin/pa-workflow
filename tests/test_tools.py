@@ -1,5 +1,6 @@
 """Tests for workflow tools."""
 
+import base64
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -230,17 +231,16 @@ async def test_extract_tool_missing_schema():
 async def test_sheets_tool_csv():
     """Test the sheets tool with CSV content."""
     from basic.tools import SheetsTool
-    import io
 
     tool = SheetsTool()
 
     # Create a simple CSV in memory
     csv_content = "Name,Age,City\nAlice,30,New York\nBob,25,London\nCharlie,35,Paris"
     csv_bytes = csv_content.encode("utf-8")
-    base64_content = __import__("base64").b64encode(csv_bytes).decode("utf-8")
+    base64_content = base64.b64encode(csv_bytes).decode("utf-8")
 
     # Mock download function (won't be called since we're using file_content)
-    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+    with patch("basic.tools.download_file_from_llamacloud"):
         # Test with base64 content
         result = await tool.execute(file_content=base64_content, filename="test.csv")
 
@@ -276,7 +276,7 @@ async def test_sheets_tool_excel():
     excel_buffer = io.BytesIO()
     df.to_excel(excel_buffer, index=False)
     excel_bytes = excel_buffer.getvalue()
-    base64_content = __import__("base64").b64encode(excel_bytes).decode("utf-8")
+    base64_content = base64.b64encode(excel_bytes).decode("utf-8")
 
     # Test with base64 content
     result = await tool.execute(file_content=base64_content, filename="test.xlsx")
@@ -294,8 +294,6 @@ async def test_sheets_tool_excel():
 async def test_sheets_tool_max_rows():
     """Test the sheets tool with max_rows limit."""
     from basic.tools import SheetsTool
-    import pandas as pd
-    import io
 
     tool = SheetsTool()
 
@@ -303,7 +301,7 @@ async def test_sheets_tool_max_rows():
     rows = [f"Row{i},Value{i}" for i in range(100)]
     csv_content = "Column1,Column2\n" + "\n".join(rows)
     csv_bytes = csv_content.encode("utf-8")
-    base64_content = __import__("base64").b64encode(csv_bytes).decode("utf-8")
+    base64_content = base64.b64encode(csv_bytes).decode("utf-8")
 
     # Test with max_rows limit
     result = await tool.execute(

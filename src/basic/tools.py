@@ -248,7 +248,11 @@ class ExtractTool(Tool):
 
             # Create or get extraction agent
             # Use a generic agent name based on schema hash
-            agent_name = f"extract_agent_{hash(str(schema)) % 10000}"
+            import hashlib
+
+            schema_str = str(schema)
+            schema_hash = hashlib.md5(schema_str.encode()).hexdigest()[:8]
+            agent_name = f"extract_agent_{schema_hash}"
 
             try:
                 extract_agent = self.llama_extract.get_agent(name=agent_name)
