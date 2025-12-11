@@ -5,7 +5,7 @@ from __future__ import annotations
 import html
 import logging
 import os
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Callable, Any, TypeVar
 
 from tenacity import (
     retry,
@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from .models import Attachment
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar('T')
 
 
 def is_retryable_error(exception: Exception) -> bool:
@@ -105,6 +107,100 @@ api_retry = retry(
     before_sleep=before_sleep_log(logger, logging.WARNING),  # Log retry attempts
     reraise=True,  # Re-raise the exception after all retries exhausted
 )
+
+
+async def process_text_in_batches(
+    text: str,
+    max_length: int,
+    processor: Callable[[str], Any],
+    combiner: Optional[Callable[[list[Any]], Any]] = None,
+) -> Any:
+    """Process long text in batches when it exceeds max_length.
+    
+    This function splits text into chunks of max_length characters,
+    processes each chunk using the provided processor function,
+    and optionally combines the results using the combiner function.
+    
+    Args:
+        text: The text to process
+        max_length: Maximum length for each batch
+        processor: Async function that processes a single text chunk
+        combiner: Optional function to combine results from all batches.
+                 If None, results are concatenated with newlines (for strings)
+                 or returned as a list (for other types).
+    
+    Returns:
+        Combined result from processing all batches
+        
+    Example:
+        # For translation
+        async def translate_chunk(chunk: str) -> str:
+            return await translator.translate(chunk)
+        
+        result = await process_text_in_batches(
+            long_text, 
+            max_length=50000, 
+            processor=translate_chunk
+        )
+    """
+    # If text is short enough, process it directly
+    if len(text) <= max_length:
+        return await processor(text)
+    
+    # Split text into chunks
+    chunks = []
+    current_pos = 0
+    
+    while current_pos < len(text):
+        # Find a good break point (end of sentence or word)
+        end_pos = current_pos + max_length
+        
+        if end_pos < len(text):
+            # Try to break at sentence boundary (. ! ?)
+            sentence_break = max(
+                text.rfind('. ', current_pos, end_pos),
+                text.rfind('! ', current_pos, end_pos),
+                text.rfind('? ', current_pos, end_pos),
+            )
+            
+            if sentence_break > current_pos:
+                end_pos = sentence_break + 2  # Include the punctuation and space
+            else:
+                # Try to break at word boundary
+                space_pos = text.rfind(' ', current_pos, end_pos)
+                if space_pos > current_pos:
+                    end_pos = space_pos + 1  # Include the space
+        else:
+            end_pos = len(text)
+        
+        chunk = text[current_pos:end_pos]
+        if chunk.strip():  # Only add non-empty chunks
+            chunks.append(chunk)
+        current_pos = end_pos
+    
+    logger.info(f"Processing text in {len(chunks)} batches (max_length={max_length})")
+    
+    # Process each chunk
+    results = []
+    for i, chunk in enumerate(chunks):
+        logger.info(f"Processing batch {i + 1}/{len(chunks)} ({len(chunk)} characters)")
+        result = await processor(chunk)
+        results.append(result)
+    
+    # Combine results
+    if combiner:
+        return combiner(results)
+    
+    # Default combining logic
+    if len(results) == 0:
+        return ""
+    
+    # If results are strings, concatenate them
+    if isinstance(results[0], str):
+        return "\n".join(results)
+    
+    # Otherwise return as list
+    return results
 
 
 def text_to_html(text: str) -> str:
