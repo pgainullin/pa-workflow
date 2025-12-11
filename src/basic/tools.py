@@ -250,7 +250,7 @@ class ExtractTool(Tool):
             import hashlib
 
             schema_str = str(schema)
-            schema_hash = hashlib.md5(schema_str.encode()).hexdigest()[:8]
+            schema_hash = hashlib.sha256(schema_str.encode()).hexdigest()[:8]
             agent_name = f"extract_agent_{schema_hash}"
 
             try:
