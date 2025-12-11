@@ -183,7 +183,6 @@ class ExtractTool(Tool):
                           one will be created using environment variables.
         """
         self.llama_extract = llama_extract
-        self._extract_agent = None
 
     @property
     def name(self) -> str:
