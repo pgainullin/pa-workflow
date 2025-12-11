@@ -99,7 +99,7 @@ async def test_image_attachment_processing():
     call_args = mock_aio_models.generate_content.call_args
     
     # Check that it was called with the right model
-    assert call_args.kwargs["model"] == "gemini-2.0-flash-exp"
+    assert call_args.kwargs["model"] == "gemini-3-pro-preview"
     
     # Check that contents includes both text and image
     contents = call_args.kwargs["contents"]
@@ -188,7 +188,7 @@ async def test_pdf_attachment_processing():
     call_args = mock_aio_models.generate_content.call_args
     
     # Check that it was called with the right model
-    assert call_args.kwargs["model"] == "gemini-2.0-flash-exp"
+    assert call_args.kwargs["model"] == "gemini-3-pro-preview"
     
     # Check that contents includes both text and PDF
     contents = call_args.kwargs["contents"]
