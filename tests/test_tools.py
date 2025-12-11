@@ -25,7 +25,7 @@ async def test_summarise_tool():
     tool = SummariseTool(mock_llm)
 
     # Test execution
-    result = await tool.execute({"text": "This is a long text that needs summarization."})
+    result = await tool.execute(text="This is a long text that needs summarization.")
 
     assert result["success"] is True
     assert "summary" in result
@@ -45,9 +45,15 @@ async def test_translate_tool():
         mock_translator = MagicMock()
         mock_translator.translate = MagicMock(return_value="Bonjour le monde")
         mock_translator_class.return_value = mock_translator
+        # Mock the get_supported_languages method
+        mock_translator_class.get_supported_languages = MagicMock(
+            return_value={"en": "English", "fr": "French", "auto": "Auto-detect"}
+        )
 
         # Test execution
-        result = await tool.execute(text="Hello world", source_lang="en", target_lang="fr")
+        result = await tool.execute(
+            text="Hello world", source_lang="en", target_lang="fr"
+        )
 
         assert result["success"] is True
         assert "translated_text" in result
@@ -69,7 +75,9 @@ async def test_classify_tool():
 
     # Test execution
     categories = ["Technical", "Business", "Personal"]
-    result = await tool.execute(text="This is about software development.", categories=categories)
+    result = await tool.execute(
+        text="This is about software development.", categories=categories
+    )
 
     assert result["success"] is True
     assert "category" in result
@@ -84,7 +92,9 @@ async def test_split_tool():
     tool = SplitTool()
 
     # Test with text
-    text = "Section 1 content here.\n\nSection 2 content here.\n\nSection 3 content here."
+    text = (
+        "Section 1 content here.\n\nSection 2 content here.\n\nSection 3 content here."
+    )
     result = await tool.execute(text=text)
 
     assert result["success"] is True
@@ -97,7 +107,6 @@ async def test_split_tool():
 async def test_print_to_pdf_tool():
     """Test the print to PDF tool."""
     from basic.tools import PrintToPDFTool
-    import json
 
     tool = PrintToPDFTool()
 
@@ -105,9 +114,10 @@ async def test_print_to_pdf_tool():
     with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
         mock_upload.return_value = "file-123"
 
-        # Test execution with JSON input
-        input_data = json.dumps({"text": "Hello, this is a test PDF content.", "filename": "test.pdf"})
-        result = await tool.execute(input_data)
+        # Test execution with keyword arguments
+        result = await tool.execute(
+            text="Hello, this is a test PDF content.", filename="test.pdf"
+        )
 
         assert result["success"] is True
         assert "file_id" in result

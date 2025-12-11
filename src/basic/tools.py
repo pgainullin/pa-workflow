@@ -67,14 +67,14 @@ class ParseTool(Tool):
             "Output: parsed_text (markdown format)"
         )
 
-    async def execute(
-        self, file_id: str | None = None, file_content: str | None = None
-    ) -> dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         """Parse a document using LlamaParse.
 
         Args:
-            file_id: LlamaCloud file ID
-            file_content: Base64-encoded file content
+            **kwargs: Keyword arguments including:
+                - file_id: LlamaCloud file ID (optional)
+                - file_content: Base64-encoded file content (optional)
+                - filename: Original filename for extension detection (optional)
 
         Returns:
             Dictionary with 'success' and 'parsed_text' or 'error'
@@ -82,6 +82,10 @@ class ParseTool(Tool):
         import asyncio
         import tempfile
         import pathlib
+
+        file_id = kwargs.get("file_id")
+        file_content = kwargs.get("file_content")
+        filename = kwargs.get("filename")
 
         try:
             # Get file content
@@ -96,7 +100,18 @@ class ParseTool(Tool):
                 }
 
             # Create temporary file for LlamaParse
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            # Determine file extension from filename if provided
+            file_extension = ".pdf"  # Default to .pdf
+            if filename:
+                import os
+
+                _, ext = os.path.splitext(filename)
+                if ext:
+                    file_extension = ext
+
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=file_extension
+            ) as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
 
@@ -179,10 +194,7 @@ class SheetsTool(Tool):
         """
         file_id = kwargs.get("file_id")
         if not file_id:
-            return {
-                "success": False,
-                "error": "Missing required argument: file_id"
-            }
+            return {"success": False, "error": "Missing required argument: file_id"}
         # Note: This is a placeholder implementation
         return {
             "success": True,
@@ -207,23 +219,31 @@ class SplitTool(Tool):
             "Output: splits (list of document sections)"
         )
 
-    async def execute(
-        self,
-        text: str | None = None,
-        file_id: str | None = None,
-        split_strategy: str = "by_section",
-    ) -> dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         """Split a document into sections.
 
         Args:
-            text: Text content to split
-            file_id: LlamaCloud file ID
-            split_strategy: Strategy for splitting
+            **kwargs: Keyword arguments including:
+                - text: Text content to split (optional)
+                - file_id: LlamaCloud file ID (optional)
+                - split_strategy: Strategy for splitting (optional, default: 'by_section')
 
         Returns:
             Dictionary with 'success' and 'splits' or 'error'
         """
+        text = kwargs.get("text")
+        file_id = kwargs.get("file_id")
+        split_strategy = kwargs.get("split_strategy", "by_section")
+
         try:
+            # Limit text length to prevent excessive processing
+            max_length = 100000
+            if text and len(text) > max_length:
+                logger.warning(
+                    f"Text truncated from {len(text)} to {max_length} characters for splitting"
+                )
+                text = text[:max_length]
+
             if text:
                 # Simple split by double newlines as placeholder
                 splits = text.split("\n\n")
@@ -320,21 +340,35 @@ class TranslateTool(Tool):
             "Output: translated_text"
         )
 
-    async def execute(
-        self, text: str, source_lang: str = "auto", target_lang: str = "en"
-    ) -> dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         """Translate text to target language.
 
         Args:
-            text: Text to translate
-            source_lang: Source language code (auto-detect if 'auto')
-            target_lang: Target language code
+            **kwargs: Keyword arguments including:
+                - text: Text to translate (required)
+                - source_lang: Source language code (optional, default: 'auto')
+                - target_lang: Target language code (optional, default: 'en')
 
         Returns:
             Dictionary with 'success', 'translated_text' or 'error'
         """
+        text = kwargs.get("text")
+        source_lang = kwargs.get("source_lang", "auto")
+        target_lang = kwargs.get("target_lang", "en")
+
+        if not text:
+            return {"success": False, "error": "Missing required parameter: text"}
+
         try:
             import asyncio
+
+            # Limit text length to prevent excessive API usage
+            max_length = 50000
+            if len(text) > max_length:
+                logger.warning(
+                    f"Text truncated from {len(text)} to {max_length} characters for translation"
+                )
+                text = text[:max_length]
 
             # Validate language codes
             supported_langs = GoogleTranslator.get_supported_languages(as_dict=True)
@@ -343,12 +377,12 @@ class TranslateTool(Tool):
             if source_lang != "auto" and source_lang not in supported_codes:
                 return {
                     "success": False,
-                    "error": f"Invalid source_lang '{source_lang}'. Supported codes: {sorted(supported_codes)}"
+                    "error": f"Invalid source_lang '{source_lang}'. Supported codes: {sorted(supported_codes)}",
                 }
             if target_lang not in supported_codes:
                 return {
                     "success": False,
-                    "error": f"Invalid target_lang '{target_lang}'. Supported codes: {sorted(supported_codes)}"
+                    "error": f"Invalid target_lang '{target_lang}'. Supported codes: {sorted(supported_codes)}",
                 }
             # Create translator instance for this translation
             translator = GoogleTranslator(source=source_lang, target=target_lang)
@@ -390,9 +424,21 @@ class SummariseTool(Tool):
         Returns:
             Dictionary with 'success' and 'summary' or 'error'
         """
+        text = kwargs.get("text")
+        max_length = kwargs.get("max_length")
+
+        if not text:
+            return {"success": False, "error": "Missing required parameter: text"}
+
         try:
-            text = kwargs.get("text")
-            max_length = kwargs.get("max_length")
+            # Limit text length to prevent excessive LLM costs and prompt injection
+            max_input_length = 50000
+            if len(text) > max_input_length:
+                logger.warning(
+                    f"Text truncated from {len(text)} to {max_input_length} characters for summarization"
+                )
+                text = text[:max_input_length]
+
             length_instruction = f" in about {max_length} words" if max_length else ""
             prompt = (
                 f"Provide a concise summary{length_instruction} of the following text:\n\n"
@@ -473,34 +519,24 @@ class PrintToPDFTool(Tool):
 
         return lines if lines else [""]
 
-    async def execute(self, input: str) -> dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         """Convert text to PDF and upload to LlamaCloud.
 
         Args:
-            input: Input string containing text and optionally filename.
-                If input is a JSON string: {"text": "...", "filename": "..."}
-                If input is plain text, filename defaults to "output.pdf".
+            **kwargs: Keyword arguments including:
+                - text: Text to convert to PDF (required)
+                - filename: Output filename (optional, default: "output.pdf")
 
         Returns:
             Dictionary with 'success' and 'file_id' or 'error'
         """
-        import json
+        text = kwargs.get("text")
+        filename = kwargs.get("filename", "output.pdf")
+
+        if not text:
+            return {"success": False, "error": "Missing required parameter: text"}
 
         try:
-            # Try to parse input as JSON for text and filename
-            text = None
-            filename = "output.pdf"
-            try:
-                data = json.loads(input)
-                if isinstance(data, dict) and "text" in data:
-                    text = data["text"]
-                    filename = data.get("filename", "output.pdf")
-                else:
-                    text = input
-            except Exception:
-                # Not JSON, treat input as plain text
-                text = input
-
             # Create PDF in memory
             pdf_buffer = io.BytesIO()
             pdf_canvas = canvas.Canvas(pdf_buffer, pagesize=letter)

@@ -36,13 +36,15 @@ async def test_triage_simple_email():
     # Mock the LLM to return a simple plan
     mock_llm = MagicMock()
     mock_response = MagicMock()
-    mock_response.__str__ = lambda x: """[
+    mock_response.__str__ = (
+        lambda x: """[
         {
             "tool": "summarise",
             "params": {"text": "This is a long document that needs to be summarized."},
             "description": "Summarize the email content"
         }
     ]"""
+    )
     mock_llm.acomplete = AsyncMock(return_value=mock_response)
 
     workflow = EmailWorkflow(timeout=60)
@@ -63,7 +65,13 @@ async def test_triage_simple_email():
 @pytest.mark.asyncio
 async def test_plan_parsing():
     """Test parsing of execution plan from LLM response."""
+    from basic.models import EmailData
+
     workflow = EmailWorkflow(timeout=60)
+
+    email_data = EmailData(
+        from_email="test@example.com", subject="Test", text="Test content"
+    )
 
     # Test valid JSON plan
     response = """[
@@ -79,7 +87,7 @@ async def test_plan_parsing():
         }
     ]"""
 
-    plan = workflow._parse_plan(response)
+    plan = workflow._parse_plan(response, email_data)
 
     assert len(plan) == 2
     assert plan[0]["tool"] == "parse"
@@ -89,7 +97,13 @@ async def test_plan_parsing():
 @pytest.mark.asyncio
 async def test_plan_parsing_with_noise():
     """Test parsing plan when LLM includes extra text."""
+    from basic.models import EmailData
+
     workflow = EmailWorkflow(timeout=60)
+
+    email_data = EmailData(
+        from_email="test@example.com", subject="Test", text="Test content"
+    )
 
     # Test response with extra text
     response = """Here is the plan:
@@ -102,7 +116,7 @@ async def test_plan_parsing_with_noise():
     ]
     This should work well."""
 
-    plan = workflow._parse_plan(response)
+    plan = workflow._parse_plan(response, email_data)
 
     assert len(plan) == 1
     assert plan[0]["tool"] == "summarise"
@@ -143,9 +157,7 @@ async def test_plan_execution():
         }
     ]
 
-    triage_event = TriageEvent(
-        plan=plan, email_data=email_data, callback=callback
-    )
+    triage_event = TriageEvent(plan=plan, email_data=email_data, callback=callback)
 
     # Execute the plan
     result = await workflow.execute_plan(triage_event, MagicMock())
@@ -161,9 +173,7 @@ async def test_parameter_resolution():
     """Test resolution of parameters from execution context."""
     workflow = EmailWorkflow(timeout=60)
 
-    email_data = EmailData(
-        from_email="user@example.com", subject="Test", text="Test"
-    )
+    email_data = EmailData(from_email="user@example.com", subject="Test", text="Test")
 
     # Test simple parameter
     params = {"text": "hello"}
@@ -230,13 +240,15 @@ async def test_end_to_end_workflow():
     # Mock LLM for triage
     mock_llm = MagicMock()
     mock_response = MagicMock()
-    mock_response.__str__ = lambda x: """[
+    mock_response.__str__ = (
+        lambda x: """[
         {
             "tool": "summarise",
             "params": {"text": "This is a long email that needs summarization."},
             "description": "Summarize email"
         }
     ]"""
+    )
     mock_llm.acomplete = AsyncMock(return_value=mock_response)
 
     # Mock httpx for callback
@@ -294,9 +306,7 @@ async def test_workflow_with_unknown_tool():
         }
     ]
 
-    triage_event = TriageEvent(
-        plan=plan, email_data=email_data, callback=callback
-    )
+    triage_event = TriageEvent(plan=plan, email_data=email_data, callback=callback)
 
     # Execute the plan
     result = await workflow.execute_plan(triage_event, MagicMock())
@@ -337,9 +347,7 @@ async def test_critical_step_stops_execution():
         },
     ]
 
-    triage_event = TriageEvent(
-        plan=plan, email_data=email_data, callback=callback
-    )
+    triage_event = TriageEvent(plan=plan, email_data=email_data, callback=callback)
 
     # Execute the plan
     result = await workflow.execute_plan(triage_event, MagicMock())
@@ -379,9 +387,7 @@ async def test_dependency_checking_skips_dependent_steps():
         },
     ]
 
-    triage_event = TriageEvent(
-        plan=plan, email_data=email_data, callback=callback
-    )
+    triage_event = TriageEvent(plan=plan, email_data=email_data, callback=callback)
 
     # Execute the plan
     result = await workflow.execute_plan(triage_event, MagicMock())
