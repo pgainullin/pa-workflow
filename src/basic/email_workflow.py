@@ -32,9 +32,9 @@ llm_api_retry = api_retry
 
 
 # Gemini model configuration
-# Using latest stable Gemini 2.0 models as per https://ai.google.dev/gemini-api/docs/gemini-3
-GEMINI_MULTIMODAL_MODEL = "gemini-2.0-flash"  # Latest stable for multi-modal (images, PDFs, videos)
-GEMINI_TEXT_MODEL = "gemini-2.0-flash"  # Latest stable for text processing
+# Using latest stable Gemini 3.0 models as per https://ai.google.dev/gemini-api/docs/gemini-3
+GEMINI_MULTIMODAL_MODEL = "gemini-3.0-flash"  # Latest stable for multi-modal (images, PDFs, videos)
+GEMINI_TEXT_MODEL = "gemini-3.0-flash"  # Latest stable for text processing
 
 # Alternative cheaper model configuration (not currently in use)
 # Gemini 2.5 Flash is optimized for cost-effective simple requests

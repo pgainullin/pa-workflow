@@ -10,12 +10,12 @@ This document describes the Gemini model configuration updates made to align wit
 
 1. **Multi-modal Model (Images, PDFs, Videos)**
    - Previous: `gemini-2.0-flash-exp` (experimental)
-   - Current: `gemini-2.0-flash` (stable)
+   - Current: `gemini-3.0-flash` (latest stable)
    - Used for: PDF analysis, image processing, and other multi-modal tasks
 
 2. **Text-based LLM Model**
    - Previous: `gemini-2.5-flash`
-   - Current: `gemini-2.0-flash` (stable)
+   - Current: `gemini-3.0-flash` (latest stable)
    - Used for: Text summarization, document content analysis
 
 ### Configuration Constants
@@ -24,8 +24,8 @@ Three new constants have been added to `src/basic/email_workflow.py` for central
 
 ```python
 # Gemini model configuration
-GEMINI_MULTIMODAL_MODEL = "gemini-2.0-flash"  # Latest stable for multi-modal
-GEMINI_TEXT_MODEL = "gemini-2.0-flash"  # Latest stable for text processing
+GEMINI_MULTIMODAL_MODEL = "gemini-3.0-flash"  # Latest stable for multi-modal
+GEMINI_TEXT_MODEL = "gemini-3.0-flash"  # Latest stable for text processing
 
 # Alternative cheaper model (not currently in use)
 GEMINI_CHEAP_TEXT_MODEL = "gemini-2.5-flash"  # Cheaper option for simple text tasks
