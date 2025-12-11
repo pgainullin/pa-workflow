@@ -531,7 +531,7 @@ Plan:"""
                                 referenced_steps.add(step_key)
                     
                     # Find all single-brace template references like {step_1.field}
-                    matches = re.finditer(r"\{(step_\d+)\.[a-zA-Z_]+\}", value)
+                    matches = re.finditer(r"\{(step_\d+)\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
                     for match in matches:
                         step_key = match.group(1)
                         referenced_steps.add(step_key)
