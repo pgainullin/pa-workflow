@@ -241,22 +241,28 @@ async def test_callback_retry_on_transient_error():
 
         # Mock httpx client to fail once then succeed
         with patch("httpx.AsyncClient") as mock_client_class:
+            import httpx
+            
             mock_client = MagicMock()
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
             mock_client.__aexit__ = AsyncMock(return_value=None)
 
             # First call fails with 503, second call succeeds
-            mock_response_fail = MagicMock()
-            mock_response_fail.raise_for_status = MagicMock(
-                side_effect=Exception("503 Service Unavailable")
-            )
-
+            # Create a realistic HTTPStatusError with proper request/response
+            mock_request = httpx.Request("POST", "http://test.com/callback")
+            mock_response_fail = httpx.Response(503, request=mock_request)
+            
             mock_response_success = MagicMock()
             mock_response_success.raise_for_status = MagicMock(return_value=None)
 
-            mock_client.post = AsyncMock(
-                side_effect=[mock_response_fail, mock_response_success]
-            )
+            # First post returns 503 response, raise_for_status will raise HTTPStatusError
+            # Second post returns success response
+            async def mock_post_side_effect(*args, **kwargs):
+                if mock_client.post.call_count == 1:
+                    return mock_response_fail
+                return mock_response_success
+            
+            mock_client.post = AsyncMock(side_effect=mock_post_side_effect)
             mock_client_class.return_value = mock_client
 
             email_request = SendEmailRequest(
