@@ -251,7 +251,7 @@ class ClassifyTool(Tool):
         return (
             "Classify text or documents into categories. "
             "Input: text, categories (list of possible categories). "
-            "Output: category (selected category), confidence (0-1)"
+            "Output: category (selected category)"
         )
 
     async def execute(self, data: dict[str, Any]) -> dict[str, Any]:
@@ -261,7 +261,7 @@ class ClassifyTool(Tool):
             data: Dictionary with keys 'text' and 'categories'
 
         Returns:
-            Dictionary with 'success', 'category', 'confidence' or 'error'
+            Dictionary with 'success', 'category' or 'error'
         """
         try:
             text = data.get("text")
@@ -276,10 +276,7 @@ class ClassifyTool(Tool):
             response = await self.llm.acomplete(prompt)
             category = str(response).strip()
 
-            # Simple confidence based on exact match
-            confidence = 1.0 if category in categories else 0.5
-
-            return {"success": True, "category": category, "confidence": confidence}
+            return {"success": True, "category": category}
         except Exception as e:
             logger.exception("Error classifying text")
             return {"success": False, "error": str(e)}
@@ -381,7 +378,9 @@ class PrintToPDFTool(Tool):
     PDF_MARGIN_INCHES = 1  # 1 inch margins
     PDF_MARGIN_POINTS = 72  # 72 points = 1 inch
     PDF_LINE_SPACING = 15  # Points between lines
-    PDF_MAX_LINE_LENGTH = 100  # Maximum characters per line
+    PDF_MAX_LINE_WIDTH = 468  # Max width in points (letter width - 2*margin)
+    PDF_FONT_SIZE = 12  # Default font size
+    PDF_FONT_NAME = "Helvetica"  # Default font
 
     @property
     def name(self) -> str:
@@ -395,6 +394,46 @@ class PrintToPDFTool(Tool):
             "Output: file_id (LlamaCloud file ID of generated PDF)"
         )
 
+    def _wrap_text(self, text: str, canvas_obj, max_width: float) -> list[str]:
+        """Wrap text to fit within the specified width.
+
+        Args:
+            text: Text to wrap
+            canvas_obj: ReportLab canvas object for measuring text width
+            max_width: Maximum width in points
+
+        Returns:
+            List of wrapped lines
+        """
+        words = text.split(" ")
+        lines = []
+        current_line = ""
+
+        for word in words:
+            # Test if adding this word would exceed the width
+            test_line = current_line + (" " if current_line else "") + word
+            text_width = canvas_obj.stringWidth(
+                test_line, self.PDF_FONT_NAME, self.PDF_FONT_SIZE
+            )
+
+            if text_width <= max_width:
+                current_line = test_line
+            else:
+                # Current line is full, save it and start a new line
+                if current_line:
+                    lines.append(current_line)
+                    current_line = word
+                else:
+                    # Single word is too long, we need to break it
+                    lines.append(word[:100])  # Fallback: truncate extremely long words
+                    current_line = ""
+
+        # Add the last line
+        if current_line:
+            lines.append(current_line)
+
+        return lines if lines else [""]
+
     async def execute(self, input: str) -> dict[str, Any]:
         """Convert text to PDF and upload to LlamaCloud.
 
@@ -407,6 +446,7 @@ class PrintToPDFTool(Tool):
             Dictionary with 'success' and 'file_id' or 'error'
         """
         import json
+
         try:
             # Try to parse input as JSON for text and filename
             text = None
@@ -421,28 +461,37 @@ class PrintToPDFTool(Tool):
             except Exception:
                 # Not JSON, treat input as plain text
                 text = input
+
             # Create PDF in memory
             pdf_buffer = io.BytesIO()
             pdf_canvas = canvas.Canvas(pdf_buffer, pagesize=letter)
+            pdf_canvas.setFont(self.PDF_FONT_NAME, self.PDF_FONT_SIZE)
 
             # Set up text
             width, height = letter
             y_position = height - self.PDF_MARGIN_POINTS
 
             # Split text into lines and write to PDF
-            lines = text.split("\n")
-            for line in lines:
-                if y_position < self.PDF_MARGIN_POINTS:
-                    # Start new page
-                    pdf_canvas.showPage()
-                    y_position = height - self.PDF_MARGIN_POINTS
+            input_lines = text.split("\n")
+            for input_line in input_lines:
+                # Wrap long lines
+                wrapped_lines = self._wrap_text(
+                    input_line, pdf_canvas, self.PDF_MAX_LINE_WIDTH
+                )
 
-                # Truncate long lines to prevent overflow
-                display_line = line[: self.PDF_MAX_LINE_LENGTH]
-                # Replace characters that can't be encoded in latin-1 (default font encoding)
-                safe_line = display_line.encode("latin-1", errors="replace").decode("latin-1")
-                pdf_canvas.drawString(self.PDF_MARGIN_POINTS, y_position, safe_line)
-                y_position -= self.PDF_LINE_SPACING  # Move down for next line
+                for wrapped_line in wrapped_lines:
+                    # Check if we need a new page
+                    if y_position < self.PDF_MARGIN_POINTS:
+                        pdf_canvas.showPage()
+                        pdf_canvas.setFont(self.PDF_FONT_NAME, self.PDF_FONT_SIZE)
+                        y_position = height - self.PDF_MARGIN_POINTS
+
+                    # Replace characters that can't be encoded in latin-1 (default font encoding)
+                    safe_line = wrapped_line.encode("latin-1", errors="replace").decode(
+                        "latin-1"
+                    )
+                    pdf_canvas.drawString(self.PDF_MARGIN_POINTS, y_position, safe_line)
+                    y_position -= self.PDF_LINE_SPACING  # Move down for next line
 
             pdf_canvas.save()
 

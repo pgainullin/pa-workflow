@@ -25,7 +25,7 @@ async def test_summarise_tool():
     tool = SummariseTool(mock_llm)
 
     # Test execution
-    result = await tool.execute(text="This is a long text that needs summarization.")
+    result = await tool.execute({"text": "This is a long text that needs summarization."})
 
     assert result["success"] is True
     assert "summary" in result
@@ -74,8 +74,6 @@ async def test_classify_tool():
     assert result["success"] is True
     assert "category" in result
     assert result["category"] == "Technical"
-    assert "confidence" in result
-    assert result["confidence"] == 1.0
 
 
 @pytest.mark.asyncio
@@ -99,6 +97,7 @@ async def test_split_tool():
 async def test_print_to_pdf_tool():
     """Test the print to PDF tool."""
     from basic.tools import PrintToPDFTool
+    import json
 
     tool = PrintToPDFTool()
 
@@ -106,8 +105,9 @@ async def test_print_to_pdf_tool():
     with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
         mock_upload.return_value = "file-123"
 
-        # Test execution
-        result = await tool.execute(text="Hello, this is a test PDF content.", filename="test.pdf")
+        # Test execution with JSON input
+        input_data = json.dumps({"text": "Hello, this is a test PDF content.", "filename": "test.pdf"})
+        result = await tool.execute(input_data)
 
         assert result["success"] is True
         assert "file_id" in result
