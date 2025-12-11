@@ -168,15 +168,21 @@ class SheetsTool(Tool):
             "Output: sheet_data (parsed spreadsheet content)"
         )
 
-    async def execute(self, file_id: str) -> dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         """Process a spreadsheet file.
 
         Args:
-            file_id: LlamaCloud file ID
+            file_id: LlamaCloud file ID (passed via kwargs)
 
         Returns:
             Dictionary with 'success' and 'sheet_data' or 'error'
         """
+        file_id = kwargs.get("file_id")
+        if not file_id:
+            return {
+                "success": False,
+                "error": "Missing required argument: file_id"
+            }
         # Note: This is a placeholder implementation
         return {
             "success": True,
