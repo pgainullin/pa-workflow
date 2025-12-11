@@ -62,7 +62,7 @@ async def test_execution_log_created_as_attachment():
     from workflows import Context
     ctx = Context(workflow)
     
-    result = await workflow.send_results(event, ctx)
+    await workflow.send_results(event, ctx)
 
     # Verify callback was called
     assert workflow._send_callback_email.called
