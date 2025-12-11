@@ -516,7 +516,7 @@ Plan:"""
                 # Check for both {{...}} and {step_X.field} template patterns
                 has_template = (
                     ("{{" in value and "}}" in value) or 
-                    (re.search(r'\{step_\d+\.[a-zA-Z_]+\}', value) is not None)
+                    (re.search(r'\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}', value) is not None)
                 )
                 
                 if has_template:
@@ -587,7 +587,7 @@ Plan:"""
                 # Support both single and double braces since LLMs sometimes use single braces
                 has_template = (
                     ("{{" in value and "}}" in value) or 
-                    (re.search(r'\{step_\d+\.[a-zA-Z_]+\}', value) is not None)
+                    (re.search(r'\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}', value) is not None)
                 )
                 
                 if has_template:

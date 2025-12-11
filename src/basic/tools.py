@@ -76,13 +76,12 @@ class ParseTool(Tool):
         Returns:
             True if the string is a valid UUID format
         """
-        import re
-        # UUID v4 pattern: 8-4-4-4-12 hex digits
-        uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
-        )
-        return bool(uuid_pattern.match(value))
+        try:
+            import uuid
+            uuid.UUID(value)
+            return True
+        except (ValueError, AttributeError):
+            return False
 
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Parse a document using LlamaParse.
