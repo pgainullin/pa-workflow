@@ -299,7 +299,16 @@ class ExtractTool(Tool):
 
 
 class SheetsTool(Tool):
-    """Tool for processing spreadsheets using pandas."""
+    """Tool for processing spreadsheets using LlamaParse."""
+
+    def __init__(self, llama_parser=None):
+        """Initialize the SheetsTool.
+
+        Args:
+            llama_parser: Optional LlamaParse instance. If not provided,
+                         one will be created using environment variables.
+        """
+        self.llama_parser = llama_parser
 
     @property
     def name(self) -> str:
@@ -308,21 +317,19 @@ class SheetsTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Process spreadsheet files (Excel, CSV, Google Sheets). "
-            "Input: file_id or file_content (base64), filename (optional for format detection). "
+            "Process spreadsheet files (Excel, CSV) using LlamaParse. "
+            "Input: file_id or file_content (base64), filename (optional). "
             "Output: sheet_data (parsed spreadsheet content as JSON)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Process a spreadsheet file.
+        """Process a spreadsheet file using LlamaParse.
 
         Args:
             **kwargs: Keyword arguments including:
                 - file_id: LlamaCloud file ID (optional)
                 - file_content: Base64-encoded file content (optional)
                 - filename: Filename for format detection (optional)
-                - sheet_name: Specific sheet name or index (optional, default: 0)
-                - max_rows: Maximum rows to return (optional, default: 1000)
 
         Returns:
             Dictionary with 'success' and 'sheet_data' or 'error'
@@ -334,11 +341,13 @@ class SheetsTool(Tool):
         file_content = kwargs.get("file_content")
         file_content_from_param = kwargs.get("file_id_content")
         filename = kwargs.get("filename") or kwargs.get("file_id_filename")
-        sheet_name = kwargs.get("sheet_name", 0)  # Default to first sheet
-        max_rows = kwargs.get("max_rows", 1000)
 
         try:
-            import pandas as pd
+            from llama_parse import LlamaParse
+
+            # Get or create LlamaParse instance
+            if self.llama_parser is None:
+                self.llama_parser = LlamaParse(result_type="markdown")
 
             # Get file content
             if file_id:
@@ -351,52 +360,34 @@ class SheetsTool(Tool):
                     "error": "Either file_id or file_content must be provided",
                 }
 
-            # Determine file type from filename
-            file_extension = None
+            # Determine file extension from filename
+            file_extension = ".xlsx"  # Default to Excel
             if filename:
                 import os
 
                 _, ext = os.path.splitext(filename.lower())
-                file_extension = ext
+                if ext:
+                    file_extension = ext
 
-            # Create temporary file to use with pandas
-            # Pandas needs the proper extension to auto-detect format
-            suffix = file_extension if file_extension else ".csv"
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            # Create temporary file for LlamaParse
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=file_extension
+            ) as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
 
             try:
-                # Read the spreadsheet based on file type
-                if file_extension in [".xlsx", ".xls", ".xlsm"]:
-                    # Excel file
-                    df = pd.read_excel(tmp_path, sheet_name=sheet_name)
-                elif file_extension == ".csv":
-                    # CSV file
-                    df = pd.read_csv(tmp_path)
-                else:
-                    # Try to auto-detect - default to CSV
-                    try:
-                        df = pd.read_csv(tmp_path)
-                    except Exception:
-                        # If CSV fails, try Excel
-                        df = pd.read_excel(tmp_path, sheet_name=sheet_name)
+                # Parse the spreadsheet using LlamaParse
+                # LlamaParse returns JSON representation of tables
+                json_result = await self.llama_parser.aget_json(tmp_path)
 
-                # Limit rows if specified
-                if max_rows and len(df) > max_rows:
-                    logger.warning(
-                        f"Limiting spreadsheet output from {len(df)} to {max_rows} rows"
-                    )
-                    df = df.head(max_rows)
-
-                # Convert to JSON-serializable format
-                # Use orient='records' to get list of dicts (one per row)
+                # Extract table data from the JSON result
+                # The json_result contains parsed table data in a structured format
                 sheet_data = {
-                    "rows": df.to_dict(orient="records"),
-                    "columns": df.columns.tolist(),
-                    "row_count": len(df),
-                    "column_count": len(df.columns),
+                    "tables": json_result,
+                    "table_count": len(json_result)
+                    if isinstance(json_result, list)
+                    else 1,
                 }
 
                 return {"success": True, "sheet_data": sheet_data}

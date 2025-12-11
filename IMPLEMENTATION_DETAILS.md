@@ -49,40 +49,36 @@ result = await tool.execute(
 ## SheetsTool Implementation
 
 ### Features
-- Processes Excel (.xlsx, .xls, .xlsm) and CSV files using pandas
+- Processes Excel (.xlsx, .xls, .xlsm) and CSV files using LlamaParse
+- Leverages LlamaParse's native spreadsheet parsing capabilities
 - Supports multiple input formats:
   - `file_id`: LlamaCloud file ID
   - `file_content`: Base64-encoded file content
 - Optional parameters:
   - `filename`: For format detection
-  - `sheet_name`: Specific sheet (default: first sheet)
-  - `max_rows`: Limit rows returned (default: 1000)
-- Returns structured JSON with rows, columns, and metadata
+- Returns structured JSON with parsed table data
 
 ### Key Design Decisions
-- **File Format Detection**: Uses filename extension to determine Excel vs CSV
-- **Fallback Strategy**: If format detection fails, tries CSV first, then Excel
-- **Memory Protection**: Limits output to 1000 rows by default to prevent excessive memory usage
-- **Structured Output**: Returns data as list of dicts (one per row) plus metadata
+- **LlamaParse Integration**: Uses LlamaParse's `aget_json` method for native spreadsheet parsing
+- **Format Support**: Automatically handles Excel and CSV formats through LlamaParse
+- **Structured Output**: Returns table data in JSON format as parsed by LlamaParse
+- **No Manual Parsing**: Leverages LlamaParse's robust parsing instead of pandas
 
 ### Usage Example
 ```python
 from basic.tools import SheetsTool
 
-tool = SheetsTool()
+tool = SheetsTool(llama_parser)
 result = await tool.execute(
     file_content=base64_encoded_excel_content,
-    filename="data.xlsx",
-    max_rows=500
+    filename="data.xlsx"
 )
 # Returns:
 # {
 #   "success": True,
 #   "sheet_data": {
-#     "rows": [...],
-#     "columns": ["Column1", "Column2"],
-#     "row_count": 100,
-#     "column_count": 2
+#     "tables": [...],
+#     "table_count": 1
 #   }
 # }
 ```
@@ -150,12 +146,12 @@ result = await tool.execute(
 # }
 ```
 
-## Dependencies Added
+## Dependencies
 
 ### openpyxl
 - Version: >=3.0.0
-- Purpose: Excel file support for pandas
-- Required for: `pandas.read_excel()` functionality
+- Purpose: Excel file support for pandas (legacy, may be removed in future)
+- Note: SheetsTool now uses LlamaParse instead of pandas, so openpyxl is no longer required for spreadsheet processing
 
 ## Testing
 
@@ -163,15 +159,14 @@ result = await tool.execute(
 Updated tests covering:
 1. ExtractTool basic functionality
 2. ExtractTool error handling (missing schema)
-3. SheetsTool CSV processing
-4. SheetsTool Excel processing
-5. SheetsTool max_rows limiting
-6. SheetsTool error handling (missing file)
-7. **SplitTool with LlamaIndex SentenceSplitter**
-8. **ClassifyTool with LlamaIndex structured outputs**
+3. **SheetsTool CSV processing with LlamaParse**
+4. **SheetsTool Excel processing with LlamaParse**
+5. SheetsTool error handling (missing file)
+6. **SplitTool with LlamaIndex SentenceSplitter**
+7. **ClassifyTool with LlamaIndex structured outputs**
 
 ### Test Results
-- All 13 tool tests pass
+- All 12 tool tests pass
 - Code passes linting (ruff)
 - Code passes formatting checks
 
@@ -184,7 +179,7 @@ def _register_tools(self):
     """Register all available tools."""
     self.tool_registry.register(ParseTool(self.llama_parser))
     self.tool_registry.register(ExtractTool())  # ✓ Fully implemented
-    self.tool_registry.register(SheetsTool())    # ✓ Fully implemented
+    self.tool_registry.register(SheetsTool(self.llama_parser))    # ✓ Fully implemented with LlamaParse
     self.tool_registry.register(SplitTool())
     self.tool_registry.register(ClassifyTool(self.llm))
     self.tool_registry.register(TranslateTool())
@@ -196,7 +191,7 @@ def _register_tools(self):
 
 1. **src/basic/tools.py**
    - Implemented ExtractTool.execute()
-   - Implemented SheetsTool.execute()
+   - Reimplemented SheetsTool.execute() using LlamaParse
 
 2. **tests/test_tools.py**
    - Updated tests for SplitTool and ClassifyTool

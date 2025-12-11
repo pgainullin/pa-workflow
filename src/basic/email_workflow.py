@@ -113,7 +113,7 @@ class EmailWorkflow(Workflow):
         """Register all available tools."""
         self.tool_registry.register(ParseTool(self.llama_parser))
         self.tool_registry.register(ExtractTool())
-        self.tool_registry.register(SheetsTool())
+        self.tool_registry.register(SheetsTool(self.llama_parser))
         self.tool_registry.register(SplitTool())
         self.tool_registry.register(ClassifyTool(self.llm))
         self.tool_registry.register(TranslateTool())
@@ -514,11 +514,11 @@ Plan:"""
         for key, value in params.items():
             if isinstance(value, str):
                 # Check for both {{...}} and {step_X.field} template patterns
-                has_template = (
-                    ("{{" in value and "}}" in value) or 
-                    (re.search(r'\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}', value) is not None)
+                has_template = ("{{" in value and "}}" in value) or (
+                    re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
+                    is not None
                 )
-                
+
                 if has_template:
                     # Find all double-brace template references
                     matches = re.finditer(r"\{\{([^}]+)\}\}", value)
@@ -529,9 +529,11 @@ Plan:"""
                             step_key = parts[0]
                             if step_key.startswith("step_"):
                                 referenced_steps.add(step_key)
-                    
+
                     # Find all single-brace template references like {step_1.field}
-                    matches = re.finditer(r"\{(step_\d+)\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
+                    matches = re.finditer(
+                        r"\{(step_\d+)\.[a-zA-Z_][a-zA-Z0-9_]*\}", value
+                    )
                     for match in matches:
                         step_key = match.group(1)
                         referenced_steps.add(step_key)
@@ -585,11 +587,11 @@ Plan:"""
             if isinstance(value, str):
                 # Check for template references like {{step_1.parsed_text}} or {step_1.parsed_text}
                 # Support both single and double braces since LLMs sometimes use single braces
-                has_template = (
-                    ("{{" in value and "}}" in value) or 
-                    (re.search(r'\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}', value) is not None)
+                has_template = ("{{" in value and "}}" in value) or (
+                    re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
+                    is not None
                 )
-                
+
                 if has_template:
                     # Simple template resolution
                     def template_replacer(match):
@@ -616,16 +618,24 @@ Plan:"""
                         r"\{\{([^}]+)\}\}", template_replacer, value
                     )
                     resolved_value = re.sub(
-                        r"\{(step_\d+\.[a-zA-Z0-9_]+)\}", template_replacer, resolved_value
+                        r"\{(step_\d+\.[a-zA-Z0-9_]+)\}",
+                        template_replacer,
+                        resolved_value,
                     )
                     resolved[key] = resolved_value
                 # Attachment reference resolution: if value starts with "att-" or matches a filename
-                elif value.startswith("att-") or self._is_attachment_reference(value, email_data):
+                elif value.startswith("att-") or self._is_attachment_reference(
+                    value, email_data
+                ):
                     att_index = value
                     attachment_found = False
                     for att in email_data.attachments:
                         # Match by ID, name (filename), or file_id
-                        if att.id == att_index or att.name == att_index or att.file_id == att_index:
+                        if (
+                            att.id == att_index
+                            or att.name == att_index
+                            or att.file_id == att_index
+                        ):
                             resolved[key] = att.file_id or None
                             if not resolved[key] and att.content:
                                 resolved[f"{key}_content"] = att.content

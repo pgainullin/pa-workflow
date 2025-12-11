@@ -245,10 +245,24 @@ async def test_extract_tool_missing_schema():
 
 @pytest.mark.asyncio
 async def test_sheets_tool_csv():
-    """Test the sheets tool with CSV content."""
+    """Test the sheets tool with CSV content using LlamaParse."""
     from basic.tools import SheetsTool
 
-    tool = SheetsTool()
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_parser.aget_json = AsyncMock(
+        return_value=[
+            {
+                "table": [
+                    {"Name": "Alice", "Age": 30, "City": "New York"},
+                    {"Name": "Bob", "Age": 25, "City": "London"},
+                    {"Name": "Charlie", "Age": 35, "City": "Paris"},
+                ]
+            }
+        ]
+    )
+
+    tool = SheetsTool(llama_parser=mock_parser)
 
     # Create a simple CSV in memory
     csv_content = "Name,Age,City\nAlice,30,New York\nBob,25,London\nCharlie,35,Paris"
@@ -262,36 +276,35 @@ async def test_sheets_tool_csv():
 
         assert result["success"] is True
         assert "sheet_data" in result
-        assert "rows" in result["sheet_data"]
-        assert "columns" in result["sheet_data"]
-        assert result["sheet_data"]["row_count"] == 3
-        assert result["sheet_data"]["column_count"] == 3
-        assert result["sheet_data"]["columns"] == ["Name", "Age", "City"]
-        assert result["sheet_data"]["rows"][0]["Name"] == "Alice"
-        assert result["sheet_data"]["rows"][1]["Age"] == 25
+        assert "tables" in result["sheet_data"]
+        assert "table_count" in result["sheet_data"]
+        assert result["sheet_data"]["table_count"] == 1
+        assert len(result["sheet_data"]["tables"]) == 1
 
 
 @pytest.mark.asyncio
 async def test_sheets_tool_excel():
-    """Test the sheets tool with Excel content."""
+    """Test the sheets tool with Excel content using LlamaParse."""
     from basic.tools import SheetsTool
-    import pandas as pd
-    import io
 
-    tool = SheetsTool()
-
-    # Create a simple Excel file in memory
-    df = pd.DataFrame(
-        {
-            "Product": ["Widget", "Gadget", "Doohickey"],
-            "Price": [10.99, 25.50, 5.00],
-            "Quantity": [100, 50, 200],
-        }
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_parser.aget_json = AsyncMock(
+        return_value=[
+            {
+                "table": [
+                    {"Product": "Widget", "Price": 10.99, "Quantity": 100},
+                    {"Product": "Gadget", "Price": 25.50, "Quantity": 50},
+                    {"Product": "Doohickey", "Price": 5.00, "Quantity": 200},
+                ]
+            }
+        ]
     )
 
-    excel_buffer = io.BytesIO()
-    df.to_excel(excel_buffer, index=False)
-    excel_bytes = excel_buffer.getvalue()
+    tool = SheetsTool(llama_parser=mock_parser)
+
+    # Create mock Excel content
+    excel_bytes = b"mock excel content"
     base64_content = base64.b64encode(excel_bytes).decode("utf-8")
 
     # Test with base64 content
@@ -299,33 +312,8 @@ async def test_sheets_tool_excel():
 
     assert result["success"] is True
     assert "sheet_data" in result
-    assert result["sheet_data"]["row_count"] == 3
-    assert result["sheet_data"]["column_count"] == 3
-    assert "Product" in result["sheet_data"]["columns"]
-    assert result["sheet_data"]["rows"][0]["Product"] == "Widget"
-    assert result["sheet_data"]["rows"][1]["Price"] == 25.50
-
-
-@pytest.mark.asyncio
-async def test_sheets_tool_max_rows():
-    """Test the sheets tool with max_rows limit."""
-    from basic.tools import SheetsTool
-
-    tool = SheetsTool()
-
-    # Create a larger CSV with many rows
-    rows = [f"Row{i},Value{i}" for i in range(100)]
-    csv_content = "Column1,Column2\n" + "\n".join(rows)
-    csv_bytes = csv_content.encode("utf-8")
-    base64_content = base64.b64encode(csv_bytes).decode("utf-8")
-
-    # Test with max_rows limit
-    result = await tool.execute(
-        file_content=base64_content, filename="test.csv", max_rows=10
-    )
-
-    assert result["success"] is True
-    assert result["sheet_data"]["row_count"] == 10  # Should be limited to 10
+    assert "tables" in result["sheet_data"]
+    assert result["sheet_data"]["table_count"] == 1
 
 
 @pytest.mark.asyncio
