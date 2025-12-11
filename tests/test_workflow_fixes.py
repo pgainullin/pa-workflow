@@ -223,7 +223,7 @@ async def test_result_formatting_with_file_id():
             }
         ]
 
-        formatted = workflow._format_results(results, email_data)
+        formatted = workflow._create_execution_log(results, email_data)
 
         # Check that file_id is included in the output
         assert "file_id" in formatted.lower() or "file ID" in formatted

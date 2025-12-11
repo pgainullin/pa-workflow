@@ -213,7 +213,7 @@ async def test_result_formatting():
         },
     ]
 
-    formatted = workflow._format_results(results, email_data)
+    formatted = workflow._create_execution_log(results, email_data)
 
     assert "Test Subject" in formatted
     assert "summarise" in formatted

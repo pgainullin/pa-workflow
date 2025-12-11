@@ -4,6 +4,7 @@ This workflow uses an LLM-powered triage agent to analyze emails and create
 execution plans using available tools.
 """
 
+import base64
 import json
 import logging
 import os
@@ -705,11 +706,24 @@ Plan:"""
         callback = ev.callback
         results = ev.results
 
-        # Format results for email
-        result_text = self._format_results(results, email_data)
+        # Generate natural language response for the user
+        result_text = await self._generate_user_response(results, email_data)
+        
+        # Create execution log as markdown
+        execution_log = self._create_execution_log(results, email_data)
         
         # Collect any generated files from the results to attach
         attachments = self._collect_attachments(results)
+        
+        # Add execution log as an attachment
+        execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
+        execution_log_attachment = Attachment(
+            id="execution-log",
+            name="execution_log.md",
+            type="text/markdown",
+            content=execution_log_b64,
+        )
+        attachments.append(execution_log_attachment)
 
         # Send response email via callback
         try:
@@ -761,19 +775,94 @@ Plan:"""
             ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
             return StopEvent(result=failure)
 
-    def _format_results(self, results: list[dict], email_data: EmailData) -> str:
-        """Format execution results for email display.
+    async def _generate_user_response(self, results: list[dict], email_data: EmailData) -> str:
+        """Generate a natural language response to the user's query.
 
         Args:
             results: List of execution results
             email_data: Original email data
 
         Returns:
-            Formatted result text
+            Natural language response text
         """
-        output = "Your email has been processed.\n\n"
-        output += f"Original subject: {email_data.subject}\n"
-        output += f"Processed with {len(results)} steps:\n\n"
+        # Build a prompt to generate the user-facing response
+        successful_results = [r for r in results if r.get("success", False)]
+        
+        if not successful_results:
+            return "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
+        
+        # Create a summary of what was done
+        context = f"User's email subject: {email_data.subject}\n\n"
+        context += "Execution results:\n"
+        
+        for result in successful_results:
+            tool = result.get("tool", "unknown")
+            desc = result.get("description", "")
+            context += f"- {tool}"
+            if desc:
+                context += f": {desc}"
+            context += "\n"
+            
+            # Add key outputs
+            if "summary" in result:
+                context += f"  Result: {result['summary']}\n"
+            elif "translated_text" in result:
+                context += f"  Result: {result['translated_text']}\n"
+            elif "category" in result:
+                context += f"  Result: Category '{result['category']}'\n"
+            elif "parsed_text" in result:
+                # Include a snippet of parsed text
+                text = result["parsed_text"]
+                if len(text) > 500:
+                    text = text[:500] + "..."
+                context += f"  Result: {text}\n"
+        
+        # Use LLM to generate a natural response
+        prompt = f"""Based on the following email processing results, generate a brief, natural language response to send to the user. 
+
+{context}
+
+Write a concise, friendly response that:
+1. Acknowledges what was requested
+2. Summarizes the key results
+3. Mentions that detailed execution logs are attached if needed
+4. Is written in a helpful, professional tone
+
+Response:"""
+        
+        try:
+            response = await self._llm_complete_with_retry(prompt)
+            return str(response).strip()
+        except Exception as e:
+            logger.warning(f"Failed to generate LLM response, using fallback: {e}")
+            # Fallback: create a simple summary
+            output = "Your email has been processed successfully.\n\n"
+            
+            for result in successful_results:
+                if "summary" in result:
+                    output += f"Summary: {result['summary']}\n\n"
+                elif "translated_text" in result:
+                    output += f"Translation: {result['translated_text']}\n\n"
+                elif "category" in result:
+                    output += f"Category: {result['category']}\n\n"
+            
+            output += "See the attached execution_log.md for detailed information about the processing steps."
+            return output
+
+    def _create_execution_log(self, results: list[dict], email_data: EmailData) -> str:
+        """Create detailed execution log in markdown format.
+
+        Args:
+            results: List of execution results
+            email_data: Original email data
+
+        Returns:
+            Formatted execution log in markdown
+        """
+        output = "# Workflow Execution Log\n\n"
+        output += f"**Original Subject:** {email_data.subject}\n\n"
+        output += f"**Processed Steps:** {len(results)}\n\n"
+        output += "---\n\n"
 
         for result in results:
             step_num = result.get("step", "?")
@@ -781,35 +870,38 @@ Plan:"""
             desc = result.get("description", "")
             success = result.get("success", False)
 
-            output += f"Step {step_num}: {tool}"
+            output += f"## Step {step_num}: {tool}\n\n"
             if desc:
-                output += f" - {desc}"
-            output += f" ({'✓ Success' if success else '✗ Failed'})\n"
+                output += f"**Description:** {desc}\n\n"
+            output += f"**Status:** {'✓ Success' if success else '✗ Failed'}\n\n"
 
             # Add relevant output from each step
             if success:
                 if "summary" in result:
-                    output += f"  Summary: {result['summary']}\n"
+                    output += f"**Summary:**\n```\n{result['summary']}\n```\n\n"
                 elif "parsed_text" in result:
-                    # Truncate long text
                     text = result["parsed_text"]
-                    if len(text) > 200:
-                        text = text[:200] + "..."
-                    output += f"  Parsed: {text}\n"
+                    if len(text) > 1000:
+                        text = text[:1000] + "...\n(truncated for brevity)"
+                    output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
                 elif "translated_text" in result:
-                    output += f"  Translation: {result['translated_text']}\n"
+                    output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
                 elif "category" in result:
-                    output += f"  Category: {result['category']}\n"
+                    output += f"**Category:** {result['category']}\n\n"
                 elif "file_id" in result:
-                    # For tools that generate files (like print_to_pdf)
-                    output += f"  Generated file ID: {result['file_id']}\n"
+                    output += f"**Generated File ID:** `{result['file_id']}`\n\n"
+                
+                # Include any additional result fields
+                for key, value in result.items():
+                    if key not in ["step", "tool", "description", "success", "summary", "parsed_text", "translated_text", "category", "file_id", "error"]:
+                        output += f"**{key}:** {value}\n\n"
             else:
                 error = result.get("error", "Unknown error")
-                output += f"  Error: {error}\n"
+                output += f"**Error:**\n```\n{error}\n```\n\n"
 
-            output += "\n"
+            output += "---\n\n"
 
-        output += "\nProcessing complete."
+        output += "\n**Processing complete.**\n"
 
         return output
 
