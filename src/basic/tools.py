@@ -426,7 +426,9 @@ class PrintToPDFTool(Tool):
 
                 # Truncate long lines to prevent overflow
                 display_line = line[: self.PDF_MAX_LINE_LENGTH]
-                pdf_canvas.drawString(self.PDF_MARGIN_POINTS, y_position, display_line)
+                # Replace characters that can't be encoded in latin-1 (default font encoding)
+                safe_line = display_line.encode("latin-1", errors="replace").decode("latin-1")
+                pdf_canvas.drawString(self.PDF_MARGIN_POINTS, y_position, safe_line)
                 y_position -= self.PDF_LINE_SPACING  # Move down for next line
 
             pdf_canvas.save()
