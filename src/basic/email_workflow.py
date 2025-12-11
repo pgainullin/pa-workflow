@@ -22,19 +22,13 @@ from .models import (
     EmailProcessingResult,
     SendEmailRequest,
 )
-from .utils import download_file_from_llamacloud, text_to_html, is_retryable_error
+from .utils import download_file_from_llamacloud, text_to_html, is_retryable_error, api_retry
 
 logger = logging.getLogger(__name__)
 
 
-# Create retry decorator for LLM API calls
-llm_api_retry = retry(
-    retry=retry_if_exception(is_retryable_error),
-    stop=stop_after_attempt(5),  # Maximum 5 attempts
-    wait=wait_exponential(multiplier=1, min=1, max=45),  # Exponential backoff
-    before_sleep=before_sleep_log(logger, logging.WARNING),
-    reraise=True,
-)
+# Use the shared retry decorator for LLM API calls
+llm_api_retry = api_retry
 
 
 class EmailStartEvent(StartEvent):
