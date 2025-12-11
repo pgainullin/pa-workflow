@@ -17,8 +17,8 @@ Email processing workflow with LlamaCloud integration and AI-powered triage for 
 The workflow includes the following tools that can be used by the triage agent:
 
 1. **Parse** - Parse documents (PDF, Word, PowerPoint) using LlamaParse
-2. **Extract** - Extract structured data using LlamaCloud Extract (placeholder)
-3. **Sheets** - Process spreadsheet files (Excel, CSV) (placeholder)
+2. **Extract** - Extract structured data using LlamaCloud Extract
+3. **Sheets** - Process spreadsheet files (Excel, CSV) using pandas
 4. **Split** - Split documents into logical sections
 5. **Classify** - Classify text into categories using an LLM
 6. **Translate** - Translate text using Google Translate

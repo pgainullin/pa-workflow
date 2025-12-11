@@ -19,6 +19,7 @@ dependencies = [
     "tenacity>=8.0.0",  # Required for retry logic with exponential backoff
     "deep-translator>=1.11.0",  # Google Translate API wrapper
     "reportlab>=4.0.0",  # PDF generation library
+    "openpyxl>=3.0.0",  # Excel file support for pandas
 ]
 
 [dependency-groups]
