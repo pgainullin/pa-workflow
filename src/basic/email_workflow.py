@@ -529,6 +529,7 @@ Plan:"""
                             f"Attachment '{att_index}' not found. "
                             f"Available attachments: {[att.id for att in email_data.attachments]}"
                         )
+                        resolved[key] = None
                 else:
                     resolved[key] = value
             else:
