@@ -513,30 +513,26 @@ Plan:"""
                         r"\{\{([^}]+)\}\}", template_replacer, value
                     )
                     resolved[key] = resolved_value
+                # Attachment reference resolution: if value starts with "att-"
+                elif value.startswith("att-"):
+                    att_index = value
+                    attachment_found = False
+                    for att in email_data.attachments:
+                        if att.id == att_index or att.name == att_index:
+                            resolved[key] = att.file_id or None
+                            if not resolved[key] and att.content:
+                                resolved[f"{key}_content"] = att.content
+                            attachment_found = True
+                            break
+                    if not attachment_found:
+                        logger.warning(
+                            f"Attachment '{att_index}' not found. "
+                            f"Available attachments: {[att.id for att in email_data.attachments]}"
+                        )
                 else:
                     resolved[key] = value
             else:
                 resolved[key] = value
-
-        # Add attachment file_ids if referenced
-        if "file_id" in params and params["file_id"].startswith("att-"):
-            # Find attachment by index or id
-            att_index = params["file_id"]
-            attachment_found = False
-            for att in email_data.attachments:
-                if att.id == att_index or att.name == att_index:
-                    resolved["file_id"] = att.file_id or None
-                    if not resolved["file_id"] and att.content:
-                        resolved["file_content"] = att.content
-                    attachment_found = True
-                    break
-
-            if not attachment_found:
-                logger.warning(
-                    f"Attachment '{att_index}' not found. "
-                    f"Available attachments: {[att.id for att in email_data.attachments]}"
-                )
-
         return resolved
 
     @step
