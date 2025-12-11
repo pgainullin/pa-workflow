@@ -384,23 +384,26 @@ Plan:"""
                 # Check for template references like {{step_1.parsed_text}}
                 if "{{" in value and "}}" in value:
                     # Simple template resolution
-                    resolved_value = value
-                    for match in re.finditer(r"\{\{([^}]+)\}\}", value):
+                    def template_replacer(match):
                         ref = match.group(1).strip()
-                        # Split on . to get step and field
                         parts = ref.split(".")
                         if len(parts) == 2:
                             step_key, field = parts
                             if step_key in context and field in context[step_key]:
-                                resolved_value = resolved_value.replace(
-                                    match.group(0), str(context[step_key][field])
-                                )
+                                return str(context[step_key][field])
                             else:
-                                # Log warning if template reference not found
                                 logger.warning(
                                     f"Template reference '{ref}' not found in execution context. "
                                     f"Available steps: {list(context.keys())}"
                                 )
+                                return match.group(0)
+                        else:
+                            logger.warning(
+                                f"Invalid template reference format: '{ref}'. Expected 'step.field'."
+                            )
+                            return match.group(0)
+
+                    resolved_value = re.sub(r"\{\{([^}]+)\}\}", template_replacer, value)
                     resolved[key] = resolved_value
                 else:
                     resolved[key] = value
