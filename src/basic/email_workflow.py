@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 llm_api_retry = api_retry
 
 
+# Gemini model configuration
+# Using latest stable Gemini 2.0 models as per https://ai.google.dev/gemini-api/docs/gemini-3
+GEMINI_MULTIMODAL_MODEL = "gemini-2.0-flash"  # Latest stable for multi-modal (images, PDFs, videos)
+GEMINI_TEXT_MODEL = "gemini-2.0-flash"  # Latest stable for text processing
+
+# Alternative cheaper model configuration (not currently in use)
+# Gemini 2.5 Flash is optimized for cost-effective simple requests
+GEMINI_CHEAP_TEXT_MODEL = "gemini-2.5-flash"  # Cheaper option for simple text tasks
+
+
 class EmailStartEvent(StartEvent):
     """Start event for email workflow containing email data and callback config.
 
@@ -82,7 +92,7 @@ class EmailWorkflow(Workflow):
     """
 
     llama_parser = LlamaParse(result_type="markdown")
-    llm = GoogleGenAI(model="gemini-2.5-flash", api_key=os.getenv("GEMINI_API_KEY"))
+    llm = GoogleGenAI(model=GEMINI_TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -104,7 +114,7 @@ class EmailWorkflow(Workflow):
         """Execute Gemini multi-modal content generation with automatic retry.
         
         Args:
-            model: The model name (e.g., "gemini-2.0-flash-exp")
+            model: The model name (e.g., "gemini-2.0-flash")
             contents: List of content parts (text, images, etc.)
             
         Returns:
@@ -310,7 +320,7 @@ class EmailWorkflow(Workflow):
                     
                     # Use async API with multi-modal model that supports PDFs
                     summary = await self._genai_generate_content_with_retry(
-                        model="gemini-2.0-flash-exp",
+                        model=GEMINI_MULTIMODAL_MODEL,
                         contents=[prompt_text, pdf_part]
                     )
                 
@@ -349,7 +359,7 @@ class EmailWorkflow(Workflow):
                     
                     # Use async API to avoid blocking the event loop
                     summary = await self._genai_generate_content_with_retry(
-                        model="gemini-2.0-flash-exp",
+                        model=GEMINI_MULTIMODAL_MODEL,
                         contents=[prompt_text, image_part]
                     )
 

@@ -5,7 +5,7 @@ The email workflow now supports processing various types of attachments with int
 ## Supported Attachment Types
 
 ### 📄 Documents
-- **PDF files** - Analyzed using Google Gemini's native PDF understanding (gemini-2.0-flash-exp) for comprehensive analysis including text, images, tables, and formatting
+- **PDF files** - Analyzed using Google Gemini's native PDF understanding (gemini-2.0-flash) for comprehensive analysis including text, images, tables, and formatting
 - **Spreadsheets** (Excel, Google Sheets) - Parsed with LlamaParse, summarized with LLM
 - **CSV files** - Parsed with LlamaParse, summarized with LLM
 - **Word documents** (.doc, .docx) - Parsed with LlamaParse, summarized with LLM
@@ -13,7 +13,7 @@ The email workflow now supports processing various types of attachments with int
 
 ### 🖼️ Images
 - **All image formats** (PNG, JPEG, GIF, WebP, etc.)
-- Analyzed using Google Gemini's vision capabilities (gemini-2.0-flash-exp)
+- Analyzed using Google Gemini's vision capabilities (gemini-2.0-flash)
 - Provides description of image content, objects, text, and context
 
 ### 📝 Text Files
@@ -108,7 +108,7 @@ prompt_text = (
 )
 
 response = await self.genai_client.aio.models.generate_content(
-    model="gemini-2.0-flash-exp",  # Using multi-modal model with PDF support
+    model="gemini-2.0-flash",  # Using multi-modal model with PDF support
     contents=[prompt_text, pdf_part]
 )
 
@@ -133,7 +133,7 @@ prompt_text = (
 )
 
 response = await self.genai_client.aio.models.generate_content(
-    model="gemini-2.0-flash-exp",  # Using vision-capable model
+    model="gemini-2.0-flash",  # Using vision-capable model
     contents=[prompt_text, image_part]
 )
 
