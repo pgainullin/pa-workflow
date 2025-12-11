@@ -392,17 +392,32 @@ class PrintToPDFTool(Tool):
             "Output: file_id (LlamaCloud file ID of generated PDF)"
         )
 
-    async def execute(self, text: str, filename: str = "output.pdf") -> dict[str, Any]:
+    async def execute(self, input: str) -> dict[str, Any]:
         """Convert text to PDF and upload to LlamaCloud.
 
         Args:
-            text: Text content to convert
-            filename: Output PDF filename
+            input: Input string containing text and optionally filename.
+                If input is a JSON string: {"text": "...", "filename": "..."}
+                If input is plain text, filename defaults to "output.pdf".
 
         Returns:
             Dictionary with 'success' and 'file_id' or 'error'
         """
+        import json
         try:
+            # Try to parse input as JSON for text and filename
+            text = None
+            filename = "output.pdf"
+            try:
+                data = json.loads(input)
+                if isinstance(data, dict) and "text" in data:
+                    text = data["text"]
+                    filename = data.get("filename", "output.pdf")
+                else:
+                    text = input
+            except Exception:
+                # Not JSON, treat input as plain text
+                text = input
             # Create PDF in memory
             pdf_buffer = io.BytesIO()
             pdf_canvas = canvas.Canvas(pdf_buffer, pagesize=letter)
