@@ -813,7 +813,7 @@ Plan:"""
 
         return output
 
-    def _collect_attachments(self, results: list[dict]) -> list:
+    def _collect_attachments(self, results: list[dict]) -> list[Attachment]:
         """Collect file attachments from workflow results.
 
         Args:
