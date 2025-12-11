@@ -131,18 +131,20 @@ class ExtractTool(Tool):
             "Output: extracted_data (structured JSON)"
         )
 
-    async def execute(self, file_id: str, schema: dict) -> dict[str, Any]:
+    async def execute(self, **kwargs) -> dict[str, Any]:
         """Extract structured data from a document.
 
         Args:
-            file_id: LlamaCloud file ID
-            schema: JSON schema for extraction
+            file_id: LlamaCloud file ID (from kwargs)
+            schema: JSON schema for extraction (from kwargs)
 
         Returns:
             Dictionary with 'success' and 'extracted_data' or 'error'
         """
         # Note: This is a placeholder implementation
         # Real implementation would use LlamaCloud Extract API
+        file_id = kwargs.get("file_id")
+        schema = kwargs.get("schema")
         return {
             "success": True,
             "extracted_data": {
