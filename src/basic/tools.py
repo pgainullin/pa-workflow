@@ -351,17 +351,20 @@ class SummariseTool(Tool):
             "Output: summary"
         )
 
-    async def execute(self, text: str, max_length: int | None = None) -> dict[str, Any]:
+    async def execute(self, input: dict[str, Any]) -> dict[str, Any]:
         """Summarise text using an LLM.
 
         Args:
-            text: Text to summarise
-            max_length: Target summary length in words
+            input: Dictionary with keys:
+                - 'text': Text to summarise (required)
+                - 'max_length': Target summary length in words (optional)
 
         Returns:
             Dictionary with 'success' and 'summary' or 'error'
         """
         try:
+            text = input.get("text")
+            max_length = input.get("max_length")
             length_instruction = f" in about {max_length} words" if max_length else ""
             prompt = (
                 f"Provide a concise summary{length_instruction} of the following text:\n\n"
