@@ -165,6 +165,19 @@ class ParseTool(Tool):
                     self.llama_parser.load_data, tmp_path
                 )
                 parsed_text = "\n".join([doc.get_content() for doc in documents])
+                
+                # Validate that we got some content
+                if not parsed_text or not parsed_text.strip():
+                    logger.warning(
+                        f"ParseTool returned empty text for file. "
+                        f"Documents returned: {len(documents)}, "
+                        f"File extension: {file_extension}"
+                    )
+                    return {
+                        "success": False,
+                        "error": "Document parsing returned no text content. The document may be empty, corrupted, or in an unsupported format.",
+                    }
+                
                 return {"success": True, "parsed_text": parsed_text}
             finally:
                 # Clean up temp file
@@ -583,7 +596,8 @@ class TranslateTool(Tool):
     def description(self) -> str:
         return (
             "Translate text from one language to another using Google Translate. "
-            "Input: text, source_lang (default: 'auto'), target_lang (default: 'en'). "
+            "Input: text, source_lang (default: 'auto'), target_lang (default: 'english'). "
+            "Languages can be specified as codes (e.g., 'en', 'fr') or full names (e.g., 'english', 'french'). "
             "Output: translated_text"
         )
 
@@ -621,14 +635,19 @@ class TranslateTool(Tool):
             # Create a temporary instance to get supported languages
             temp_translator = GoogleTranslator(source="auto", target="en")
             supported_langs = temp_translator.get_supported_languages(as_dict=True)
-            supported_codes = set(supported_langs.keys())
+            # get_supported_languages returns dict with language names as keys and codes as values
+            # e.g., {'english': 'en', 'french': 'fr', ...}
+            # GoogleTranslator accepts both formats, but we should validate both
+            supported_names = set(supported_langs.keys())  # Full names: 'english', 'french', etc.
+            supported_codes = set(supported_langs.values())  # Short codes: 'en', 'fr', etc.
+            
             # "auto" is allowed for source_lang
-            if source_lang != "auto" and source_lang not in supported_codes:
+            if source_lang != "auto" and source_lang not in supported_codes and source_lang not in supported_names:
                 return {
                     "success": False,
                     "error": f"Invalid source_lang '{source_lang}'. Supported codes: {sorted(supported_codes)}",
                 }
-            if target_lang not in supported_codes:
+            if target_lang not in supported_codes and target_lang not in supported_names:
                 return {
                     "success": False,
                     "error": f"Invalid target_lang '{target_lang}'. Supported codes: {sorted(supported_codes)}",
