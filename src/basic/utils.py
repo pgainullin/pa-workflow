@@ -170,6 +170,11 @@ async def process_text_in_batches(
                 space_pos = text.rfind(' ', current_pos, end_pos)
                 if space_pos > current_pos:
                     end_pos = space_pos + 1  # Include the space
+                else:
+                    # No boundary found, force split but guarantee forward progress
+                    end_pos = min(current_pos + max_length, len(text))
+                    if end_pos <= current_pos:
+                        end_pos = min(current_pos + max_length, len(text))
         else:
             end_pos = len(text)
         
