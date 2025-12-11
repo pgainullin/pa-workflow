@@ -120,10 +120,11 @@ async def process_text_in_batches(
     processes each chunk using the provided processor function,
     and optionally combines the results using the combiner function.
     
-    Note: If processing a batch fails, the entire operation fails and
-    previously processed batches are not returned. This is an all-or-nothing
-    operation. Consider implementing custom error handling in the processor
-    function if partial results are needed.
+    Error Handling:
+    - If a batch fails, the error is logged and processing continues with remaining batches
+    - Partial results from successful batches are returned
+    - If ALL batches fail, a RuntimeError is raised with details of all failures
+    - This allows graceful degradation when processing large documents
     
     Args:
         text: The text to process
@@ -134,7 +135,10 @@ async def process_text_in_batches(
                  or returned as a list (for other types).
     
     Returns:
-        Combined result from processing all batches
+        Combined result from processing all batches (or partial results if some batches failed)
+        
+    Raises:
+        RuntimeError: If all batches fail to process
         
     Example:
         # For translation
@@ -190,12 +194,29 @@ async def process_text_in_batches(
     
     logger.info(f"Processing text in {len(chunks)} batches (max_length={max_length})")
     
-    # Process each chunk
+    # Process each chunk with error handling
     results = []
+    errors = []
     for i, chunk in enumerate(chunks):
         logger.info(f"Processing batch {i + 1}/{len(chunks)} ({len(chunk)} characters)")
-        result = await processor(chunk)
-        results.append(result)
+        try:
+            result = await processor(chunk)
+            results.append(result)
+        except Exception as e:
+            logger.error(f"Error processing batch {i + 1}/{len(chunks)}: {e}")
+            errors.append((i + 1, str(e)))
+            # Continue processing remaining batches
+    
+    # If all batches failed, raise an exception
+    if len(results) == 0:
+        error_summary = "; ".join(f"Batch {idx}: {err}" for idx, err in errors)
+        raise RuntimeError(f"All batches failed to process: {error_summary}")
+    
+    # If some batches failed, log warning but continue with partial results
+    if errors:
+        logger.warning(f"{len(errors)} batch(es) failed out of {len(chunks)}. Continuing with partial results.")
+        for idx, err in errors:
+            logger.warning(f"  Batch {idx} error: {err}")
     
     # Combine results
     if combiner:
