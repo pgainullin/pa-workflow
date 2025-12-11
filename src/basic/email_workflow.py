@@ -537,6 +537,22 @@ Plan:"""
 
         return False
 
+    def _is_attachment_reference(self, value: str, email_data: EmailData) -> bool:
+        """Check if a string value is likely an attachment reference.
+
+        Args:
+            value: Parameter value to check
+            email_data: Email data containing attachments
+
+        Returns:
+            True if the value matches an attachment name
+        """
+        # Check if value matches any attachment name (filename)
+        for att in email_data.attachments:
+            if att.name == value:
+                return True
+        return False
+
     def _resolve_params(
         self, params: dict, context: dict, email_data: EmailData
     ) -> dict:
@@ -580,21 +596,25 @@ Plan:"""
                         r"\{\{([^}]+)\}\}", template_replacer, value
                     )
                     resolved[key] = resolved_value
-                # Attachment reference resolution: if value starts with "att-"
-                elif value.startswith("att-"):
+                # Attachment reference resolution: if value starts with "att-" or matches a filename
+                elif value.startswith("att-") or self._is_attachment_reference(value, email_data):
                     att_index = value
                     attachment_found = False
                     for att in email_data.attachments:
-                        if att.id == att_index or att.name == att_index:
+                        # Match by ID, name (filename), or file_id
+                        if att.id == att_index or att.name == att_index or att.file_id == att_index:
                             resolved[key] = att.file_id or None
                             if not resolved[key] and att.content:
                                 resolved[f"{key}_content"] = att.content
+                            if not resolved[key]:
+                                # If both file_id and content are None, add the filename for better error messages
+                                resolved[f"{key}_filename"] = att.name
                             attachment_found = True
                             break
                     if not attachment_found:
                         logger.warning(
                             f"Attachment '{att_index}' not found. "
-                            f"Available attachments: {[att.id for att in email_data.attachments]}"
+                            f"Available attachments: {[(att.id, att.name) for att in email_data.attachments]}"
                         )
                         resolved[key] = None
                 else:
