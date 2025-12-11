@@ -80,6 +80,7 @@ def is_retryable_error(exception: Exception) -> bool:
         if isinstance(exception, (httpx.TimeoutException, httpx.ConnectError)):
             return True
     except ImportError:
+        # httpx is optional; if not installed, just skip httpx-specific checks
         pass
     
     return False
