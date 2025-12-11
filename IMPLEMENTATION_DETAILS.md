@@ -7,7 +7,7 @@ This document describes the implementation of tools using LlamaIndex and LlamaCl
 The issue requested implementing tools using LlamaIndex APIs. Four tools have been fully implemented:
 
 1. **ExtractTool** - Structured data extraction using LlamaCloud Extract
-2. **SheetsTool** - Spreadsheet processing using pandas
+2. **SheetsTool** - Spreadsheet processing using LlamaParse
 3. **SplitTool** - Text splitting using LlamaIndex SentenceSplitter
 4. **ClassifyTool** - Text classification using LlamaIndex structured outputs
 
