@@ -803,14 +803,16 @@ Plan:"""
                 context += f": {desc}"
             context += "\n"
             
-            # Add key outputs
+            # Add key outputs (use independent if statements to show all relevant fields)
             if "summary" in result:
                 context += f"  Result: {result['summary']}\n"
-            elif "translated_text" in result:
+            if "translated_text" in result:
                 context += f"  Result: {result['translated_text']}\n"
-            elif "category" in result:
+            if "category" in result:
                 context += f"  Result: Category '{result['category']}'\n"
-            elif "parsed_text" in result:
+            if "file_id" in result:
+                context += f"  Generated file: {result['file_id']}\n"
+            if "parsed_text" in result:
                 # Include a snippet of parsed text
                 text = result["parsed_text"]
                 if len(text) > 500:
@@ -841,13 +843,14 @@ Response:"""
             for result in successful_results:
                 if "summary" in result:
                     output += f"Summary: {result['summary']}\n\n"
-                elif "translated_text" in result:
+                if "translated_text" in result:
                     output += f"Translation: {result['translated_text']}\n\n"
-                elif "category" in result:
+                if "category" in result:
                     output += f"Category: {result['category']}\n\n"
+                if "file_id" in result:
+                    output += f"Generated file: {result['file_id']}\n\n"
             
-            if execution_log_attached:
-                output += "See the attached execution_log.md for detailed information about the processing steps."
+            output += "See the attached execution_log.md for detailed information about the processing steps."
             return output
 
     def _create_execution_log(self, results: list[dict], email_data: EmailData) -> str:
@@ -876,20 +879,20 @@ Response:"""
                 output += f"**Description:** {desc}\n\n"
             output += f"**Status:** {'✓ Success' if success else '✗ Failed'}\n\n"
 
-            # Add relevant output from each step
+            # Add relevant output from each step (use independent if statements to show all relevant fields)
             if success:
                 if "summary" in result:
                     output += f"**Summary:**\n```\n{result['summary']}\n```\n\n"
-                elif "parsed_text" in result:
+                if "parsed_text" in result:
                     text = result["parsed_text"]
                     if len(text) > 1000:
                         text = text[:1000] + "...\n(truncated for brevity)"
                     output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
-                elif "translated_text" in result:
+                if "translated_text" in result:
                     output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
-                elif "category" in result:
+                if "category" in result:
                     output += f"**Category:** {result['category']}\n\n"
-                elif "file_id" in result:
+                if "file_id" in result:
                     output += f"**Generated File ID:** `{result['file_id']}`\n\n"
                 
                 # Include any additional result fields
