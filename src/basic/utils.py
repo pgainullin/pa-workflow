@@ -48,7 +48,7 @@ def is_retryable_error(exception: Exception) -> bool:
     #   Examples: "503 UNAVAILABLE", "500 internal error", "429 too many requests"
     # Pattern 2: Also matches status codes with punctuation
     #   Examples: "status: 503", "HTTP 500 - error", "error-503"
-    if re.search(r'(http\s+)?[45]0[03](\s+(unavailable|error|server|internal|service|too\s+many)|\s*[:\-])', error_str, re.IGNORECASE):
+    if re.search(r'(http\s+)?(429|500|503)(\s+(unavailable|error|server|internal|service|too\s+many)|\s*[:\-])', error_str, re.IGNORECASE):
         return True
     
     # Matches common HTTP error message formats
