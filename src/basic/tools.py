@@ -254,17 +254,20 @@ class ClassifyTool(Tool):
             "Output: category (selected category), confidence (0-1)"
         )
 
-    async def execute(self, text: str, categories: list[str]) -> dict[str, Any]:
+    async def execute(self, data: dict[str, Any]) -> dict[str, Any]:
         """Classify text into one of the given categories.
 
         Args:
-            text: Text to classify
-            categories: List of possible categories
+            data: Dictionary with keys 'text' and 'categories'
 
         Returns:
             Dictionary with 'success', 'category', 'confidence' or 'error'
         """
         try:
+            text = data.get("text")
+            categories = data.get("categories")
+            if not text or not categories:
+                return {"success": False, "error": "Both 'text' and 'categories' must be provided"}
             prompt = (
                 f"Classify the following text into one of these categories: {', '.join(categories)}\n\n"
                 f"Text: {text}\n\n"
