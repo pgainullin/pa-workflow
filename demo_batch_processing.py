@@ -25,7 +25,7 @@ async def demo_translate_tool():
     tool = TranslateTool()
 
     # Create long text (60KB) that will be split into batches
-    long_text = "This is sentence number {}. " * 3000  # ~60KB
+    long_text = " ".join(f"This is sentence number {i}." for i in range(1, 3001))  # ~60KB
 
     print(f"\nInput text length: {len(long_text)} characters")
     print("Expected behavior: Split into 2 batches (50KB each)")
