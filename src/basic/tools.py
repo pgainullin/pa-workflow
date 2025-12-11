@@ -328,6 +328,20 @@ class TranslateTool(Tool):
         try:
             import asyncio
 
+            # Validate language codes
+            supported_langs = GoogleTranslator.get_supported_languages(as_dict=True)
+            supported_codes = set(supported_langs.keys())
+            # "auto" is allowed for source_lang
+            if source_lang != "auto" and source_lang not in supported_codes:
+                return {
+                    "success": False,
+                    "error": f"Invalid source_lang '{source_lang}'. Supported codes: {sorted(supported_codes)}"
+                }
+            if target_lang not in supported_codes:
+                return {
+                    "success": False,
+                    "error": f"Invalid target_lang '{target_lang}'. Supported codes: {sorted(supported_codes)}"
+                }
             # Create translator instance for this translation
             translator = GoogleTranslator(source=source_lang, target=target_lang)
 
