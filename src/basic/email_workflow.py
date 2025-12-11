@@ -1,5 +1,6 @@
 """Email processing workflow for handling inbound emails."""
 
+import asyncio
 import base64
 import logging
 import os
@@ -11,7 +12,6 @@ from google.genai import types
 import httpx
 from llama_index.llms.google_genai import GoogleGenAI
 from llama_parse import LlamaParse
-from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential, before_sleep_log
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
@@ -126,7 +126,7 @@ class EmailWorkflow(Workflow):
         Returns:
             List of parsed documents
         """
-        return self.llama_parser.load_data(file_path)
+        return await asyncio.to_thread(self.llama_parser.load_data, file_path)
 
     @step
     async def receive_email(
