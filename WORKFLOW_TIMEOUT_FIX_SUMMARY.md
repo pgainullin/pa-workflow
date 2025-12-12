@@ -68,8 +68,8 @@ async def step_name(self, ev: Event, ctx: Context) -> NextEvent:
 ```
 Parse Tool Retry Timing:
 - Max attempts: 5 (1 initial + 4 retries)
-- Backoff: exponential (1s, 2s, 4s, 8s, 16s)
-- Total wait time per file: ~31s
+- Backoff: exponential (1s, 2s, 4s, 8s)
+- Total wait time per file: ~15s (1s + 2s + 4s + 8s = 15s)
 - Plus actual API call time: ~10-20s per attempt
 - Multiple files scenario: could easily exceed 60s
 
