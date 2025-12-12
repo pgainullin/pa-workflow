@@ -9,7 +9,7 @@ by retrying instead of failing immediately.
 import asyncio
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 # Add src to path so we can import basic
 sys.path.insert(0, str(Path(__file__).parent / "src"))
