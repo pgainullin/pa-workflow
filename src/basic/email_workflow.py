@@ -852,8 +852,18 @@ Plan:"""
         Returns:
             Natural language response text
         """
-        # Build a prompt to generate the user-facing response
-        successful_results = [r for r in results if r.get("success", False)]
+        try:
+            # Defensive check: ensure results is a valid list
+            if results is None:
+                logger.warning("Results is None in _generate_user_response")
+                return "I've processed your email, but encountered issues. Please see the attached execution log for details."
+            
+            if not isinstance(results, list):
+                logger.warning(f"Results is not a list (type: {type(results)})")
+                return "I've processed your email, but encountered issues with result formatting. Please see the attached execution log for details."
+            
+            # Build a prompt to generate the user-facing response
+            successful_results = [r for r in results if r.get("success", False)]
         
         if not successful_results:
             return "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
@@ -899,26 +909,31 @@ Write a concise, friendly response that:
 
 Response:"""
         
-        try:
-            response = await self._llm_complete_with_retry(prompt)
-            return str(response).strip()
+            try:
+                response = await self._llm_complete_with_retry(prompt)
+                return str(response).strip()
+            except Exception as e:
+                logger.warning(f"Failed to generate LLM response, using fallback: {e}")
+                # Fallback: create a simple summary
+                output = "Your email has been processed successfully.\n\n"
+                
+                for result in successful_results:
+                    if "summary" in result:
+                        output += f"Summary: {result['summary']}\n\n"
+                    if "translated_text" in result:
+                        output += f"Translation: {result['translated_text']}\n\n"
+                    if "category" in result:
+                        output += f"Category: {result['category']}\n\n"
+                    if "file_id" in result:
+                        output += f"Generated file: {result['file_id']}\n\n"
+                
+                output += "See the attached execution_log.md for detailed information about the processing steps."
+                return output
+                
         except Exception as e:
-            logger.warning(f"Failed to generate LLM response, using fallback: {e}")
-            # Fallback: create a simple summary
-            output = "Your email has been processed successfully.\n\n"
-            
-            for result in successful_results:
-                if "summary" in result:
-                    output += f"Summary: {result['summary']}\n\n"
-                if "translated_text" in result:
-                    output += f"Translation: {result['translated_text']}\n\n"
-                if "category" in result:
-                    output += f"Category: {result['category']}\n\n"
-                if "file_id" in result:
-                    output += f"Generated file: {result['file_id']}\n\n"
-            
-            output += "See the attached execution_log.md for detailed information about the processing steps."
-            return output
+            logger.exception("Fatal error in _generate_user_response")
+            # Final fallback - return a generic message
+            return f"Your email has been processed. Please see the attached execution log for details. (Error: {e!s})"
 
     def _create_execution_log(self, results: list[dict], email_data: EmailData) -> str:
         """Create detailed execution log in markdown format.
@@ -930,12 +945,13 @@ Response:"""
         Returns:
             Formatted execution log in markdown
         """
-        output = "# Workflow Execution Log\n\n"
-        output += f"**Original Subject:** {email_data.subject}\n\n"
-        output += f"**Processed Steps:** {len(results)}\n\n"
-        output += "---\n\n"
+        try:
+            output = "# Workflow Execution Log\n\n"
+            output += f"**Original Subject:** {email_data.subject}\n\n"
+            output += f"**Processed Steps:** {len(results)}\n\n"
+            output += "---\n\n"
 
-        for result in results:
+            for result in results:
             step_num = result.get("step", "?")
             tool = result.get("tool", "unknown")
             desc = result.get("description", "")
@@ -996,6 +1012,11 @@ Response:"""
         output += "\n**Processing complete.**\n"
 
         return output
+        
+        except Exception as e:
+            logger.exception("Error creating execution log")
+            # Return a minimal fallback log
+            return f"# Workflow Execution Log\n\n**Error:** Failed to generate detailed log: {e!s}\n\n**Processed Steps:** {len(results) if results else 0}"
 
     def _collect_attachments(self, results: list[dict]) -> list[Attachment]:
         """Collect file attachments from workflow results.
@@ -1006,38 +1027,44 @@ Response:"""
         Returns:
             List of Attachment objects for files generated by tools
         """
-        attachments = []
-        
-        for result in results:
-            if not result.get("success", False):
-                continue
-                
-            # Check if this step generated a file
-            file_id = result.get("file_id")
-            if file_id:
-                tool = result.get("tool", "unknown")
-                step_num = result.get("step", "?")
-                
-                # Determine filename based on tool type
-                if tool == "print_to_pdf":
-                    filename = f"output_step_{step_num}.pdf"
-                    mime_type = "application/pdf"
-                else:
-                    # Generic filename for other file-generating tools
-                    filename = f"generated_file_step_{step_num}.dat"
-                    mime_type = "application/octet-stream"
-                
-                # Create attachment with file_id
-                attachment = Attachment(
-                    id=f"generated-{step_num}",
-                    name=filename,
-                    type=mime_type,
-                    file_id=file_id,
-                )
-                attachments.append(attachment)
-                logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
-        
-        return attachments
+        try:
+            attachments = []
+            
+            for result in results:
+                if not result.get("success", False):
+                    continue
+                    
+                # Check if this step generated a file
+                file_id = result.get("file_id")
+                if file_id:
+                    tool = result.get("tool", "unknown")
+                    step_num = result.get("step", "?")
+                    
+                    # Determine filename based on tool type
+                    if tool == "print_to_pdf":
+                        filename = f"output_step_{step_num}.pdf"
+                        mime_type = "application/pdf"
+                    else:
+                        # Generic filename for other file-generating tools
+                        filename = f"generated_file_step_{step_num}.dat"
+                        mime_type = "application/octet-stream"
+                    
+                    # Create attachment with file_id
+                    attachment = Attachment(
+                        id=f"generated-{step_num}",
+                        name=filename,
+                        type=mime_type,
+                        file_id=file_id,
+                    )
+                    attachments.append(attachment)
+                    logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
+            
+            return attachments
+            
+        except Exception as e:
+            logger.exception("Error collecting attachments")
+            # Return empty list on error to allow workflow to continue
+            return []
 
 
 # Timeout increased to 120s to accommodate multiple Parse tool retries
