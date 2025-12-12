@@ -4,6 +4,7 @@ This workflow uses an LLM-powered triage agent to analyze emails and create
 execution plans using available tools.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -152,7 +153,7 @@ class EmailWorkflow(Workflow):
         try:
             # Debug logging
             logger.info(
-                f"Triaging email: from={email_data.from_email}, "
+                f"[TRIAGE START] Triaging email: from={email_data.from_email}, "
                 f"subject={email_data.subject}, "
                 f"attachments={len(email_data.attachments)}"
             )
@@ -166,8 +167,20 @@ class EmailWorkflow(Workflow):
             # Parse plan from response
             plan = self._parse_plan(response, email_data)
 
-            logger.info(f"Triage complete. Generated plan with {len(plan)} steps")
+            logger.info(f"[TRIAGE COMPLETE] Generated plan with {len(plan)} steps")
 
+            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+        except asyncio.TimeoutError:
+            logger.error("Workflow timeout in triage_email step")
+            # Create a simple fallback plan for timeout scenarios
+            plan = [
+                {
+                    "tool": "summarise",
+                    "params": {
+                        "text": f"Email subject: {email_data.subject}\n\nBody: {email_data.text or '(empty)'}"
+                    },
+                }
+            ]
             return TriageEvent(plan=plan, email_data=email_data, callback=callback)
         except Exception:
             logger.exception("Error during email triage")
@@ -376,7 +389,15 @@ Plan:"""
         callback = ev.callback
 
         try:
-            logger.info(f"Executing plan with {len(plan)} steps")
+            # Defensive check: ensure plan is not None and is a list
+            if plan is None:
+                logger.error("Plan is None, creating empty plan")
+                plan = []
+            if not isinstance(plan, list):
+                logger.error(f"Plan is not a list (type: {type(plan)}), creating empty plan")
+                plan = []
+            
+            logger.info(f"[PLAN EXEC START] Executing plan with {len(plan)} steps")
 
             results = []
             execution_context = {}  # Store results from previous steps
@@ -390,7 +411,7 @@ Plan:"""
                 )  # Optional: mark step as critical
 
                 logger.info(
-                    f"Executing step {i + 1}/{len(plan)}: {tool_name} - {description}"
+                    f"[PLAN EXEC STEP {i + 1}/{len(plan)}] Executing: {tool_name} - {description}"
                 )
 
                 try:
@@ -470,7 +491,7 @@ Plan:"""
                         }
                     )
 
-                    logger.info(f"Step {i + 1} completed: {result.get('success', False)}")
+                    logger.info(f"[PLAN EXEC STEP {i + 1}] Completed: {result.get('success', False)}")
 
                     # If this is a critical step and it failed, stop execution
                     if critical and not result.get("success", False):
@@ -501,8 +522,25 @@ Plan:"""
                         )
                         break
 
+            logger.info(f"[PLAN EXEC COMPLETE] Finished {len(results)} steps")
             return PlanExecutionEvent(
                 results=results, email_data=email_data, callback=callback
+            )
+        
+        except asyncio.TimeoutError as e:
+            logger.error(f"Workflow timeout in execute_plan step: {e}")
+            # Return a PlanExecutionEvent with a timeout error result
+            return PlanExecutionEvent(
+                results=[
+                    {
+                        "step": 0,
+                        "tool": "execute_plan",
+                        "success": False,
+                        "error": "Plan execution timed out. This may be due to long-running Parse operations or API retries.",
+                    }
+                ],
+                email_data=email_data,
+                callback=callback,
             )
         
         except Exception as e:
@@ -724,6 +762,8 @@ Plan:"""
         results = ev.results
 
         try:
+            logger.info(f"[SEND RESULTS START] Preparing results for {email_data.from_email}")
+            
             # Generate natural language response for the user
             result_text = await self._generate_user_response(results, email_data)
             
@@ -744,7 +784,7 @@ Plan:"""
             attachments.append(execution_log_attachment)
 
             # Send response email via callback
-            logger.info(f"Sending results email to {email_data.from_email}")
+            logger.info(f"[SEND RESULTS CALLBACK] Sending results email to {email_data.from_email}")
 
             response_email = SendEmailRequest(
                 to_email=email_data.from_email,
@@ -759,7 +799,7 @@ Plan:"""
             await self._send_callback_email(
                 callback.callback_url, callback.auth_token, response_email
             )
-            logger.info("Callback email sent successfully")
+            logger.info("[SEND RESULTS COMPLETE] Callback email sent successfully")
 
             # Create success result
             result = EmailProcessingResult(
@@ -776,6 +816,16 @@ Plan:"""
             failure = EmailProcessingResult(
                 success=False,
                 message=f"Email processed but callback failed: {e!s}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
+            )
+            ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+            return StopEvent(result=failure)
+        except asyncio.TimeoutError as e:
+            logger.error(f"Workflow timeout in send_results step: {e}")
+            failure = EmailProcessingResult(
+                success=False,
+                message="Email processing timed out while preparing results. Please try again.",
                 from_email=email_data.from_email,
                 email_subject=email_data.subject,
             )
@@ -990,4 +1040,6 @@ Response:"""
         return attachments
 
 
-email_workflow = EmailWorkflow(timeout=60)
+# Timeout increased to 120s to accommodate multiple Parse tool retries
+# (5 retries * ~15s each = ~75s worst case, plus execution time)
+email_workflow = EmailWorkflow(timeout=120)
