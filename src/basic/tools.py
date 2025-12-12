@@ -709,7 +709,8 @@ class TranslateTool(Tool):
                 return await asyncio.to_thread(translator.translate, chunk)
 
             # Process text in batches if it's too long
-            max_length = 50000
+            # Google Translate API has a 5000 character limit per request
+            max_length = 5000
             translated = await process_text_in_batches(
                 text=text,
                 max_length=max_length,

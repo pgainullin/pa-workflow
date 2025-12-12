@@ -114,6 +114,47 @@ async def test_translate_tool_batching():
 
 
 @pytest.mark.asyncio
+async def test_translate_tool_respects_5000_char_limit():
+    """Test TranslateTool respects the 5000 character Google Translate API limit."""
+    from basic.tools import TranslateTool
+
+    tool = TranslateTool()
+
+    # Track chunk sizes to ensure they don't exceed 5000 characters
+    chunk_sizes = []
+
+    # Mock the translator
+    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+        mock_translator = MagicMock()
+
+        def mock_translate(text):
+            chunk_sizes.append(len(text))
+            # Verify each chunk is under the 5000 character limit
+            assert len(text) <= 5000, f"Chunk size {len(text)} exceeds Google Translate API limit of 5000"
+            return f"translated({len(text)} chars)"
+
+        mock_translator.translate = MagicMock(side_effect=mock_translate)
+        mock_translator.get_supported_languages = MagicMock(
+            return_value={"english": "en", "french": "fr", "spanish": "es"}
+        )
+        mock_translator_class.return_value = mock_translator
+
+        # Create text just over 5000 characters
+        long_text = "This is a sentence. " * 300  # ~6000 characters
+        result = await tool.execute(
+            text=long_text, source_lang="en", target_lang="fr"
+        )
+
+        assert result["success"] is True
+        assert "translated_text" in result
+        # Should have been split into multiple batches
+        assert len(chunk_sizes) >= 2
+        # Each chunk should be under 5000 characters
+        for size in chunk_sizes:
+            assert size <= 5000
+
+
+@pytest.mark.asyncio
 async def test_summarise_tool_batching():
     """Test SummariseTool handles long text with batching."""
     from basic.tools import SummariseTool
