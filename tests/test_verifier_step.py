@@ -233,7 +233,7 @@ async def test_verify_response_step_execution():
         assert mock_llm.called
         call_args = mock_llm.call_args[0][0]
         assert "best practices" in call_args.lower()
-        assert "RESPONSE_BEST_PRACTICES" in str(RESPONSE_BEST_PRACTICES) or True  # Check constant is used
+        assert RESPONSE_BEST_PRACTICES in call_args  # Check constant is used in the prompt
 
 
 @pytest.mark.asyncio
