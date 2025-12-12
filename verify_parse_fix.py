@@ -4,6 +4,12 @@ Verification script for the intermittent parse fix.
 
 This script demonstrates how the ParseTool now handles empty content responses
 by retrying instead of failing immediately.
+
+NOTE: This is a demonstration script, not a comprehensive test.
+The real validation is in the unit tests in tests/test_tools.py.
+This script uses synchronous mocks and doesn't fully test the retry mechanism
+against the actual is_retryable_error function. It serves to illustrate the
+intended behavior but should not be relied upon for validation.
 """
 
 import asyncio
@@ -153,5 +159,9 @@ if __name__ == "__main__":
         print("\n\n" + "🎉 " * 15)
         print("ALL VERIFICATION TESTS PASSED!")
         print("🎉 " * 15 + "\n")
+        print("NOTE: This script demonstrates the intended behavior but uses")
+        print("      synchronous mocks. For comprehensive validation, see the")
+        print("      unit tests in tests/test_tools.py which properly test the")
+        print("      retry mechanism against the actual is_retryable_error function.\n")
     else:
         print("\n\n❌ SOME TESTS FAILED\n")
