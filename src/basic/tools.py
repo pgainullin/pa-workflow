@@ -223,19 +223,18 @@ class ExtractTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Extract structured data from documents using LlamaCloud Extract. "
-            "Input: file_id or text, schema (JSON schema definition). "
-            "Output: extracted_data (structured JSON)"
+            "Extract structured data from text using LlamaCloud Extract. "
+            "Input: text (parsed document text), schema (JSON schema definition). "
+            "Output: extracted_data (structured JSON). "
+            "Note: For files, use ParseTool first to extract text, then pass the text to this tool."
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Extract structured data from a document.
+        """Extract structured data from text.
 
         Args:
             **kwargs: Keyword arguments including:
-                - file_id: LlamaCloud file ID (optional)
-                - text: Text content to extract from (optional)
-                - file_content: Base64-encoded file content (optional)
+                - text: Text content to extract from (required)
                 - schema: JSON schema for extraction (required)
 
         Returns:
@@ -246,11 +245,14 @@ class ExtractTool(Tool):
             from llama_cloud_services.extract.extract import SourceText
             from pydantic import BaseModel
 
-            file_id = kwargs.get("file_id")
             text = kwargs.get("text")
-            file_content = kwargs.get("file_content")
-            file_content_from_param = kwargs.get("file_id_content")
             schema = kwargs.get("schema")
+
+            if not text:
+                return {
+                    "success": False,
+                    "error": "Missing required parameter: text. Use ParseTool first to extract text from files.",
+                }
 
             if not schema:
                 return {
@@ -301,59 +303,39 @@ class ExtractTool(Tool):
                     agent_name, data_schema=data_schema, config=extract_config
                 )
 
-            # Prepare the content for extraction
-            if text:
-                # For text-based extraction, use batch processing for long text
-                # LlamaCloud Extract API's SourceText has a 5000 character limit
-                max_text_length = 4900  # Slightly under 5000 to be safe
+            # For text-based extraction, use batch processing for long text
+            # LlamaCloud Extract API's SourceText has a 5000 character limit
+            max_text_length = 4900  # Slightly under 5000 to be safe
 
-                async def extract_from_chunk(chunk: str) -> dict:
-                    source = SourceText(text_content=chunk)
-                    result = await extract_agent.aextract(source)
-                    return result.data if hasattr(result, "data") else result
-
-                # Process text in batches if needed
-                if len(text) > max_text_length:
-                    logger.info(
-                        f"Processing text extraction in batches (length: {len(text)})"
-                    )
-
-                    # Combine extracted data from all batches
-                    def combine_extractions(extractions: list[dict]) -> dict:
-                        if len(extractions) == 1:
-                            return extractions[0]
-                        # Return list of extractions for batch processing
-                        return {
-                            "batch_results": extractions,
-                            "batch_count": len(extractions),
-                        }
-
-                    extracted_data = await process_text_in_batches(
-                        text=text,
-                        max_length=max_text_length,
-                        processor=extract_from_chunk,
-                        combiner=combine_extractions,
-                    )
-                else:
-                    extracted_data = await extract_from_chunk(text)
-
-            elif file_id:
-                # Download file from LlamaCloud
-                content = await download_file_from_llamacloud(file_id)
-                source = SourceText(file=content)
+            async def extract_from_chunk(chunk: str) -> dict:
+                source = SourceText(text_content=chunk)
                 result = await extract_agent.aextract(source)
-                extracted_data = result.data if hasattr(result, "data") else result
-            elif file_content or file_content_from_param:
-                # Use base64 content
-                content = base64.b64decode(file_content or file_content_from_param)
-                source = SourceText(file=content)
-                result = await extract_agent.aextract(source)
-                extracted_data = result.data if hasattr(result, "data") else result
+                return result.data if hasattr(result, "data") else result
+
+            # Process text in batches if needed
+            if len(text) > max_text_length:
+                logger.info(
+                    f"Processing text extraction in batches (length: {len(text)})"
+                )
+
+                # Combine extracted data from all batches
+                def combine_extractions(extractions: list[dict]) -> dict:
+                    if len(extractions) == 1:
+                        return extractions[0]
+                    # Return list of extractions for batch processing
+                    return {
+                        "batch_results": extractions,
+                        "batch_count": len(extractions),
+                    }
+
+                extracted_data = await process_text_in_batches(
+                    text=text,
+                    max_length=max_text_length,
+                    processor=extract_from_chunk,
+                    combiner=combine_extractions,
+                )
             else:
-                return {
-                    "success": False,
-                    "error": "Either file_id, text, or file_content must be provided",
-                }
+                extracted_data = await extract_from_chunk(text)
 
             return {"success": True, "extracted_data": extracted_data}
 
