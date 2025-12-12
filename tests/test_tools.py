@@ -203,6 +203,78 @@ async def test_parse_tool_retries_on_transient_errors():
 
 
 @pytest.mark.asyncio
+async def test_parse_tool_retries_on_empty_content():
+    """Test that ParseTool retries when API returns empty content intermittently."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    
+    # Create mock documents - some with empty content, some with real content
+    empty_doc = MagicMock()
+    empty_doc.get_content = MagicMock(return_value="")  # Empty content
+    
+    valid_doc = MagicMock()
+    valid_doc.get_content = MagicMock(return_value="Parsed document content")
+    
+    # Simulate empty content on first attempt, valid content on second attempt
+    # This simulates the intermittent empty content issue
+    mock_parser.load_data = MagicMock(
+        side_effect=[
+            [empty_doc],  # First attempt returns empty content
+            [valid_doc],  # Second attempt succeeds with content
+        ]
+    )
+
+    tool = ParseTool(mock_parser)
+
+    # Mock download function
+    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+        mock_download.return_value = b"PDF content"
+
+        # Test execution - should succeed after retry
+        result = await tool.execute(file_id="550e8400-e29b-41d4-a716-446655440000")
+
+        assert result["success"] is True
+        assert "parsed_text" in result
+        assert result["parsed_text"] == "Parsed document content"
+        # Verify it was called twice (initial + 1 retry due to empty content)
+        assert mock_parser.load_data.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_fails_after_max_retries_on_empty_content():
+    """Test that ParseTool fails gracefully after max retries with empty content."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    
+    # Create mock document with empty content
+    empty_doc = MagicMock()
+    empty_doc.get_content = MagicMock(return_value="")  # Always empty content
+    
+    # Always return empty content to exhaust retries
+    mock_parser.load_data = MagicMock(return_value=[empty_doc])
+
+    tool = ParseTool(mock_parser)
+
+    # Mock download function
+    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+        mock_download.return_value = b"PDF content"
+
+        # Test execution - should fail after max retries
+        result = await tool.execute(file_id="550e8400-e29b-41d4-a716-446655440000")
+
+        assert result["success"] is False
+        assert "error" in result
+        # Should have user-friendly error message
+        assert "empty" in result["error"].lower() or "no text content" in result["error"].lower()
+        # Verify it was called 5 times (initial + 4 retries as per api_retry config)
+        assert mock_parser.load_data.call_count == 5
+
+
+@pytest.mark.asyncio
 async def test_tool_registry():
     """Test the tool registry."""
     from basic.tools import ToolRegistry, SummariseTool
