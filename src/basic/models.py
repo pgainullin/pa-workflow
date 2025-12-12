@@ -14,8 +14,10 @@ class Attachment(BaseModel):
     Supports two modes:
     1. Base64 content mode: content field contains base64-encoded data
     2. LlamaCloud file mode: file_id references a file in LlamaCloud
+    3. Hybrid mode: both content and file_id can be provided for maximum compatibility
 
     At least one of 'content' or 'file_id' must be provided.
+    When both are provided, receivers can choose which to use based on their capabilities.
     """
 
     id: str  # Or 'content-id'
