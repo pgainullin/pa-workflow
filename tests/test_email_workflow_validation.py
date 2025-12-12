@@ -83,6 +83,7 @@ def test_workflow_events_structure():
         "EmailStartEvent",
         "TriageEvent",
         "PlanExecutionEvent",
+        "VerificationEvent",
         "EmailProcessedEvent",
     ]
 
