@@ -117,7 +117,7 @@ class ParseTool(Tool):
             )
             raise Exception(
                 f"Document parsing returned no text content (documents: {len(documents)}). "
-                "This may be a transient API issue and will be retried."
+                "Content temporarily unavailable and will be retried."
             )
         
         return documents, parsed_text
