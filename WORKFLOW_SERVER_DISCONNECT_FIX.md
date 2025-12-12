@@ -145,7 +145,7 @@ All tests verify that:
 
 3. `tests/test_workflow_exception_handling.py` (new):
    - Created comprehensive test suite for exception handling
-   - 7 test cases covering various error scenarios
+   - 6 test cases covering various error scenarios
    - Integration test verifying end-to-end resilience
 
 ## Migration Notes
