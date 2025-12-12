@@ -174,15 +174,16 @@ EmailStartEvent → triage_email() → [Exception caught!]
 
 ## Test Coverage 🧪
 
-We added 7 comprehensive tests:
+We added 6 comprehensive tests in `test_workflow_exception_handling.py`:
 
 1. ✅ `test_triage_email_handles_fatal_errors`
 2. ✅ `test_execute_plan_handles_fatal_errors`
 3. ✅ `test_execute_plan_handles_malformed_plan`
 4. ✅ `test_send_results_handles_fatal_errors`
 5. ✅ `test_send_results_handles_callback_errors`
-6. ✅ `test_workflow_never_raises_unhandled_exceptions`
-7. ✅ Integration test (full workflow with failures)
+6. ✅ `test_workflow_never_raises_unhandled_exceptions` (integration test)
+
+We also updated validation tests in `test_email_workflow_validation.py` to check for the current event structure.
 
 All tests verify:
 - ✓ Steps never raise unhandled exceptions

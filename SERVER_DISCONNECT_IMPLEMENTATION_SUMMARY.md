@@ -27,7 +27,7 @@ The root cause was **insufficient exception handling** in the workflow steps. We
 
 ### 2. Test Coverage (tests/)
 
-Created comprehensive test suite with **7 test cases**:
+Created comprehensive test suite in `test_workflow_exception_handling.py` with **6 test functions**:
 
 1. `test_triage_email_handles_fatal_errors` - Verifies LLM failures don't crash workflow
 2. `test_execute_plan_handles_fatal_errors` - Verifies tool execution errors are caught
@@ -35,7 +35,8 @@ Created comprehensive test suite with **7 test cases**:
 4. `test_send_results_handles_fatal_errors` - Verifies response generation errors are caught
 5. `test_send_results_handles_callback_errors` - Verifies HTTP callback failures are handled
 6. `test_workflow_never_raises_unhandled_exceptions` - Integration test
-7. Updated validation tests to check for current event structure
+
+Updated validation tests in `test_email_workflow_validation.py` to check for current event structure (TriageEvent, PlanExecutionEvent vs old AttachmentFoundEvent)
 
 ### 3. Documentation
 
