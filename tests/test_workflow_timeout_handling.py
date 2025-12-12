@@ -247,12 +247,13 @@ def test_create_execution_log_handles_none_results():
     assert "error" in log.lower() or "failed" in log.lower()
 
 
-def test_collect_attachments_handles_none_results():
+@pytest.mark.asyncio
+async def test_collect_attachments_handles_none_results():
     """Test that _collect_attachments handles None results gracefully."""
     workflow = EmailWorkflow(timeout=120)
 
     # Test with None results
-    attachments = workflow._collect_attachments(None)
+    attachments = await workflow._collect_attachments(None)
     
     # Should return empty list
     assert isinstance(attachments, list)
