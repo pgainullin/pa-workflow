@@ -1068,5 +1068,5 @@ Response:"""
 
 
 # Timeout increased to 120s to accommodate multiple Parse tool retries
-# (5 retries * ~15s each = ~75s worst case, plus execution time)
+# (5 attempts, exponential backoff: 1s + 2s + 4s + 8s = ~15s max per file, plus execution time)
 email_workflow = EmailWorkflow(timeout=120)
