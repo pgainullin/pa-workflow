@@ -772,6 +772,9 @@ Plan:"""
             
             # Collect any generated files from the results to attach
             attachments = self._collect_attachments(results)
+            logger.info(f"[COLLECT ATTACHMENTS] Collected {len(attachments)} file attachment(s) from results")
+            for att in attachments:
+                logger.info(f"  - {att.name} (file_id: {att.file_id}, content: {'present' if att.content else 'None'})")
             
             # Add execution log as an attachment
             execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
@@ -782,6 +785,7 @@ Plan:"""
                 content=execution_log_b64,
             )
             attachments.append(execution_log_attachment)
+            logger.info(f"[ATTACHMENTS FINAL] Total {len(attachments)} attachment(s) will be sent in callback")
 
             # Send response email via callback
             logger.info(f"[SEND RESULTS CALLBACK] Sending results email to {email_data.from_email}")
@@ -1029,6 +1033,7 @@ Response:"""
         """
         try:
             attachments = []
+            logger.info(f"[COLLECT ATTACHMENTS] Processing {len(results) if results else 0} result(s)")
             
             for result in results:
                 if not result.get("success", False):
@@ -1039,6 +1044,7 @@ Response:"""
                 if file_id:
                     tool = result.get("tool", "unknown")
                     step_num = result.get("step", "?")
+                    logger.info(f"[COLLECT ATTACHMENTS] Found file_id '{file_id}' from tool '{tool}' (step {step_num})")
                     
                     # Determine filename based on tool type
                     if tool == "print_to_pdf":
@@ -1059,6 +1065,7 @@ Response:"""
                     attachments.append(attachment)
                     logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
             
+            logger.info(f"[COLLECT ATTACHMENTS] Returning {len(attachments)} attachment(s)")
             return attachments
             
         except Exception as e:
