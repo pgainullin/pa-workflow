@@ -81,12 +81,23 @@ class EmailWorkflow(Workflow):
         
     async def _genai_generate_content_with_retry(self, model: str, contents: list) -> str:
         """Gemini multimodal generation with automatic retry"""
-        
-    async def _parse_document_with_retry(self, file_path: str) -> list:
-        """LlamaParse document parsing with automatic retry"""
 ```
 
 **Important**: Never call `llm.acomplete()` or `genai_client.generate_content()` directly. Always use the retry-wrapped methods.
+
+### Document Parsing
+ParseTool automatically retries document parsing operations on transient errors:
+
+```python
+from basic.tools import ParseTool
+
+# ParseTool internally uses @api_retry decorator on parsing operations
+tool = ParseTool(llama_parser)
+result = await tool.execute(file_id="...", filename="document.pdf")
+# Automatically retries on 503, 429, timeout errors
+```
+
+The `ParseTool._parse_with_retry()` method is decorated with `@api_retry` to handle transient API failures during document parsing.
 
 ## Logging
 
