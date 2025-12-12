@@ -289,7 +289,8 @@ class ExtractTool(Tool):
             # Prepare the content for extraction
             if text:
                 # For text-based extraction, use batch processing for long text
-                max_text_length = 100000
+                # LlamaCloud Extract API's SourceText has a 5000 character limit
+                max_text_length = 4900  # Slightly under 5000 to be safe
                 
                 async def extract_from_chunk(chunk: str) -> dict:
                     source = SourceText(text_content=chunk)

@@ -72,9 +72,10 @@ result = await classify_tool.execute(
 ```
 
 ### ExtractTool
-- **Batch Size:** 100,000 characters
+- **Batch Size:** 4,900 characters (LlamaCloud Extract API limit)
 - **Strategy:** Extracts from each batch, returns batch results or combined data
-- **Use Case:** Extracting structured data from very long text documents
+- **Use Case:** Extracting structured data from long text documents
+- **Note:** The batch size is limited by the LlamaCloud Extract API's SourceText validation, which enforces a maximum of 5000 characters
 
 ```python
 # Example: Extracts data from multiple sections
