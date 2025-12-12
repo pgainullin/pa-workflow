@@ -269,6 +269,41 @@ async def test_extract_tool_respects_5000_char_limit():
             assert len(chunk) <= 5000
 
 
+@pytest.mark.asyncio
+async def test_extract_tool_rejects_file_parameters():
+    """Test ExtractTool rejects file_id and file_content parameters with specific error messages."""
+    from basic.tools import ExtractTool
+
+    tool = ExtractTool()
+
+    # Mock LlamaExtract
+    with patch("llama_cloud_services.LlamaExtract") as mock_extract_class:
+        mock_extract = MagicMock()
+        mock_agent = MagicMock()
+        mock_extract.get_agent = MagicMock(return_value=mock_agent)
+        mock_extract_class.return_value = mock_extract
+
+        # Test with file_id (should fail with specific message)
+        result = await tool.execute(file_id="test-file-id", schema={"field": "string"})
+        assert result["success"] is False
+        assert "file_id parameter is no longer supported" in result["error"]
+        assert "ParseTool first" in result["error"]
+        assert "ExtractTool" in result["error"]
+
+        # Test with file_content (should fail with specific message)
+        result = await tool.execute(file_content="base64content", schema={"field": "string"})
+        assert result["success"] is False
+        assert "file_content parameter is no longer supported" in result["error"]
+        assert "ParseTool first" in result["error"]
+        assert "ExtractTool" in result["error"]
+
+        # Test with neither text nor file (should fail with generic message)
+        result = await tool.execute(schema={"field": "string"})
+        assert result["success"] is False
+        assert "Missing required parameter: text" in result["error"]
+        assert "ParseTool" in result["error"]
+
+
 
 @pytest.mark.asyncio
 async def test_split_tool_no_truncation():

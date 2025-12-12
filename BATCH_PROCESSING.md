@@ -75,12 +75,18 @@ result = await classify_tool.execute(
 - **Batch Size:** 4,900 characters (LlamaCloud Extract API limit)
 - **Strategy:** Extracts from each batch, returns batch results or combined data
 - **Use Case:** Extracting structured data from long text documents
+- **Note:** Only accepts text input. For files, use ParseTool first to extract text
 - **Note:** The batch size is limited by the LlamaCloud Extract API's SourceText validation, which enforces a maximum of 5000 characters
 
 ```python
-# Example: Extracts data from multiple sections
-result = await extract_tool.execute(
-    text=long_document,
+# Example: Correct workflow for extracting from files
+# Step 1: Parse file to text
+parse_result = await parse_tool.execute(file_id="att-1")
+parsed_text = parse_result["parsed_text"]
+
+# Step 2: Extract from text (automatically batched if > 4900 chars)
+extract_result = await extract_tool.execute(
+    text=parsed_text,
     schema={"field": "string"}
 )
 # Returns either single result or batch_results with batch_count
