@@ -169,6 +169,40 @@ async def test_parse_tool():
 
 
 @pytest.mark.asyncio
+async def test_parse_tool_retries_on_transient_errors():
+    """Test that ParseTool retries on transient API errors."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.get_content = MagicMock(return_value="Parsed document content")
+
+    # Simulate transient error on first attempt, success on second
+    mock_parser.load_data = MagicMock(
+        side_effect=[
+            Exception("503 Service Unavailable"),  # First attempt fails
+            [mock_doc],  # Second attempt succeeds
+        ]
+    )
+
+    tool = ParseTool(mock_parser)
+
+    # Mock download function
+    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+        mock_download.return_value = b"PDF content"
+
+        # Test execution - should succeed after retry
+        result = await tool.execute(file_id="550e8400-e29b-41d4-a716-446655440000")
+
+        assert result["success"] is True
+        assert "parsed_text" in result
+        assert result["parsed_text"] == "Parsed document content"
+        # Verify it was called twice (initial + 1 retry)
+        assert mock_parser.load_data.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_tool_registry():
     """Test the tool registry."""
     from basic.tools import ToolRegistry, SummariseTool

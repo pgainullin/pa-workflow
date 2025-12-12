@@ -23,6 +23,7 @@ from .utils import (
     download_file_from_llamacloud,
     upload_file_to_llamacloud,
     process_text_in_batches,
+    api_retry,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,23 @@ class ParseTool(Tool):
         except (ValueError, AttributeError):
             return False
 
+    @api_retry
+    async def _parse_with_retry(self, tmp_path: str) -> list:
+        """Parse document with automatic retry on transient errors.
+
+        Args:
+            tmp_path: Path to the temporary file to parse
+
+        Returns:
+            List of parsed documents
+
+        Raises:
+            Exception: If parsing fails after all retry attempts
+        """
+        import asyncio
+
+        return await asyncio.to_thread(self.llama_parser.load_data, tmp_path)
+
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Parse a document using LlamaParse.
 
@@ -100,7 +118,6 @@ class ParseTool(Tool):
         Returns:
             Dictionary with 'success' and 'parsed_text' or 'error'
         """
-        import asyncio
         import tempfile
         import pathlib
 
@@ -161,12 +178,10 @@ class ParseTool(Tool):
                 tmp_path = tmp.name
 
             try:
-                # Parse the document
-                documents = await asyncio.to_thread(
-                    self.llama_parser.load_data, tmp_path
-                )
+                # Parse the document with automatic retry
+                documents = await self._parse_with_retry(tmp_path)
                 parsed_text = "\n".join([doc.get_content() for doc in documents])
-                
+
                 # Validate that we got some content
                 if not parsed_text or not parsed_text.strip():
                     logger.warning(
@@ -178,7 +193,7 @@ class ParseTool(Tool):
                         "success": False,
                         "error": "Document parsing returned no text content. The document may be empty, corrupted, or in an unsupported format.",
                     }
-                
+
                 return {"success": True, "parsed_text": parsed_text}
             finally:
                 # Clean up temp file
@@ -291,23 +306,28 @@ class ExtractTool(Tool):
                 # For text-based extraction, use batch processing for long text
                 # LlamaCloud Extract API's SourceText has a 5000 character limit
                 max_text_length = 4900  # Slightly under 5000 to be safe
-                
+
                 async def extract_from_chunk(chunk: str) -> dict:
                     source = SourceText(text_content=chunk)
                     result = await extract_agent.aextract(source)
                     return result.data if hasattr(result, "data") else result
-                
+
                 # Process text in batches if needed
                 if len(text) > max_text_length:
-                    logger.info(f"Processing text extraction in batches (length: {len(text)})")
-                    
+                    logger.info(
+                        f"Processing text extraction in batches (length: {len(text)})"
+                    )
+
                     # Combine extracted data from all batches
                     def combine_extractions(extractions: list[dict]) -> dict:
                         if len(extractions) == 1:
                             return extractions[0]
                         # Return list of extractions for batch processing
-                        return {"batch_results": extractions, "batch_count": len(extractions)}
-                    
+                        return {
+                            "batch_results": extractions,
+                            "batch_count": len(extractions),
+                        }
+
                     extracted_data = await process_text_in_batches(
                         text=text,
                         max_length=max_text_length,
@@ -316,7 +336,7 @@ class ExtractTool(Tool):
                     )
                 else:
                     extracted_data = await extract_from_chunk(text)
-                    
+
             elif file_id:
                 # Download file from LlamaCloud
                 content = await download_file_from_llamacloud(file_id)
@@ -556,16 +576,16 @@ class ClassifyTool(Tool):
 
         try:
             max_length = 10000
-            
+
             # For classification, if text is too long, we extract representative samples
             # from beginning, middle, and end
             if len(text) > max_length:
                 sample_size = max_length // 3
                 beginning = text[:sample_size]
                 middle_start = len(text) // 2 - sample_size // 2
-                middle = text[middle_start:middle_start + sample_size]
+                middle = text[middle_start : middle_start + sample_size]
                 end = text[-sample_size:]
-                
+
                 text = f"{beginning}\n\n[...middle section...]\n\n{middle}\n\n[...end section...]\n\n{end}"
                 logger.info(
                     f"Text sampled from {len(kwargs.get('text'))} to {len(text)} characters for classification"
@@ -657,21 +677,32 @@ class TranslateTool(Tool):
             # get_supported_languages returns dict with language names as keys and codes as values
             # e.g., {'english': 'en', 'french': 'fr', ...}
             # GoogleTranslator accepts both formats, but we should validate both
-            supported_names = set(supported_langs.keys())  # Full names: 'english', 'french', etc.
-            supported_codes = set(supported_langs.values())  # Short codes: 'en', 'fr', etc.
-            
+            supported_names = set(
+                supported_langs.keys()
+            )  # Full names: 'english', 'french', etc.
+            supported_codes = set(
+                supported_langs.values()
+            )  # Short codes: 'en', 'fr', etc.
+
             # "auto" is allowed for source_lang
-            if source_lang != "auto" and source_lang not in supported_codes and source_lang not in supported_names:
+            if (
+                source_lang != "auto"
+                and source_lang not in supported_codes
+                and source_lang not in supported_names
+            ):
                 return {
                     "success": False,
                     "error": f"Invalid source_lang '{source_lang}'. Supported codes: {sorted(supported_codes)}",
                 }
-            if target_lang not in supported_codes and target_lang not in supported_names:
+            if (
+                target_lang not in supported_codes
+                and target_lang not in supported_names
+            ):
                 return {
                     "success": False,
                     "error": f"Invalid target_lang '{target_lang}'. Supported codes: {sorted(supported_codes)}",
                 }
-            
+
             # Create translator instance for this translation
             translator = GoogleTranslator(source=source_lang, target=target_lang)
 
@@ -743,14 +774,16 @@ class SummariseTool(Tool):
 
             # Process text in batches if it's too long
             max_input_length = 50000
-            
+
             # For summarization, we want to combine batch summaries into a final summary
             def combine_summaries(summaries: list[str]) -> str:
                 if len(summaries) == 1:
                     return summaries[0]
                 # Join all summaries and return
-                return "\n\n".join(f"Part {i+1}: {s}" for i, s in enumerate(summaries))
-            
+                return "\n\n".join(
+                    f"Part {i + 1}: {s}" for i, s in enumerate(summaries)
+                )
+
             summary = await process_text_in_batches(
                 text=text,
                 max_length=max_input_length,
