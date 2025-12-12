@@ -772,7 +772,7 @@ Plan:"""
             execution_log = self._create_execution_log(results, email_data)
             
             # Collect any generated files from the results to attach
-            attachments = self._collect_attachments(results)
+            attachments = await self._collect_attachments(results)
             
             # Add execution log as an attachment
             execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
