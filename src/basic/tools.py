@@ -247,6 +247,21 @@ class ExtractTool(Tool):
 
             text = kwargs.get("text")
             schema = kwargs.get("schema")
+            file_id = kwargs.get("file_id")
+            file_content = kwargs.get("file_content")
+
+            # Explicitly detect and reject file-based parameters
+            if file_id is not None:
+                return {
+                    "success": False,
+                    "error": "file_id parameter is no longer supported. Use ParseTool first to extract text from files, then pass the text to ExtractTool.",
+                }
+
+            if file_content is not None:
+                return {
+                    "success": False,
+                    "error": "file_content parameter is no longer supported. Use ParseTool first to extract text from files, then pass the text to ExtractTool.",
+                }
 
             if not text:
                 return {

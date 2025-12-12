@@ -271,7 +271,7 @@ async def test_extract_tool_respects_5000_char_limit():
 
 @pytest.mark.asyncio
 async def test_extract_tool_rejects_file_parameters():
-    """Test ExtractTool rejects file_id and file_content parameters."""
+    """Test ExtractTool rejects file_id and file_content parameters with specific error messages."""
     from basic.tools import ExtractTool
 
     tool = ExtractTool()
@@ -283,22 +283,25 @@ async def test_extract_tool_rejects_file_parameters():
         mock_extract.get_agent = MagicMock(return_value=mock_agent)
         mock_extract_class.return_value = mock_extract
 
-        # Test with file_id (should fail)
+        # Test with file_id (should fail with specific message)
         result = await tool.execute(file_id="test-file-id", schema={"field": "string"})
         assert result["success"] is False
-        assert "text" in result["error"].lower()
-        assert "parsetool" in result["error"].lower()
+        assert "file_id parameter is no longer supported" in result["error"]
+        assert "ParseTool first" in result["error"]
+        assert "ExtractTool" in result["error"]
 
-        # Test with file_content (should fail)
+        # Test with file_content (should fail with specific message)
         result = await tool.execute(file_content="base64content", schema={"field": "string"})
         assert result["success"] is False
-        assert "text" in result["error"].lower()
-        assert "parsetool" in result["error"].lower()
+        assert "file_content parameter is no longer supported" in result["error"]
+        assert "ParseTool first" in result["error"]
+        assert "ExtractTool" in result["error"]
 
-        # Test with neither text nor file (should fail)
+        # Test with neither text nor file (should fail with generic message)
         result = await tool.execute(schema={"field": "string"})
         assert result["success"] is False
-        assert "text" in result["error"].lower()
+        assert "Missing required parameter: text" in result["error"]
+        assert "ParseTool" in result["error"]
 
 
 
