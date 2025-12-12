@@ -196,7 +196,7 @@ All tests verify:
 Files changed:
   src/basic/email_workflow.py                  | +163 -160 lines
   tests/test_email_workflow_validation.py      | +21  -31  lines
-  tests/test_workflow_exception_handling.py    | +294      (NEW)
+  tests/test_workflow_exception_handling.py    | +277      (NEW)
   WORKFLOW_SERVER_DISCONNECT_FIX.md            | +190      (NEW)
   VISUAL_WORKFLOW_FIX.md                       | +XXX      (NEW)
 
