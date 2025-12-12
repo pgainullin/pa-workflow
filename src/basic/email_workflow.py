@@ -149,17 +149,17 @@ class EmailWorkflow(Workflow):
         email_data = ev.email_data
         callback = ev.callback
 
-        # Debug logging
-        logger.info(
-            f"Triaging email: from={email_data.from_email}, "
-            f"subject={email_data.subject}, "
-            f"attachments={len(email_data.attachments)}"
-        )
-
-        # Build triage prompt
-        triage_prompt = self._build_triage_prompt(email_data)
-
         try:
+            # Debug logging
+            logger.info(
+                f"Triaging email: from={email_data.from_email}, "
+                f"subject={email_data.subject}, "
+                f"attachments={len(email_data.attachments)}"
+            )
+
+            # Build triage prompt
+            triage_prompt = self._build_triage_prompt(email_data)
+
             # Get plan from LLM
             response = await self._llm_complete_with_retry(triage_prompt)
 
@@ -176,7 +176,7 @@ class EmailWorkflow(Workflow):
                 {
                     "tool": "summarise",
                     "params": {
-                        "text": f"Email subject: {email_data.subject}\n\nBody: {email_data.text}"
+                        "text": f"Email subject: {email_data.subject}\n\nBody: {email_data.text or '(empty)'}"
                     },
                 }
             ]
@@ -375,134 +375,151 @@ Plan:"""
         email_data = ev.email_data
         callback = ev.callback
 
-        logger.info(f"Executing plan with {len(plan)} steps")
+        try:
+            logger.info(f"Executing plan with {len(plan)} steps")
 
-        results = []
-        execution_context = {}  # Store results from previous steps
+            results = []
+            execution_context = {}  # Store results from previous steps
 
-        for i, step_def in enumerate(plan):
-            tool_name = step_def.get("tool")
-            params = step_def.get("params", {})
-            description = step_def.get("description", "")
-            critical = step_def.get(
-                "critical", False
-            )  # Optional: mark step as critical
+            for i, step_def in enumerate(plan):
+                tool_name = step_def.get("tool")
+                params = step_def.get("params", {})
+                description = step_def.get("description", "")
+                critical = step_def.get(
+                    "critical", False
+                )  # Optional: mark step as critical
 
-            logger.info(
-                f"Executing step {i + 1}/{len(plan)}: {tool_name} - {description}"
-            )
+                logger.info(
+                    f"Executing step {i + 1}/{len(plan)}: {tool_name} - {description}"
+                )
 
-            try:
-                # Get the tool
-                tool = self.tool_registry.get_tool(tool_name)
-                if not tool:
-                    logger.warning(f"Tool '{tool_name}' not found, skipping step")
-                    # Store failed result in context so dependent steps can detect failure
-                    execution_context[f"step_{i + 1}"] = {
-                        "success": False,
-                        "error": f"Tool '{tool_name}' not found",
-                    }
-                    results.append(
-                        {
-                            "step": i + 1,
-                            "tool": tool_name,
+                try:
+                    # Get the tool
+                    tool = self.tool_registry.get_tool(tool_name)
+                    if not tool:
+                        logger.warning(f"Tool '{tool_name}' not found, skipping step")
+                        # Store failed result in context so dependent steps can detect failure
+                        execution_context[f"step_{i + 1}"] = {
                             "success": False,
                             "error": f"Tool '{tool_name}' not found",
                         }
-                    )
-                    # If this is a critical step, stop execution
-                    if critical:
-                        logger.error(
-                            f"Critical step {i + 1} failed (tool not found). Stopping execution."
+                        results.append(
+                            {
+                                "step": i + 1,
+                                "tool": tool_name,
+                                "success": False,
+                                "error": f"Tool '{tool_name}' not found",
+                            }
                         )
-                        break
-                    continue
+                        # If this is a critical step, stop execution
+                        if critical:
+                            logger.error(
+                                f"Critical step {i + 1} failed (tool not found). Stopping execution."
+                            )
+                            break
+                        continue
 
-                # Validate dependencies: check if any referenced steps have failed
-                dependency_failed = self._check_step_dependencies(
-                    params, execution_context, i + 1
-                )
-                if dependency_failed:
-                    logger.warning(
-                        f"Step {i + 1} depends on failed step(s). Skipping execution."
+                    # Validate dependencies: check if any referenced steps have failed
+                    dependency_failed = self._check_step_dependencies(
+                        params, execution_context, i + 1
                     )
-                    # Store skipped result in context
-                    execution_context[f"step_{i + 1}"] = {
-                        "success": False,
-                        "error": "Dependent step(s) failed",
-                        "skipped": True,
-                    }
-                    results.append(
-                        {
-                            "step": i + 1,
-                            "tool": tool_name,
+                    if dependency_failed:
+                        logger.warning(
+                            f"Step {i + 1} depends on failed step(s). Skipping execution."
+                        )
+                        # Store skipped result in context
+                        execution_context[f"step_{i + 1}"] = {
                             "success": False,
                             "error": "Dependent step(s) failed",
                             "skipped": True,
                         }
+                        results.append(
+                            {
+                                "step": i + 1,
+                                "tool": tool_name,
+                                "success": False,
+                                "error": "Dependent step(s) failed",
+                                "skipped": True,
+                            }
+                        )
+                        # If this is a critical step, stop execution
+                        if critical:
+                            logger.error(
+                                f"Critical step {i + 1} skipped due to dependency failure. Stopping execution."
+                            )
+                            break
+                        continue
+
+                    # Resolve parameter references from execution context
+                    resolved_params = self._resolve_params(
+                        params, execution_context, email_data
+                    )
+
+                    # Execute the tool
+                    result = await tool.execute(**resolved_params)
+
+                    # Store result in context for future steps
+                    execution_context[f"step_{i + 1}"] = result
+
+                    results.append(
+                        {
+                            "step": i + 1,
+                            "tool": tool_name,
+                            "description": description,
+                            **result,
+                        }
+                    )
+
+                    logger.info(f"Step {i + 1} completed: {result.get('success', False)}")
+
+                    # If this is a critical step and it failed, stop execution
+                    if critical and not result.get("success", False):
+                        logger.error(
+                            f"Critical step {i + 1} failed. Stopping execution of remaining steps."
+                        )
+                        break
+
+                except Exception as e:
+                    logger.exception(f"Error executing step {i + 1}")
+                    # Store failed result in context so dependent steps can detect failure
+                    execution_context[f"step_{i + 1}"] = {
+                        "success": False,
+                        "error": str(e),
+                    }
+                    results.append(
+                        {
+                            "step": i + 1,
+                            "tool": tool_name,
+                            "success": False,
+                            "error": str(e),
+                        }
                     )
                     # If this is a critical step, stop execution
                     if critical:
                         logger.error(
-                            f"Critical step {i + 1} skipped due to dependency failure. Stopping execution."
+                            f"Critical step {i + 1} encountered exception. Stopping execution."
                         )
                         break
-                    continue
 
-                # Resolve parameter references from execution context
-                resolved_params = self._resolve_params(
-                    params, execution_context, email_data
-                )
-
-                # Execute the tool
-                result = await tool.execute(**resolved_params)
-
-                # Store result in context for future steps
-                execution_context[f"step_{i + 1}"] = result
-
-                results.append(
+            return PlanExecutionEvent(
+                results=results, email_data=email_data, callback=callback
+            )
+        
+        except Exception as e:
+            logger.exception("Fatal error in execute_plan step")
+            # Return a PlanExecutionEvent with a single failed result
+            return PlanExecutionEvent(
+                results=[
                     {
-                        "step": i + 1,
-                        "tool": tool_name,
-                        "description": description,
-                        **result,
-                    }
-                )
-
-                logger.info(f"Step {i + 1} completed: {result.get('success', False)}")
-
-                # If this is a critical step and it failed, stop execution
-                if critical and not result.get("success", False):
-                    logger.error(
-                        f"Critical step {i + 1} failed. Stopping execution of remaining steps."
-                    )
-                    break
-
-            except Exception as e:
-                logger.exception(f"Error executing step {i + 1}")
-                # Store failed result in context so dependent steps can detect failure
-                execution_context[f"step_{i + 1}"] = {
-                    "success": False,
-                    "error": str(e),
-                }
-                results.append(
-                    {
-                        "step": i + 1,
-                        "tool": tool_name,
+                        "step": 0,
+                        "tool": "execute_plan",
                         "success": False,
-                        "error": str(e),
+                        "error": f"Fatal error during plan execution: {e!s}",
                     }
-                )
-                # If this is a critical step, stop execution
-                if critical:
-                    logger.error(
-                        f"Critical step {i + 1} encountered exception. Stopping execution."
-                    )
-                    break
-
-        return PlanExecutionEvent(
-            results=results, email_data=email_data, callback=callback
-        )
+                ],
+                email_data=email_data,
+                callback=callback,
+            )
 
     def _check_step_dependencies(
         self, params: dict, context: dict, current_step: int
@@ -706,27 +723,27 @@ Plan:"""
         callback = ev.callback
         results = ev.results
 
-        # Generate natural language response for the user
-        result_text = await self._generate_user_response(results, email_data)
-        
-        # Create execution log as markdown
-        execution_log = self._create_execution_log(results, email_data)
-        
-        # Collect any generated files from the results to attach
-        attachments = self._collect_attachments(results)
-        
-        # Add execution log as an attachment
-        execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
-        execution_log_attachment = Attachment(
-            id="execution-log",
-            name="execution_log.md",
-            type="text/markdown",
-            content=execution_log_b64,
-        )
-        attachments.append(execution_log_attachment)
-
-        # Send response email via callback
         try:
+            # Generate natural language response for the user
+            result_text = await self._generate_user_response(results, email_data)
+            
+            # Create execution log as markdown
+            execution_log = self._create_execution_log(results, email_data)
+            
+            # Collect any generated files from the results to attach
+            attachments = self._collect_attachments(results)
+            
+            # Add execution log as an attachment
+            execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
+            execution_log_attachment = Attachment(
+                id="execution-log",
+                name="execution_log.md",
+                type="text/markdown",
+                content=execution_log_b64,
+            )
+            attachments.append(execution_log_attachment)
+
+            # Send response email via callback
             logger.info(f"Sending results email to {email_data.from_email}")
 
             response_email = SendEmailRequest(
@@ -765,10 +782,10 @@ Plan:"""
             ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
             return StopEvent(result=failure)
         except Exception as e:
-            logger.exception("Unexpected error sending results")
+            logger.exception("Unexpected error in send_results step")
             failure = EmailProcessingResult(
                 success=False,
-                message=f"Failed to send results: {e!s}",
+                message=f"Fatal error processing email: {e!s}",
                 from_email=email_data.from_email,
                 email_subject=email_data.subject,
             )
