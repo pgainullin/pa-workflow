@@ -979,6 +979,8 @@ Response:"""
                         output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
                     if "category" in result:
                         output += f"**Category:** {result['category']}\n\n"
+                    # Include file_id for files generated and uploaded to LlamaCloud
+                    # This allows users to see which files were created and reference them
                     if "file_id" in result:
                         output += f"**Generated File ID:** `{result['file_id']}`\n\n"
                     
