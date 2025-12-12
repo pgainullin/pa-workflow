@@ -28,7 +28,9 @@ def test_verifier_improvement_example():
     # 4. Suggestions for follow-up steps
     # 5. References to key sources
     
-    expected_improved_response = """
+    """
+    Example of an improved response the verifier should produce:
+    
     I've successfully processed your financial PDF document.
     
     Key findings:
