@@ -60,6 +60,16 @@ GEMINI_TEXT_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for text processin
 GEMINI_CHEAP_TEXT_MODEL = "gemini-2.5-flash"  # Cheaper option for simple text tasks
 
 
+# Best practices for digital assistant responses
+RESPONSE_BEST_PRACTICES = """
+1. Directly respond to the user's instructions without unnecessary preambles
+2. Avoid inappropriate internal comments (e.g., "Here is the draft response", "I will now...")
+3. State clearly when all or part of the user's request could not be completed
+4. Consider and mention potential follow-up steps when relevant
+5. Provide references to key sources or files when applicable
+"""
+
+
 class EmailStartEvent(StartEvent):
     """Start event for email workflow containing email data and callback config.
 
@@ -83,6 +93,15 @@ class PlanExecutionEvent(Event):
     """Event triggered when plan execution is complete."""
 
     results: list[dict]  # Results from each tool execution
+    email_data: EmailData
+    callback: CallbackConfig
+
+
+class VerificationEvent(Event):
+    """Event triggered when response verification is complete."""
+
+    verified_response: str  # Verified and potentially improved response
+    results: list[dict]  # Original results from plan execution
     email_data: EmailData
     callback: CallbackConfig
 
@@ -256,6 +275,10 @@ IMPORTANT GUIDELINES:
 3. Analyze what type of processing each attachment needs and create appropriate steps
 4. Reference previous step outputs using the template syntax: {{{{step_N.field_name}}}}
 5. Ensure each step has all required parameters
+
+RESPONSE BEST PRACTICES:
+Remember that the final response to the user should follow these best practices:
+{RESPONSE_BEST_PRACTICES}
 
 Respond with a JSON array of steps. Each step should have:
 - "tool": the tool name
@@ -747,11 +770,109 @@ Plan:"""
             response.raise_for_status()
 
     @step
-    async def send_results(self, ev: PlanExecutionEvent, ctx: Context) -> StopEvent:
-        """Send the execution results via callback email.
+    async def verify_response(
+        self, ev: PlanExecutionEvent, ctx: Context
+    ) -> VerificationEvent:
+        """Verify and improve the generated response based on best practices.
 
         Args:
             ev: PlanExecutionEvent with execution results
+            ctx: Workflow context
+
+        Returns:
+            VerificationEvent with verified response
+        """
+        email_data = ev.email_data
+        callback = ev.callback
+        results = ev.results
+
+        try:
+            logger.info("[VERIFY START] Verifying response quality")
+
+            # Generate initial response
+            initial_response = await self._generate_user_response(results, email_data)
+
+            # Build verification prompt
+            verification_prompt = f"""You are a quality assurance agent for a digital assistant. Review the following response and suggest improvements based on these best practices:
+
+{RESPONSE_BEST_PRACTICES}
+
+<original_user_email>
+Subject: {email_data.subject}
+
+Body: {email_data.text or email_data.html or "(empty)"}
+</original_user_email>
+
+<generated_response>
+{initial_response}
+</generated_response>
+
+Review the generated response and provide an improved version that:
+- Directly addresses the user's request without meta-commentary
+- Removes any inappropriate internal comments
+- Clearly states if any part of the request couldn't be completed
+- Suggests relevant follow-up actions when appropriate
+- References key sources or files mentioned in the execution
+
+If the response is already excellent, you may return it unchanged.
+
+Respond with ONLY the improved response text, no additional commentary or explanation.
+
+Improved response:"""
+
+            # Get verified response from LLM
+            try:
+                verified_response = await self._llm_complete_with_retry(verification_prompt)
+                verified_response = str(verified_response).strip()
+                
+                # Sanity check: ensure response is not empty
+                if not verified_response or len(verified_response) < 10:
+                    logger.warning("Verification produced empty/short response, using original")
+                    verified_response = initial_response
+                
+                logger.info("[VERIFY COMPLETE] Response verification complete")
+                
+            except Exception as e:
+                logger.warning(f"Verification failed, using original response: {e}")
+                verified_response = initial_response
+
+            return VerificationEvent(
+                verified_response=verified_response,
+                results=results,
+                email_data=email_data,
+                callback=callback,
+            )
+
+        except asyncio.TimeoutError:
+            logger.error("Workflow timeout in verify_response step")
+            # Return original response on timeout
+            initial_response = await self._generate_user_response(results, email_data)
+            return VerificationEvent(
+                verified_response=initial_response,
+                results=results,
+                email_data=email_data,
+                callback=callback,
+            )
+        except Exception as e:
+            logger.exception("Error during response verification")
+            # Return original response on error
+            try:
+                initial_response = await self._generate_user_response(results, email_data)
+            except Exception:
+                initial_response = "Your email has been processed. Please see the attached execution log for details."
+            return VerificationEvent(
+                verified_response=initial_response,
+                results=results,
+                email_data=email_data,
+                callback=callback,
+            )
+
+    @step
+    async def send_results(self, ev: VerificationEvent, ctx: Context) -> StopEvent:
+        """Send the execution results via callback email.
+
+        Args:
+            ev: VerificationEvent with verified response
             ctx: Workflow context
 
         Returns:
@@ -760,12 +881,13 @@ Plan:"""
         email_data = ev.email_data
         callback = ev.callback
         results = ev.results
+        verified_response = ev.verified_response
 
         try:
             logger.info(f"[SEND RESULTS START] Preparing results for {email_data.from_email}")
             
-            # Generate natural language response for the user
-            result_text = await self._generate_user_response(results, email_data)
+            # Use the verified response from the previous step
+            result_text = verified_response
             
             # Create execution log as markdown
             execution_log = self._create_execution_log(results, email_data)
@@ -901,7 +1023,10 @@ Plan:"""
 
 {context}
 
-Write a concise, friendly response that:
+Write a concise, friendly response that follows these best practices:
+{RESPONSE_BEST_PRACTICES}
+
+Additionally:
 1. Acknowledges what was requested
 2. Summarizes the key results
 3. Mentions that detailed execution logs are attached if needed
