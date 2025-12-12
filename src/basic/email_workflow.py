@@ -864,40 +864,40 @@ Plan:"""
             
             # Build a prompt to generate the user-facing response
             successful_results = [r for r in results if r.get("success", False)]
-        
-        if not successful_results:
-            return "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
-        
-        # Create a summary of what was done
-        context = f"User's email subject: {email_data.subject}\n\n"
-        context += "Execution results:\n"
-        
-        for result in successful_results:
-            tool = result.get("tool", "unknown")
-            desc = result.get("description", "")
-            context += f"- {tool}"
-            if desc:
-                context += f": {desc}"
-            context += "\n"
             
-            # Add key outputs (use independent if statements to show all relevant fields)
-            if "summary" in result:
-                context += f"  Result: {result['summary']}\n"
-            if "translated_text" in result:
-                context += f"  Result: {result['translated_text']}\n"
-            if "category" in result:
-                context += f"  Result: Category '{result['category']}'\n"
-            if "file_id" in result:
-                context += f"  Generated file: {result['file_id']}\n"
-            if "parsed_text" in result:
-                # Include a snippet of parsed text
-                text = result["parsed_text"]
-                if len(text) > 500:
-                    text = text[:500] + "..."
-                context += f"  Result: {text}\n"
-        
-        # Use LLM to generate a natural response
-        prompt = f"""Based on the following email processing results, generate a brief, natural language response to send to the user. 
+            if not successful_results:
+                return "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
+            
+            # Create a summary of what was done
+            context = f"User's email subject: {email_data.subject}\n\n"
+            context += "Execution results:\n"
+            
+            for result in successful_results:
+                tool = result.get("tool", "unknown")
+                desc = result.get("description", "")
+                context += f"- {tool}"
+                if desc:
+                    context += f": {desc}"
+                context += "\n"
+                
+                # Add key outputs (use independent if statements to show all relevant fields)
+                if "summary" in result:
+                    context += f"  Result: {result['summary']}\n"
+                if "translated_text" in result:
+                    context += f"  Result: {result['translated_text']}\n"
+                if "category" in result:
+                    context += f"  Result: Category '{result['category']}'\n"
+                if "file_id" in result:
+                    context += f"  Generated file: {result['file_id']}\n"
+                if "parsed_text" in result:
+                    # Include a snippet of parsed text
+                    text = result["parsed_text"]
+                    if len(text) > 500:
+                        text = text[:500] + "..."
+                    context += f"  Result: {text}\n"
+            
+            # Use LLM to generate a natural response
+            prompt = f"""Based on the following email processing results, generate a brief, natural language response to send to the user. 
 
 {context}
 
@@ -908,7 +908,7 @@ Write a concise, friendly response that:
 4. Is written in a helpful, professional tone
 
 Response:"""
-        
+            
             try:
                 response = await self._llm_complete_with_retry(prompt)
                 return str(response).strip()
@@ -952,67 +952,67 @@ Response:"""
             output += "---\n\n"
 
             for result in results:
-            step_num = result.get("step", "?")
-            tool = result.get("tool", "unknown")
-            desc = result.get("description", "")
-            success = result.get("success", False)
+                step_num = result.get("step", "?")
+                tool = result.get("tool", "unknown")
+                desc = result.get("description", "")
+                success = result.get("success", False)
 
-            output += f"## Step {step_num}: {tool}\n\n"
-            if desc:
-                output += f"**Description:** {desc}\n\n"
-            output += f"**Status:** {'✓ Success' if success else '✗ Failed'}\n\n"
+                output += f"## Step {step_num}: {tool}\n\n"
+                if desc:
+                    output += f"**Description:** {desc}\n\n"
+                output += f"**Status:** {'✓ Success' if success else '✗ Failed'}\n\n"
 
-            # Add relevant output from each step (use independent if statements to show all relevant fields)
-            if success:
-                if "summary" in result:
-                    output += f"**Summary:**\n```\n{result['summary']}\n```\n\n"
-                if "parsed_text" in result:
-                    text = result["parsed_text"]
-                    if len(text) > 1000:
-                        text = text[:1000] + "...\n(truncated for brevity)"
-                    output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
-                if "translated_text" in result:
-                    output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
-                if "category" in result:
-                    output += f"**Category:** {result['category']}\n\n"
-                if "file_id" in result:
-                    output += f"**Generated File ID:** `{result['file_id']}`\n\n"
-                
-                # Include any additional result fields
-                # Only display whitelisted additional fields, with length limits and pretty-printing
-                SAFE_ADDITIONAL_FIELDS = ["extracted_data", "sheet_url", "other_info"]  # Add any known safe fields here
-                for key, value in result.items():
-                    if key in SAFE_ADDITIONAL_FIELDS:
-                        display_value = ""
-                        if isinstance(value, str):
-                            if len(value) > 500:
-                                display_value = value[:500] + "... (truncated)"
-                            else:
-                                display_value = value
-                        elif isinstance(value, (dict, list)):
-                            try:
-                                json_str = json.dumps(value, indent=2)
-                                if len(json_str) > 500:
-                                    display_value = json_str[:500] + "... (truncated)"
+                # Add relevant output from each step (use independent if statements to show all relevant fields)
+                if success:
+                    if "summary" in result:
+                        output += f"**Summary:**\n```\n{result['summary']}\n```\n\n"
+                    if "parsed_text" in result:
+                        text = result["parsed_text"]
+                        if len(text) > 1000:
+                            text = text[:1000] + "...\n(truncated for brevity)"
+                        output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
+                    if "translated_text" in result:
+                        output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
+                    if "category" in result:
+                        output += f"**Category:** {result['category']}\n\n"
+                    if "file_id" in result:
+                        output += f"**Generated File ID:** `{result['file_id']}`\n\n"
+                    
+                    # Include any additional result fields
+                    # Only display whitelisted additional fields, with length limits and pretty-printing
+                    SAFE_ADDITIONAL_FIELDS = ["extracted_data", "sheet_url", "other_info"]  # Add any known safe fields here
+                    for key, value in result.items():
+                        if key in SAFE_ADDITIONAL_FIELDS:
+                            display_value = ""
+                            if isinstance(value, str):
+                                if len(value) > 500:
+                                    display_value = value[:500] + "... (truncated)"
                                 else:
-                                    display_value = json_str
-                            except Exception:
+                                    display_value = value
+                            elif isinstance(value, (dict, list)):
+                                try:
+                                    json_str = json.dumps(value, indent=2)
+                                    if len(json_str) > 500:
+                                        display_value = json_str[:500] + "... (truncated)"
+                                    else:
+                                        display_value = json_str
+                                except Exception:
+                                    display_value = str(value)
+                            else:
                                 display_value = str(value)
-                        else:
-                            display_value = str(value)
-                            if len(display_value) > 500:
-                                display_value = display_value[:500] + "... (truncated)"
-                        output += f"**{key}:**\n```\n{display_value}\n```\n\n"
-            else:
-                error = result.get("error", "Unknown error")
-                output += f"**Error:**\n```\n{error}\n```\n\n"
+                                if len(display_value) > 500:
+                                    display_value = display_value[:500] + "... (truncated)"
+                            output += f"**{key}:**\n```\n{display_value}\n```\n\n"
+                else:
+                    error = result.get("error", "Unknown error")
+                    output += f"**Error:**\n```\n{error}\n```\n\n"
 
-            output += "---\n\n"
+                output += "---\n\n"
 
-        output += "\n**Processing complete.**\n"
+            output += "\n**Processing complete.**\n"
 
-        return output
-        
+            return output
+            
         except Exception as e:
             logger.exception("Error creating execution log")
             # Return a minimal fallback log
