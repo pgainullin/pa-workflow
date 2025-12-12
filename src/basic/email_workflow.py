@@ -871,7 +871,10 @@ Improved response:"""
         except asyncio.TimeoutError:
             logger.error("Workflow timeout in verify_response step")
             # Return original response on timeout
-            initial_response = await self._generate_user_response(results, email_data)
+            try:
+                initial_response = await self._generate_user_response(results, email_data)
+            except Exception:
+                initial_response = "Your email has been processed. Please see the attached execution log for details."
             return VerificationEvent(
                 verified_response=initial_response,
                 results=results,

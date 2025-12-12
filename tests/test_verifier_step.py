@@ -350,3 +350,67 @@ async def test_verify_response_handles_llm_exception():
             # Verify that it fell back to original response
             assert isinstance(result, VerificationEvent)
             assert result.verified_response == "Original response text"
+
+
+@pytest.mark.asyncio
+async def test_verify_response_handles_timeout_error():
+    """Test that verify_response handles asyncio.TimeoutError gracefully."""
+    import asyncio
+    
+    # Create mock email data
+    email_data = EmailData(
+        from_email="user@example.com",
+        to_email="assistant@example.com",
+        subject="Test Email",
+        text="Please process this document",
+    )
+
+    callback = CallbackConfig(
+        callback_url="https://example.com/callback",
+        auth_token="test-token",
+    )
+
+    results = [
+        {
+            "step": 1,
+            "tool": "summarise",
+            "success": True,
+            "summary": "Document has been summarized successfully.",
+        }
+    ]
+
+    # Create the event
+    plan_execution_event = PlanExecutionEvent(
+        results=results,
+        email_data=email_data,
+        callback=callback,
+    )
+
+    # Create workflow instance
+    workflow = EmailWorkflow(timeout=60)
+
+    # Mock _generate_user_response to succeed initially, then be called again in timeout handler
+    with patch.object(
+        workflow, "_generate_user_response", new_callable=AsyncMock
+    ) as mock_generate:
+        # First call succeeds for initial response
+        # Second call in timeout handler should also succeed
+        mock_generate.return_value = "Fallback response after timeout"
+
+        # Mock the LLM completion to raise TimeoutError
+        with patch.object(
+            workflow, "_llm_complete_with_retry", new_callable=AsyncMock
+        ) as mock_llm:
+            mock_llm.side_effect = asyncio.TimeoutError("LLM timeout")
+
+            # Create a mock context
+            mock_context = MagicMock()
+
+            # Execute the verify_response step
+            result = await workflow.verify_response(plan_execution_event, mock_context)
+
+            # Verify that it handled timeout and returned fallback
+            assert isinstance(result, VerificationEvent)
+            assert result.verified_response == "Fallback response after timeout"
+            # _generate_user_response should be called twice: once for initial, once in timeout handler
+            assert mock_generate.call_count == 2

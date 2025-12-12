@@ -11,15 +11,15 @@ def test_verifier_improvement_example():
     This is a documentation test that shows the expected behavior
     without actually running the full workflow.
     """
-    # Example of a response that needs improvement
-    problematic_response = """
-    Here is the draft response to your request:
-    
-    I've processed the PDF you sent. It appears to contain financial data.
-    The document has been successfully parsed.
-    
-    I hope this helps!
-    """
+    # Example of a response that needs improvement:
+    # """
+    # Here is the draft response to your request:
+    # 
+    # I've processed the PDF you sent. It appears to contain financial data.
+    # The document has been successfully parsed.
+    # 
+    # I hope this helps!
+    # """
     
     # Expected improvements from the verifier:
     # 1. Remove "Here is the draft response" - inappropriate internal comment
@@ -28,22 +28,21 @@ def test_verifier_improvement_example():
     # 4. Suggestions for follow-up steps
     # 5. References to key sources
     
-    """
-    Example of an improved response the verifier should produce:
+    # Example of an improved response the verifier should produce:
+    # """
+    # I've successfully processed your financial PDF document.
+    # 
+    # Key findings:
+    # - Document parsed and analyzed
+    # - Financial data extracted and available in the execution log
+    # 
+    # If you need specific data points extracted or further analysis,
+    # please let me know. You can also refer to execution_log.md for
+    # detailed processing information.
+    # """
     
-    I've successfully processed your financial PDF document.
-    
-    Key findings:
-    - Document parsed and analyzed
-    - Financial data extracted and available in the execution log
-    
-    If you need specific data points extracted or further analysis,
-    please let me know. You can also refer to execution_log.md for
-    detailed processing information.
-    """
-    
-    # The verifier step should transform problematic_response into
-    # something similar to expected_improved_response
+    # The verifier step should transform problematic responses into
+    # something similar to the improved example above
     
     assert True  # This is a documentation test
 
@@ -73,17 +72,16 @@ def test_verification_prompt_structure():
     """Test that the verification prompt is well-structured."""
     # This test verifies the structure without running the full workflow
     
-    expected_prompt_elements = [
-        "quality assurance agent",  # Role definition
-        "best practices",            # References best practices
-        "original_user_email",       # Contains original email context
-        "generated_response",        # Contains the response to verify
-        "improved version",          # Asks for improvement
-        "ONLY the improved response", # Clear output format
-    ]
+    # The verification prompt in verify_response should contain these elements:
+    # - "quality assurance agent" (Role definition)
+    # - "best practices" (References best practices)
+    # - "original_user_email" (Contains original email context)
+    # - "generated_response" (Contains the response to verify)
+    # - "improved version" (Asks for improvement)
+    # - "ONLY the improved response" (Clear output format)
     
     # In the actual implementation, the prompt in verify_response
-    # should contain all these elements
+    # contains all these elements
     # (This is verified by the existence of the step itself)
     
     assert True  # This is a documentation test
