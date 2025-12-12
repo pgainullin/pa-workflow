@@ -4,6 +4,7 @@ This workflow uses an LLM-powered triage agent to analyze emails and create
 execution plans using available tools.
 """
 
+import asyncio
 import base64
 import json
 import logging
@@ -152,7 +153,7 @@ class EmailWorkflow(Workflow):
         try:
             # Debug logging
             logger.info(
-                f"Triaging email: from={email_data.from_email}, "
+                f"[TRIAGE START] Triaging email: from={email_data.from_email}, "
                 f"subject={email_data.subject}, "
                 f"attachments={len(email_data.attachments)}"
             )
@@ -166,8 +167,20 @@ class EmailWorkflow(Workflow):
             # Parse plan from response
             plan = self._parse_plan(response, email_data)
 
-            logger.info(f"Triage complete. Generated plan with {len(plan)} steps")
+            logger.info(f"[TRIAGE COMPLETE] Generated plan with {len(plan)} steps")
 
+            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+        except asyncio.TimeoutError:
+            logger.error("Workflow timeout in triage_email step")
+            # Create a simple fallback plan for timeout scenarios
+            plan = [
+                {
+                    "tool": "summarise",
+                    "params": {
+                        "text": f"Email subject: {email_data.subject}\n\nBody: {email_data.text or '(empty)'}"
+                    },
+                }
+            ]
             return TriageEvent(plan=plan, email_data=email_data, callback=callback)
         except Exception:
             logger.exception("Error during email triage")
@@ -376,7 +389,15 @@ Plan:"""
         callback = ev.callback
 
         try:
-            logger.info(f"Executing plan with {len(plan)} steps")
+            # Defensive check: ensure plan is not None and is a list
+            if plan is None:
+                logger.error("Plan is None, creating empty plan")
+                plan = []
+            if not isinstance(plan, list):
+                logger.error(f"Plan is not a list (type: {type(plan)}), creating empty plan")
+                plan = []
+            
+            logger.info(f"[PLAN EXEC START] Executing plan with {len(plan)} steps")
 
             results = []
             execution_context = {}  # Store results from previous steps
@@ -390,7 +411,7 @@ Plan:"""
                 )  # Optional: mark step as critical
 
                 logger.info(
-                    f"Executing step {i + 1}/{len(plan)}: {tool_name} - {description}"
+                    f"[PLAN EXEC STEP {i + 1}/{len(plan)}] Executing: {tool_name} - {description}"
                 )
 
                 try:
@@ -470,7 +491,7 @@ Plan:"""
                         }
                     )
 
-                    logger.info(f"Step {i + 1} completed: {result.get('success', False)}")
+                    logger.info(f"[PLAN EXEC STEP {i + 1}] Completed: {result.get('success', False)}")
 
                     # If this is a critical step and it failed, stop execution
                     if critical and not result.get("success", False):
@@ -501,8 +522,25 @@ Plan:"""
                         )
                         break
 
+            logger.info(f"[PLAN EXEC COMPLETE] Finished {len(results)} steps")
             return PlanExecutionEvent(
                 results=results, email_data=email_data, callback=callback
+            )
+        
+        except asyncio.TimeoutError as e:
+            logger.error(f"Workflow timeout in execute_plan step: {e}")
+            # Return a PlanExecutionEvent with a timeout error result
+            return PlanExecutionEvent(
+                results=[
+                    {
+                        "step": 0,
+                        "tool": "execute_plan",
+                        "success": False,
+                        "error": "Plan execution timed out. This may be due to long-running Parse operations or API retries.",
+                    }
+                ],
+                email_data=email_data,
+                callback=callback,
             )
         
         except Exception as e:
@@ -724,6 +762,8 @@ Plan:"""
         results = ev.results
 
         try:
+            logger.info(f"[SEND RESULTS START] Preparing results for {email_data.from_email}")
+            
             # Generate natural language response for the user
             result_text = await self._generate_user_response(results, email_data)
             
@@ -744,7 +784,7 @@ Plan:"""
             attachments.append(execution_log_attachment)
 
             # Send response email via callback
-            logger.info(f"Sending results email to {email_data.from_email}")
+            logger.info(f"[SEND RESULTS CALLBACK] Sending results email to {email_data.from_email}")
 
             response_email = SendEmailRequest(
                 to_email=email_data.from_email,
@@ -759,7 +799,7 @@ Plan:"""
             await self._send_callback_email(
                 callback.callback_url, callback.auth_token, response_email
             )
-            logger.info("Callback email sent successfully")
+            logger.info("[SEND RESULTS COMPLETE] Callback email sent successfully")
 
             # Create success result
             result = EmailProcessingResult(
@@ -776,6 +816,16 @@ Plan:"""
             failure = EmailProcessingResult(
                 success=False,
                 message=f"Email processed but callback failed: {e!s}",
+                from_email=email_data.from_email,
+                email_subject=email_data.subject,
+            )
+            ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
+            return StopEvent(result=failure)
+        except asyncio.TimeoutError as e:
+            logger.error(f"Workflow timeout in send_results step: {e}")
+            failure = EmailProcessingResult(
+                success=False,
+                message="Email processing timed out while preparing results. Please try again.",
                 from_email=email_data.from_email,
                 email_subject=email_data.subject,
             )
@@ -802,42 +852,52 @@ Plan:"""
         Returns:
             Natural language response text
         """
-        # Build a prompt to generate the user-facing response
-        successful_results = [r for r in results if r.get("success", False)]
-        
-        if not successful_results:
-            return "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
-        
-        # Create a summary of what was done
-        context = f"User's email subject: {email_data.subject}\n\n"
-        context += "Execution results:\n"
-        
-        for result in successful_results:
-            tool = result.get("tool", "unknown")
-            desc = result.get("description", "")
-            context += f"- {tool}"
-            if desc:
-                context += f": {desc}"
-            context += "\n"
+        try:
+            # Defensive check: ensure results is a valid list
+            if results is None:
+                logger.warning("Results is None in _generate_user_response")
+                return "I've processed your email, but encountered issues. Please see the attached execution log for details."
             
-            # Add key outputs (use independent if statements to show all relevant fields)
-            if "summary" in result:
-                context += f"  Result: {result['summary']}\n"
-            if "translated_text" in result:
-                context += f"  Result: {result['translated_text']}\n"
-            if "category" in result:
-                context += f"  Result: Category '{result['category']}'\n"
-            if "file_id" in result:
-                context += f"  Generated file: {result['file_id']}\n"
-            if "parsed_text" in result:
-                # Include a snippet of parsed text
-                text = result["parsed_text"]
-                if len(text) > 500:
-                    text = text[:500] + "..."
-                context += f"  Result: {text}\n"
-        
-        # Use LLM to generate a natural response
-        prompt = f"""Based on the following email processing results, generate a brief, natural language response to send to the user. 
+            if not isinstance(results, list):
+                logger.warning(f"Results is not a list (type: {type(results)})")
+                return "I've processed your email, but encountered issues with result formatting. Please see the attached execution log for details."
+            
+            # Build a prompt to generate the user-facing response
+            successful_results = [r for r in results if r.get("success", False)]
+            
+            if not successful_results:
+                return "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
+            
+            # Create a summary of what was done
+            context = f"User's email subject: {email_data.subject}\n\n"
+            context += "Execution results:\n"
+            
+            for result in successful_results:
+                tool = result.get("tool", "unknown")
+                desc = result.get("description", "")
+                context += f"- {tool}"
+                if desc:
+                    context += f": {desc}"
+                context += "\n"
+                
+                # Add key outputs (use independent if statements to show all relevant fields)
+                if "summary" in result:
+                    context += f"  Result: {result['summary']}\n"
+                if "translated_text" in result:
+                    context += f"  Result: {result['translated_text']}\n"
+                if "category" in result:
+                    context += f"  Result: Category '{result['category']}'\n"
+                if "file_id" in result:
+                    context += f"  Generated file: {result['file_id']}\n"
+                if "parsed_text" in result:
+                    # Include a snippet of parsed text
+                    text = result["parsed_text"]
+                    if len(text) > 500:
+                        text = text[:500] + "..."
+                    context += f"  Result: {text}\n"
+            
+            # Use LLM to generate a natural response
+            prompt = f"""Based on the following email processing results, generate a brief, natural language response to send to the user. 
 
 {context}
 
@@ -848,27 +908,32 @@ Write a concise, friendly response that:
 4. Is written in a helpful, professional tone
 
 Response:"""
-        
-        try:
-            response = await self._llm_complete_with_retry(prompt)
-            return str(response).strip()
+            
+            try:
+                response = await self._llm_complete_with_retry(prompt)
+                return str(response).strip()
+            except Exception as e:
+                logger.warning(f"Failed to generate LLM response, using fallback: {e}")
+                # Fallback: create a simple summary
+                output = "Your email has been processed successfully.\n\n"
+                
+                for result in successful_results:
+                    if "summary" in result:
+                        output += f"Summary: {result['summary']}\n\n"
+                    if "translated_text" in result:
+                        output += f"Translation: {result['translated_text']}\n\n"
+                    if "category" in result:
+                        output += f"Category: {result['category']}\n\n"
+                    if "file_id" in result:
+                        output += f"Generated file: {result['file_id']}\n\n"
+                
+                output += "See the attached execution_log.md for detailed information about the processing steps."
+                return output
+                
         except Exception as e:
-            logger.warning(f"Failed to generate LLM response, using fallback: {e}")
-            # Fallback: create a simple summary
-            output = "Your email has been processed successfully.\n\n"
-            
-            for result in successful_results:
-                if "summary" in result:
-                    output += f"Summary: {result['summary']}\n\n"
-                if "translated_text" in result:
-                    output += f"Translation: {result['translated_text']}\n\n"
-                if "category" in result:
-                    output += f"Category: {result['category']}\n\n"
-                if "file_id" in result:
-                    output += f"Generated file: {result['file_id']}\n\n"
-            
-            output += "See the attached execution_log.md for detailed information about the processing steps."
-            return output
+            logger.exception("Fatal error in _generate_user_response")
+            # Final fallback - return a generic message
+            return f"Your email has been processed. Please see the attached execution log for details. (Error: {e!s})"
 
     def _create_execution_log(self, results: list[dict], email_data: EmailData) -> str:
         """Create detailed execution log in markdown format.
@@ -880,72 +945,78 @@ Response:"""
         Returns:
             Formatted execution log in markdown
         """
-        output = "# Workflow Execution Log\n\n"
-        output += f"**Original Subject:** {email_data.subject}\n\n"
-        output += f"**Processed Steps:** {len(results)}\n\n"
-        output += "---\n\n"
-
-        for result in results:
-            step_num = result.get("step", "?")
-            tool = result.get("tool", "unknown")
-            desc = result.get("description", "")
-            success = result.get("success", False)
-
-            output += f"## Step {step_num}: {tool}\n\n"
-            if desc:
-                output += f"**Description:** {desc}\n\n"
-            output += f"**Status:** {'✓ Success' if success else '✗ Failed'}\n\n"
-
-            # Add relevant output from each step (use independent if statements to show all relevant fields)
-            if success:
-                if "summary" in result:
-                    output += f"**Summary:**\n```\n{result['summary']}\n```\n\n"
-                if "parsed_text" in result:
-                    text = result["parsed_text"]
-                    if len(text) > 1000:
-                        text = text[:1000] + "...\n(truncated for brevity)"
-                    output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
-                if "translated_text" in result:
-                    output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
-                if "category" in result:
-                    output += f"**Category:** {result['category']}\n\n"
-                if "file_id" in result:
-                    output += f"**Generated File ID:** `{result['file_id']}`\n\n"
-                
-                # Include any additional result fields
-                # Only display whitelisted additional fields, with length limits and pretty-printing
-                SAFE_ADDITIONAL_FIELDS = ["extracted_data", "sheet_url", "other_info"]  # Add any known safe fields here
-                for key, value in result.items():
-                    if key in SAFE_ADDITIONAL_FIELDS:
-                        display_value = ""
-                        if isinstance(value, str):
-                            if len(value) > 500:
-                                display_value = value[:500] + "... (truncated)"
-                            else:
-                                display_value = value
-                        elif isinstance(value, (dict, list)):
-                            try:
-                                json_str = json.dumps(value, indent=2)
-                                if len(json_str) > 500:
-                                    display_value = json_str[:500] + "... (truncated)"
-                                else:
-                                    display_value = json_str
-                            except Exception:
-                                display_value = str(value)
-                        else:
-                            display_value = str(value)
-                            if len(display_value) > 500:
-                                display_value = display_value[:500] + "... (truncated)"
-                        output += f"**{key}:**\n```\n{display_value}\n```\n\n"
-            else:
-                error = result.get("error", "Unknown error")
-                output += f"**Error:**\n```\n{error}\n```\n\n"
-
+        try:
+            output = "# Workflow Execution Log\n\n"
+            output += f"**Original Subject:** {email_data.subject}\n\n"
+            output += f"**Processed Steps:** {len(results)}\n\n"
             output += "---\n\n"
 
-        output += "\n**Processing complete.**\n"
+            for result in results:
+                step_num = result.get("step", "?")
+                tool = result.get("tool", "unknown")
+                desc = result.get("description", "")
+                success = result.get("success", False)
 
-        return output
+                output += f"## Step {step_num}: {tool}\n\n"
+                if desc:
+                    output += f"**Description:** {desc}\n\n"
+                output += f"**Status:** {'✓ Success' if success else '✗ Failed'}\n\n"
+
+                # Add relevant output from each step (use independent if statements to show all relevant fields)
+                if success:
+                    if "summary" in result:
+                        output += f"**Summary:**\n```\n{result['summary']}\n```\n\n"
+                    if "parsed_text" in result:
+                        text = result["parsed_text"]
+                        if len(text) > 1000:
+                            text = text[:1000] + "...\n(truncated for brevity)"
+                        output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
+                    if "translated_text" in result:
+                        output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
+                    if "category" in result:
+                        output += f"**Category:** {result['category']}\n\n"
+                    if "file_id" in result:
+                        output += f"**Generated File ID:** `{result['file_id']}`\n\n"
+                    
+                    # Include any additional result fields
+                    # Only display whitelisted additional fields, with length limits and pretty-printing
+                    SAFE_ADDITIONAL_FIELDS = ["extracted_data", "sheet_url", "other_info"]  # Add any known safe fields here
+                    for key, value in result.items():
+                        if key in SAFE_ADDITIONAL_FIELDS:
+                            display_value = ""
+                            if isinstance(value, str):
+                                if len(value) > 500:
+                                    display_value = value[:500] + "... (truncated)"
+                                else:
+                                    display_value = value
+                            elif isinstance(value, (dict, list)):
+                                try:
+                                    json_str = json.dumps(value, indent=2)
+                                    if len(json_str) > 500:
+                                        display_value = json_str[:500] + "... (truncated)"
+                                    else:
+                                        display_value = json_str
+                                except Exception:
+                                    display_value = str(value)
+                            else:
+                                display_value = str(value)
+                                if len(display_value) > 500:
+                                    display_value = display_value[:500] + "... (truncated)"
+                            output += f"**{key}:**\n```\n{display_value}\n```\n\n"
+                else:
+                    error = result.get("error", "Unknown error")
+                    output += f"**Error:**\n```\n{error}\n```\n\n"
+
+                output += "---\n\n"
+
+            output += "\n**Processing complete.**\n"
+
+            return output
+            
+        except Exception as e:
+            logger.exception("Error creating execution log")
+            # Return a minimal fallback log
+            return f"# Workflow Execution Log\n\n**Error:** Failed to generate detailed log: {e!s}\n\n**Processed Steps:** {len(results) if results else 0}"
 
     def _collect_attachments(self, results: list[dict]) -> list[Attachment]:
         """Collect file attachments from workflow results.
@@ -956,38 +1027,46 @@ Response:"""
         Returns:
             List of Attachment objects for files generated by tools
         """
-        attachments = []
-        
-        for result in results:
-            if not result.get("success", False):
-                continue
-                
-            # Check if this step generated a file
-            file_id = result.get("file_id")
-            if file_id:
-                tool = result.get("tool", "unknown")
-                step_num = result.get("step", "?")
-                
-                # Determine filename based on tool type
-                if tool == "print_to_pdf":
-                    filename = f"output_step_{step_num}.pdf"
-                    mime_type = "application/pdf"
-                else:
-                    # Generic filename for other file-generating tools
-                    filename = f"generated_file_step_{step_num}.dat"
-                    mime_type = "application/octet-stream"
-                
-                # Create attachment with file_id
-                attachment = Attachment(
-                    id=f"generated-{step_num}",
-                    name=filename,
-                    type=mime_type,
-                    file_id=file_id,
-                )
-                attachments.append(attachment)
-                logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
-        
-        return attachments
+        try:
+            attachments = []
+            
+            for result in results:
+                if not result.get("success", False):
+                    continue
+                    
+                # Check if this step generated a file
+                file_id = result.get("file_id")
+                if file_id:
+                    tool = result.get("tool", "unknown")
+                    step_num = result.get("step", "?")
+                    
+                    # Determine filename based on tool type
+                    if tool == "print_to_pdf":
+                        filename = f"output_step_{step_num}.pdf"
+                        mime_type = "application/pdf"
+                    else:
+                        # Generic filename for other file-generating tools
+                        filename = f"generated_file_step_{step_num}.dat"
+                        mime_type = "application/octet-stream"
+                    
+                    # Create attachment with file_id
+                    attachment = Attachment(
+                        id=f"generated-{step_num}",
+                        name=filename,
+                        type=mime_type,
+                        file_id=file_id,
+                    )
+                    attachments.append(attachment)
+                    logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
+            
+            return attachments
+            
+        except Exception as e:
+            logger.exception("Error collecting attachments")
+            # Return empty list on error to allow workflow to continue
+            return []
 
 
-email_workflow = EmailWorkflow(timeout=60)
+# Timeout increased to 120s to accommodate multiple Parse tool retries
+# (5 attempts, exponential backoff: 1s + 2s + 4s + 8s = ~15s max per file, plus execution time)
+email_workflow = EmailWorkflow(timeout=120)
