@@ -90,21 +90,37 @@ class ParseTool(Tool):
             return False
 
     @api_retry
-    async def _parse_with_retry(self, tmp_path: str) -> list:
+    async def _parse_with_retry(self, tmp_path: str, file_extension: str = ".pdf") -> tuple[list, str]:
         """Parse document with automatic retry on transient errors.
 
         Args:
             tmp_path: Path to the temporary file to parse
+            file_extension: File extension for diagnostic logging
 
         Returns:
-            List of parsed documents
+            Tuple of (list of parsed documents, parsed text content)
 
         Raises:
-            Exception: If parsing fails after all retry attempts
+            Exception: If parsing fails after all retry attempts or if content is empty
         """
         import asyncio
 
-        return await asyncio.to_thread(self.llama_parser.load_data, tmp_path)
+        documents = await asyncio.to_thread(self.llama_parser.load_data, tmp_path)
+        parsed_text = "\n".join([doc.get_content() for doc in documents])
+        
+        # Validate that we got some content - if not, raise an exception to trigger retry
+        if not parsed_text or not parsed_text.strip():
+            logger.warning(
+                f"ParseTool returned empty text for file (will retry). "
+                f"Documents returned: {len(documents)}, "
+                f"File extension: {file_extension}"
+            )
+            raise Exception(
+                f"Document parsing returned no text content (documents: {len(documents)}). "
+                "Content temporarily unavailable and will be retried."
+            )
+        
+        return documents, parsed_text
 
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Parse a document using LlamaParse.
@@ -179,21 +195,9 @@ class ParseTool(Tool):
 
             try:
                 # Parse the document with automatic retry
-                documents = await self._parse_with_retry(tmp_path)
-                parsed_text = "\n".join([doc.get_content() for doc in documents])
-
-                # Validate that we got some content
-                if not parsed_text or not parsed_text.strip():
-                    logger.warning(
-                        f"ParseTool returned empty text for file. "
-                        f"Documents returned: {len(documents)}, "
-                        f"File extension: {file_extension}"
-                    )
-                    return {
-                        "success": False,
-                        "error": "Document parsing returned no text content. The document may be empty, corrupted, or in an unsupported format.",
-                    }
-
+                # The retry logic now includes content validation
+                documents, parsed_text = await self._parse_with_retry(tmp_path, file_extension)
+                
                 return {"success": True, "parsed_text": parsed_text}
             finally:
                 # Clean up temp file
@@ -201,7 +205,11 @@ class ParseTool(Tool):
 
         except Exception as e:
             logger.exception("Error parsing document")
-            return {"success": False, "error": str(e)}
+            error_msg = str(e)
+            # Make error message more user-friendly for empty content issues
+            if "no text content" in error_msg.lower():
+                error_msg = "Document parsing returned no text content. The document may be empty, corrupted, or in an unsupported format."
+            return {"success": False, "error": error_msg}
 
 
 class ExtractTool(Tool):
