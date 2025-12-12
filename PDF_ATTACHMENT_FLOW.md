@@ -68,7 +68,7 @@ if "file_id" in result:
 This allows users to see which files were generated and their LlamaCloud IDs.
 
 ### 4. Attachment Collection
-**Location:** `src/basic/email_workflow.py` (lines 1025-1075)
+**Location:** `src/basic/email_workflow.py` (lines 1027-1076)
 
 ```python
 def _collect_attachments(self, results: list[dict]) -> list[Attachment]:
