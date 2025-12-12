@@ -821,21 +821,15 @@ Respond with ONLY the improved response text, no additional commentary or explan
 Improved response:"""
 
             # Get verified response from LLM
-            try:
-                verified_response = await self._llm_complete_with_retry(verification_prompt)
-                verified_response = str(verified_response).strip()
-                
-                # Sanity check: ensure response is not empty
-                if not verified_response or len(verified_response) < 10:
-                    logger.warning("Verification produced empty/short response, using original")
-                    verified_response = initial_response
-                
-                logger.info("[VERIFY COMPLETE] Response verification complete")
-                
-            except Exception as e:
-                logger.warning(f"Verification failed, using original response: {e}")
+            verified_response = await self._llm_complete_with_retry(verification_prompt)
+            verified_response = str(verified_response).strip()
+
+            # Sanity check: ensure response is not empty
+            if not verified_response or len(verified_response) < 10:
+                logger.warning("Verification produced empty/short response, using original")
                 verified_response = initial_response
 
+            logger.info("[VERIFY COMPLETE] Response verification complete")
             return VerificationEvent(
                 verified_response=verified_response,
                 results=results,
