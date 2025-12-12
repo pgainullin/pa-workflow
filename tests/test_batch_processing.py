@@ -200,10 +200,14 @@ async def test_extract_tool_text_batching():
         mock_agent = MagicMock()
 
         call_count = 0
+        chunk_sizes = []
 
         async def mock_aextract(source):
             nonlocal call_count
             call_count += 1
+            # Capture the chunk size
+            if hasattr(source, 'text_content'):
+                chunk_sizes.append(len(source.text_content))
             mock_result = MagicMock()
             mock_result.data = {"field": f"value_{call_count}"}
             return mock_result
@@ -222,6 +226,48 @@ async def test_extract_tool_text_batching():
         assert "extracted_data" in result
         # Should have been called multiple times due to batching
         assert call_count > 1
+        # Each chunk should be under 5000 characters (the API limit)
+        for size in chunk_sizes:
+            assert size <= 5000, f"Chunk size {size} exceeds API limit of 5000"
+
+
+@pytest.mark.asyncio
+async def test_extract_tool_respects_5000_char_limit():
+    """Test ExtractTool respects the 5000 character API limit."""
+    from basic.tools import ExtractTool
+
+    tool = ExtractTool()
+
+    # Mock LlamaExtract
+    with patch("llama_cloud_services.LlamaExtract") as mock_extract_class:
+        mock_extract = MagicMock()
+        mock_agent = MagicMock()
+
+        chunks_received = []
+
+        async def mock_aextract(source):
+            # Capture each chunk
+            if hasattr(source, 'text_content'):
+                chunks_received.append(source.text_content)
+            mock_result = MagicMock()
+            mock_result.data = {"extracted": "data"}
+            return mock_result
+
+        mock_agent.aextract = mock_aextract
+        mock_extract.get_agent = MagicMock(return_value=mock_agent)
+        mock_extract_class.return_value = mock_extract
+
+        # Test with text just over 5000 characters
+        text_5500 = "x" * 5500
+        result = await tool.execute(text=text_5500, schema={"field": "string"})
+
+        assert result["success"] is True
+        # Should be split into at least 2 chunks
+        assert len(chunks_received) >= 2
+        # Each chunk should be under 5000 characters
+        for chunk in chunks_received:
+            assert len(chunk) <= 5000
+
 
 
 @pytest.mark.asyncio
