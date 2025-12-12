@@ -39,7 +39,6 @@ from .tools import (
 from .utils import (
     text_to_html,
     api_retry,
-    download_file_from_llamacloud,
 )
 
 logger = logging.getLogger(__name__)
@@ -772,7 +771,7 @@ Plan:"""
             execution_log = self._create_execution_log(results, email_data)
             
             # Collect any generated files from the results to attach
-            attachments = await self._collect_attachments(results)
+            attachments = self._collect_attachments(results)
             
             # Add execution log as an attachment
             execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
@@ -1019,11 +1018,8 @@ Response:"""
             # Return a minimal fallback log
             return f"# Workflow Execution Log\n\n**Error:** Failed to generate detailed log: {e!s}\n\n**Processed Steps:** {len(results) if results else 0}"
 
-    async def _collect_attachments(self, results: list[dict]) -> list[Attachment]:
+    def _collect_attachments(self, results: list[dict]) -> list[Attachment]:
         """Collect file attachments from workflow results.
-
-        Downloads files from LlamaCloud and includes both file_id and content
-        for maximum compatibility with callback receivers.
 
         Args:
             results: List of execution results
@@ -1053,28 +1049,15 @@ Response:"""
                         filename = f"generated_file_step_{step_num}.dat"
                         mime_type = "application/octet-stream"
                     
-                    # Download file content from LlamaCloud to include in attachment
-                    # This ensures the callback receiver can use either file_id or content
-                    try:
-                        logger.info(f"Downloading file {file_id} from LlamaCloud for attachment")
-                        file_bytes = await download_file_from_llamacloud(file_id)
-                        content_b64 = base64.b64encode(file_bytes).decode("utf-8")
-                        logger.info(f"Successfully downloaded {len(file_bytes)} bytes for {filename}")
-                    except Exception as download_error:
-                        logger.warning(f"Failed to download file {file_id}: {download_error}. Creating attachment with file_id only.")
-                        content_b64 = None
-                    
-                    # Create attachment with both file_id and content (when available)
-                    # This provides maximum compatibility - receivers can use either field
+                    # Create attachment with file_id
                     attachment = Attachment(
                         id=f"generated-{step_num}",
                         name=filename,
                         type=mime_type,
                         file_id=file_id,
-                        content=content_b64,
                     )
                     attachments.append(attachment)
-                    logger.info(f"Adding attachment: {filename} (file_id: {file_id}, content: {'present' if content_b64 else 'not available'})")
+                    logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
             
             return attachments
             

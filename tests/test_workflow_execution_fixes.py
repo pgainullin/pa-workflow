@@ -160,13 +160,8 @@ async def test_collect_attachments_from_results():
     """Test that workflow collects file attachments from tool results."""
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
-    ) as mock_genai, patch(
-        "basic.email_workflow.download_file_from_llamacloud"
-    ) as mock_download:
+    ) as mock_genai:
         from basic.email_workflow import EmailWorkflow
-
-        # Mock the download function
-        mock_download.return_value = b"Mock PDF content"
 
         workflow = EmailWorkflow()
 
@@ -192,15 +187,13 @@ async def test_collect_attachments_from_results():
             },
         ]
 
-        attachments = await workflow._collect_attachments(results)
+        attachments = workflow._collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-123"
         assert attachments[0].name == "output_step_2.pdf"
         assert attachments[0].type == "application/pdf"
         assert attachments[0].id == "generated-2"
-        # New behavior: content should also be present
-        assert attachments[0].content is not None
 
 
 @pytest.mark.asyncio
@@ -208,13 +201,8 @@ async def test_collect_attachments_skips_failed_steps():
     """Test that workflow only collects attachments from successful steps."""
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
-    ) as mock_genai, patch(
-        "basic.email_workflow.download_file_from_llamacloud"
-    ) as mock_download:
+    ) as mock_genai:
         from basic.email_workflow import EmailWorkflow
-
-        # Mock the download function
-        mock_download.return_value = b"Mock PDF content"
 
         workflow = EmailWorkflow()
 
@@ -234,7 +222,7 @@ async def test_collect_attachments_skips_failed_steps():
             },
         ]
 
-        attachments = await workflow._collect_attachments(results)
+        attachments = workflow._collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-456"
