@@ -786,11 +786,42 @@ Plan:"""
         callback = ev.callback
         results = ev.results
 
+        def _strip_html(text):
+            # Remove HTML tags
+            if not text:
+                return ""
+            text = re.sub(r"<[^>]+>", "", text)
+            # Replace HTML entities
+            text = re.sub(r"&nbsp;", " ", text)
+            text = re.sub(r"&amp;", "&", text)
+            text = re.sub(r"&lt;", "<", text)
+            text = re.sub(r"&gt;", ">", text)
+            return text
+
+        def _sanitize_email_content(subject, text, html, max_subject_len=200, max_body_len=2000):
+            # Prefer text, fallback to html, fallback to empty
+            body = text if text else html if html else ""
+            body = _strip_html(body)
+            body = body.strip().replace("\r\n", "\n").replace("\r", "\n")
+            if len(body) > max_body_len:
+                body = body[:max_body_len] + "..."
+            subject = subject or ""
+            subject = _strip_html(subject)
+            subject = subject.strip()
+            if len(subject) > max_subject_len:
+                subject = subject[:max_subject_len] + "..."
+            return subject, body if body else "(empty)"
+
         try:
             logger.info("[VERIFY START] Verifying response quality")
 
             # Generate initial response
             initial_response = await self._generate_user_response(results, email_data)
+
+            # Sanitize email content for prompt
+            sanitized_subject, sanitized_body = _sanitize_email_content(
+                email_data.subject, email_data.text, email_data.html
+            )
 
             # Build verification prompt
             verification_prompt = f"""You are a quality assurance agent for a digital assistant. Review the following response and suggest improvements based on these best practices:
@@ -798,9 +829,9 @@ Plan:"""
 {RESPONSE_BEST_PRACTICES}
 
 <original_user_email>
-Subject: {email_data.subject}
+Subject: {sanitized_subject}
 
-Body: {email_data.text or email_data.html or "(empty)"}
+Body: {sanitized_body}
 </original_user_email>
 
 <generated_response>
