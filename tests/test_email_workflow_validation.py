@@ -17,16 +17,11 @@ def get_workflow_file_path():
     return project_root / "src" / "basic" / "email_workflow.py"
 
 
-def test_process_email_step_includes_attachment_found_event_in_return_type():
-    """Test that process_email step declares AttachmentFoundEvent in its return type.
+def test_triage_email_step_returns_triage_event():
+    """Test that triage_email step declares TriageEvent in its return type.
 
-    This is critical because the step uses ctx.send_event(AttachmentFoundEvent(...))
-    to fan out events. According to workflow validation rules, when a step sends
-    an event using ctx.send_event(), it must still declare that event type in its
-    return type annotation for proper workflow validation.
-
-    The error "The following events are consumed but never produced: AttachmentFoundEvent"
-    occurs when this return type is missing.
+    The triage_email step is the first step in the refactored workflow and must
+    return a TriageEvent containing the execution plan.
     """
     # Read the source file
     workflow_file = get_workflow_file_path()
@@ -45,35 +40,26 @@ def test_process_email_step_includes_attachment_found_event_in_return_type():
 
     assert email_workflow_class is not None, "EmailWorkflow class not found"
 
-    # Find the process_email method
-    process_email_method = None
+    # Find the triage_email method
+    triage_email_method = None
     for item in email_workflow_class.body:
-        if isinstance(item, ast.AsyncFunctionDef) and item.name == "process_email":
-            process_email_method = item
+        if isinstance(item, ast.AsyncFunctionDef) and item.name == "triage_email":
+            triage_email_method = item
             break
 
-    assert process_email_method is not None, "process_email method not found"
+    assert triage_email_method is not None, "triage_email method not found"
 
     # Get the return annotation as a string
-    if process_email_method.returns:
-        return_annotation = ast.unparse(process_email_method.returns)
+    if triage_email_method.returns:
+        return_annotation = ast.unparse(triage_email_method.returns)
 
-        # Check that AttachmentFoundEvent is in the return type
-        assert "AttachmentFoundEvent" in return_annotation, (
-            f"AttachmentFoundEvent must be in process_email return type. "
+        # Check that TriageEvent is in the return type
+        assert "TriageEvent" in return_annotation, (
+            f"TriageEvent must be in triage_email return type. "
             f"Found: {return_annotation}"
-        )
-
-        # Also verify StopEvent and None are present (the other possible returns)
-        assert "StopEvent" in return_annotation, (
-            f"StopEvent must be in process_email return type. "
-            f"Found: {return_annotation}"
-        )
-        assert "None" in return_annotation, (
-            f"None must be in process_email return type. Found: {return_annotation}"
         )
     else:
-        pytest.fail("process_email method has no return type annotation")
+        pytest.fail("triage_email method has no return type annotation")
 
 
 def test_workflow_events_structure():
@@ -92,11 +78,11 @@ def test_workflow_events_structure():
         if isinstance(node, ast.ClassDef):
             class_names.add(node.name)
 
-    # Check that all required event classes are defined
+    # Check that all required event classes are defined for the refactored workflow
     required_events = [
-        "AttachmentFoundEvent",
-        "AttachmentSummaryEvent",
-        "EmailReceivedEvent",
+        "EmailStartEvent",
+        "TriageEvent",
+        "PlanExecutionEvent",
         "EmailProcessedEvent",
     ]
 
