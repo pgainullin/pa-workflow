@@ -198,3 +198,30 @@ def test_observability_error_message_without_credentials(reset_callback_manager,
         # Check that the error message contains helpful information
         assert any("LANGFUSE_SECRET_KEY" in record.message and "LANGFUSE_PUBLIC_KEY" in record.message 
                    for record in caplog.records)
+
+
+def test_logging_handler_configured(reset_callback_manager):
+    """Test that Python logging handler is configured to forward logs to Langfuse."""
+    from basic.observability import setup_observability, LangfuseLoggingHandler
+    from llama_index.core import Settings
+    import logging
+    
+    # Clear callback manager
+    Settings.callback_manager = None
+    
+    # Set environment variables
+    with patch.dict(os.environ, {
+        "LANGFUSE_SECRET_KEY": "sk-test-key",
+        "LANGFUSE_PUBLIC_KEY": "pk-test-key",
+        "LANGFUSE_HOST": "https://test.langfuse.com"
+    }):
+        setup_observability()
+        
+        # Check that logging handler was added to workflow loggers
+        workflow_logger = logging.getLogger('basic.email_workflow')
+        has_langfuse_handler = any(
+            isinstance(h, LangfuseLoggingHandler) 
+            for h in workflow_logger.handlers
+        )
+        
+        assert has_langfuse_handler, "LangfuseLoggingHandler should be added to workflow loggers"

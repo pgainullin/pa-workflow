@@ -57,17 +57,18 @@ LANGFUSE_ENABLED=true                # Enable/disable observability (optional)
 
 The workflow includes optional observability using [Langfuse](https://langfuse.com/) for tracing and monitoring workflow execution. When configured, you can view detailed logs and traces of:
 
-- Workflow steps and their execution times
-- LLM calls with prompts and responses
-- Tool executions and their results
-- Errors and exceptions
+- **Workflow logs**: All Python logger.info(), logger.warning(), logger.error() calls are streamed to Langfuse
+- **Workflow steps**: Step execution times and transitions
+- **LLM calls**: Prompts, responses, and token usage
+- **Tool executions**: Parameters and results for each tool
+- **Errors and exceptions**: Full stack traces and context
 
 To enable observability:
 
 1. Sign up for a free account at [langfuse.com](https://langfuse.com/)
 2. Get your API keys from the Langfuse dashboard
 3. Set the environment variables `LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY`
-4. Run your workflow - traces will appear automatically in your Langfuse dashboard
+4. Run your workflow - traces and logs will appear automatically in your Langfuse dashboard
 
 If the Langfuse keys are not set, the workflow will run normally without observability.
 

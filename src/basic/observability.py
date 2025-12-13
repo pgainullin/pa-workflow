@@ -21,12 +21,95 @@ Usage:
 
 import logging
 import os
+from typing import Optional
 from urllib.parse import urlparse
 
 from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
 
 logger = logging.getLogger(__name__)
+
+
+class LangfuseLoggingHandler(logging.Handler):
+    """Custom logging handler that forwards logs to Langfuse as events.
+    
+    This handler captures Python log messages and sends them to Langfuse,
+    making workflow logs visible in the Langfuse dashboard alongside traces.
+    """
+    
+    def __init__(self, langfuse_client, level=logging.INFO):
+        """Initialize the handler.
+        
+        Args:
+            langfuse_client: Langfuse client instance
+            level: Minimum log level to capture (default: INFO)
+        """
+        super().__init__(level)
+        self.langfuse_client = langfuse_client
+        
+    def emit(self, record: logging.LogRecord) -> None:
+        """Emit a log record to Langfuse.
+        
+        Args:
+            record: Log record to emit
+        """
+        try:
+            # Format the log message
+            log_message = self.format(record)
+            
+            # Create metadata from the log record
+            metadata = {
+                "level": record.levelname,
+                "logger": record.name,
+                "module": record.module,
+                "function": record.funcName,
+                "line": record.lineno,
+            }
+            
+            # Add exception info if present
+            if record.exc_info:
+                metadata["exception"] = {
+                    "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
+                    "message": str(record.exc_info[1]) if record.exc_info[1] else None,
+                }
+            
+            # Send to Langfuse as an event
+            # Use the langfuse_context to ensure events are attached to current trace
+            try:
+                from langfuse.decorators import langfuse_context
+                
+                # Get current trace ID if available
+                trace_id = langfuse_context.get_current_trace_id()
+                
+                if trace_id:
+                    # Update current trace with the log event
+                    langfuse_context.update_current_trace(
+                        metadata={
+                            "log_event": {
+                                "message": log_message,
+                                **metadata
+                            }
+                        }
+                    )
+                else:
+                    # Create a standalone event if no active trace
+                    self.langfuse_client.event(
+                        name=f"log.{record.levelname.lower()}",
+                        metadata=metadata,
+                        input=log_message,
+                    )
+            except Exception:
+                # Fallback: create event directly on client
+                self.langfuse_client.event(
+                    name=f"log.{record.levelname.lower()}",
+                    metadata=metadata,
+                    input=log_message,
+                )
+                
+        except Exception:
+            # Don't let logging errors break the application
+            # Use handleError to report issues with the handler itself
+            self.handleError(record)
 
 
 def _sanitize_host_for_logging(host: str) -> str:
@@ -46,6 +129,45 @@ def _sanitize_host_for_logging(host: str) -> str:
     except Exception:
         # Fallback: return as-is if parsing fails
         return host
+
+
+def _setup_logging_handler(langfuse_client) -> None:
+    """Set up Python logging handler to forward logs to Langfuse.
+    
+    This configures the root logger and workflow-specific loggers to send
+    their log messages to Langfuse, making them visible in the dashboard.
+    
+    Args:
+        langfuse_client: Langfuse client instance
+    """
+    # Create the Langfuse logging handler
+    langfuse_log_handler = LangfuseLoggingHandler(langfuse_client, level=logging.INFO)
+    
+    # Set a formatter for better log messages
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    langfuse_log_handler.setFormatter(formatter)
+    
+    # Add handler to workflow-specific loggers
+    # These are the main loggers used in the workflows
+    workflow_loggers = [
+        'basic.email_workflow',
+        'basic.workflow',
+        'basic.tools',
+        'basic.utils',
+        'basic.response_utils',
+        'basic.plan_utils',
+    ]
+    
+    for logger_name in workflow_loggers:
+        workflow_logger = logging.getLogger(logger_name)
+        # Check if handler is already added to avoid duplicates
+        if not any(isinstance(h, LangfuseLoggingHandler) for h in workflow_logger.handlers):
+            workflow_logger.addHandler(langfuse_log_handler)
+            # Don't propagate to root to avoid duplicate logging
+            workflow_logger.propagate = False
 
 
 def setup_observability(enabled: bool | None = None) -> None:
@@ -101,11 +223,19 @@ def setup_observability(enabled: bool | None = None) -> None:
         return
     
     try:
-        # Import the Langfuse callback handler
+        # Import the Langfuse callback handler and client
         # Note: The llama-index-callbacks-langfuse package is a wrapper that
         # re-exports LlamaIndexCallbackHandler from the langfuse package.
         # We import directly from langfuse.llama_index for better clarity.
+        from langfuse import Langfuse
         from langfuse.llama_index import LlamaIndexCallbackHandler
+        
+        # Create the Langfuse client for logging
+        langfuse_client = Langfuse(
+            secret_key=secret_key,
+            public_key=public_key,
+            host=host,
+        )
         
         # Create the callback handler
         langfuse_handler = LlamaIndexCallbackHandler(
@@ -126,9 +256,13 @@ def setup_observability(enabled: bool | None = None) -> None:
         else:
             Settings.callback_manager = CallbackManager([langfuse_handler])
         
+        # Set up Python logging handler to stream workflow logs to Langfuse
+        # This captures logger.info(), logger.warning(), logger.error() calls
+        _setup_logging_handler(langfuse_client)
+        
         # Log sanitized host (only log the scheme and domain)
         safe_host = _sanitize_host_for_logging(host)
-        logger.info(f"Langfuse observability enabled (host: {safe_host})")
+        logger.info(f"Langfuse observability enabled with log streaming (host: {safe_host})")
         
     except ImportError as e:
         logger.error(
