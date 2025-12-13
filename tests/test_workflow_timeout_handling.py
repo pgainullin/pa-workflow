@@ -175,12 +175,12 @@ async def test_send_results_handles_timeout():
         plan_execution_event = PlanExecutionEvent(
             results=results, email_data=email_data, callback=callback
         )
-    result = await workflow.send_results(plan_execution_event, ctx)
+        result = await workflow.send_results(plan_execution_event, ctx)
 
-    # Should return StopEvent with timeout error
-    assert isinstance(result, StopEvent)
-    assert result.result.success is False
-    assert "timeout" in result.result.message.lower()
+        # Should return StopEvent with timeout error
+        assert isinstance(result, StopEvent)
+        assert result.result.success is False
+        assert "timeout" in result.result.message.lower()
 
 
 @pytest.mark.asyncio
