@@ -3,6 +3,11 @@
 
 This script tests the observability setup and shows clear error messages
 when there are issues with package installation or configuration.
+
+NOTE: This is a standalone diagnostic script that modifies sys.path to work
+without requiring package installation. This design allows users to run
+diagnostics even when the package isn't properly installed (which is one
+of the issues this script helps diagnose).
 """
 
 import logging
@@ -15,7 +20,9 @@ logging.basicConfig(
     format='%(levelname)s: %(message)s'
 )
 
-# Add src to path
+# Add src to path for standalone execution
+# This allows the script to work even when the package isn't installed,
+# which is helpful for diagnosing installation issues
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 def test_package_installed():
