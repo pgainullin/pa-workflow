@@ -76,9 +76,9 @@ class LangfuseLoggingHandler(logging.Handler):
             # Send to Langfuse as an event
             # Use the langfuse_context to ensure events are attached to current trace
             try:
+                # Get current trace ID if available (import done here for performance)
                 from langfuse.decorators import langfuse_context
                 
-                # Get current trace ID if available
                 trace_id = langfuse_context.get_current_trace_id()
                 
                 if trace_id:
@@ -98,16 +98,19 @@ class LangfuseLoggingHandler(logging.Handler):
                         metadata=metadata,
                         input=log_message,
                     )
-            except Exception:
-                # Fallback: create event directly on client
+            except (ImportError, AttributeError) as e:
+                # Fallback: create event directly on client if context not available
                 self.langfuse_client.event(
                     name=f"log.{record.levelname.lower()}",
                     metadata=metadata,
                     input=log_message,
                 )
                 
-        except Exception:
+        except Exception as e:
             # Don't let logging errors break the application
+            # Log the error for debugging but don't propagate
+            import sys
+            print(f"Error in LangfuseLoggingHandler: {e}", file=sys.stderr)
             # Use handleError to report issues with the handler itself
             self.handleError(record)
 
@@ -166,8 +169,10 @@ def _setup_logging_handler(langfuse_client) -> None:
         # Check if handler is already added to avoid duplicates
         if not any(isinstance(h, LangfuseLoggingHandler) for h in workflow_logger.handlers):
             workflow_logger.addHandler(langfuse_log_handler)
-            # Don't propagate to root to avoid duplicate logging
-            workflow_logger.propagate = False
+            # Only disable propagation if this is the logger's only handler
+            # This preserves existing logging configurations
+            if len(workflow_logger.handlers) == 1:
+                workflow_logger.propagate = False
 
 
 def setup_observability(enabled: bool | None = None) -> None:
