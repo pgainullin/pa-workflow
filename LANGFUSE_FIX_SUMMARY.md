@@ -2,11 +2,27 @@
 
 ## Issue Summary
 
-**Problem**: Nothing is reported to Langfuse when observability is configured.
+**Problem**: Nothing is reported to Langfuse when observability is configured. Additionally, workflow logs (logger.info, logger.warning, etc.) were not visible in Langfuse dashboard.
 
-**Root Cause**: The `llama-index-callbacks-langfuse` package, which is required for Langfuse integration, may not be installed even though it's listed as a dependency in `pyproject.toml`.
+**Root Cause**: The `llama-index-callbacks-langfuse` package, which is required for Langfuse integration, may not be installed even though it's listed as a dependency in `pyproject.toml`. Also, Python logging was not integrated with Langfuse.
 
-**Status**: ✅ RESOLVED
+**Status**: ✅ RESOLVED + ENHANCED
+
+---
+
+## Updates
+
+### Phase 1: Fixed Missing Traces (Initial Fix)
+- Improved error visibility (WARNING → ERROR)
+- Added actionable error messages
+- Created troubleshooting documentation
+- Added verification tools
+
+### Phase 2: Added Log Streaming (Enhancement)
+- Created `LangfuseLoggingHandler` to forward Python logs to Langfuse
+- All workflow logger calls now appear in Langfuse dashboard
+- Logs are linked to traces when available
+- Full metadata captured (level, module, function, line, exceptions)
 
 ---
 
@@ -96,6 +112,37 @@ Created `verify_observability_fix.py` - an executable script that:
 - Tests observability with and without credentials
 - Provides clear pass/fail results
 - Shows exactly what error messages users will see
+
+### 6. Added Python Log Streaming (NEW)
+
+Created `LangfuseLoggingHandler` class that forwards Python log messages to Langfuse:
+
+**Features:**
+- Captures all `logger.info()`, `logger.warning()`, `logger.error()` calls from workflows
+- Automatically configured for workflow-specific loggers (email_workflow, tools, utils, etc.)
+- Logs appear in Langfuse dashboard with full metadata:
+  - Log level, logger name, module, function, line number
+  - Exception information when present
+  - Links to traces when available
+- Seamless integration - no code changes needed in workflows
+
+**Implementation:**
+```python
+class LangfuseLoggingHandler(logging.Handler):
+    """Custom logging handler that forwards logs to Langfuse as events."""
+    
+    def emit(self, record: logging.LogRecord) -> None:
+        # Format message and extract metadata
+        # Send to Langfuse using langfuse_context or client.event()
+```
+
+**Example Log Output in Langfuse:**
+```
+2025-12-13 08:00:00 - basic.email_workflow - INFO - Starting workflow execution
+2025-12-13 08:00:01 - basic.email_workflow - INFO - Processing step 1: Triage
+2025-12-13 08:00:02 - basic.tools - INFO - Executing parse tool on file att-123
+2025-12-13 08:00:03 - basic.email_workflow - ERROR - Error processing request
+```
 
 ---
 
