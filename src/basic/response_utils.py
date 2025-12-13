@@ -193,11 +193,12 @@ def create_execution_log(results: list[dict], email_data: EmailData) -> str:
 
 def collect_attachments(results: list[dict] | None) -> list[Attachment]:
     try:
-        attachments = []
-        logger.info(f"[COLLECT ATTACHMENTS] Processing {len(results) if results else 0} result(s)")
-
         if not results:
+            logger.info("[COLLECT ATTACHMENTS] Processing 0 result(s)")
             return []
+
+        attachments = []
+        logger.info(f"[COLLECT ATTACHMENTS] Processing {len(results)} result(s)")
 
         for result in results:
             if not result.get("success", False):
