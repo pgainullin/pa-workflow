@@ -101,4 +101,4 @@ def setup_observability(enabled: bool | None = None) -> None:
 
 
 # Auto-initialize observability on module import
-setup_observability()
+# setup_observability()
