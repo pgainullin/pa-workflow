@@ -17,7 +17,11 @@ from typing import Any
 
 from deep_translator import GoogleTranslator
 from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
+from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
 
 from .utils import (
     download_file_from_llamacloud,
@@ -826,6 +830,119 @@ class PrintToPDFTool(Tool):
             "Output: file_id (LlamaCloud file ID of generated PDF)"
         )
 
+    def _is_markdown_table_row(self, line: str) -> bool:
+        """Check if a line looks like a markdown table row.
+        
+        Args:
+            line: Line to check
+            
+        Returns:
+            True if the line appears to be a markdown table row
+        """
+        stripped = line.strip()
+        # Table rows start and end with |, and contain at least one | in the middle
+        return stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 3
+    
+    def _parse_markdown_table(self, lines: list[str], start_idx: int) -> tuple[list[list[str]], int]:
+        """Parse a markdown table from the given lines.
+        
+        Args:
+            lines: List of all lines
+            start_idx: Index of the first table row
+            
+        Returns:
+            Tuple of (table_data as list of rows, index after the table)
+        """
+        table_data = []
+        idx = start_idx
+        
+        while idx < len(lines) and self._is_markdown_table_row(lines[idx]):
+            line = lines[idx].strip()
+            # Remove leading and trailing |
+            if line.startswith("|"):
+                line = line[1:]
+            if line.endswith("|"):
+                line = line[:-1]
+            
+            # Split by | and clean up cells
+            cells = [cell.strip() for cell in line.split("|")]
+            
+            # Check if this is a separator row (contains only dashes, spaces, and colons)
+            is_separator = all(
+                all(c in "-: " for c in cell) and ("-" in cell or not cell)
+                for cell in cells
+            )
+            
+            # Skip separator rows
+            if not is_separator:
+                table_data.append(cells)
+            
+            idx += 1
+        
+        return table_data, idx
+    
+    def _create_pdf_table(self, table_data: list[list[str]], page_width: float) -> Table:
+        """Create a ReportLab Table from parsed markdown table data.
+        
+        Args:
+            table_data: List of rows, each row is a list of cell values
+            page_width: Available page width in points
+            
+        Returns:
+            ReportLab Table object
+        """
+        if not table_data:
+            return None
+        
+        # Calculate column widths based on content and available space
+        num_cols = len(table_data[0])
+        # Use available width minus margins
+        available_width = page_width - (2 * self.PDF_MARGIN_POINTS)
+        col_width = available_width / num_cols
+        
+        # Create table with Paragraph objects for text wrapping
+        styles = getSampleStyleSheet()
+        cell_style = ParagraphStyle(
+            'CellStyle',
+            parent=styles['Normal'],
+            fontSize=9,
+            leading=11,
+        )
+        
+        # Convert cells to Paragraphs for automatic wrapping
+        table_with_paragraphs = []
+        for row in table_data:
+            paragraph_row = []
+            for cell in row:
+                # Handle empty cells
+                if not cell:
+                    cell = " "
+                # Encode safely for latin-1
+                safe_cell = cell.encode("latin-1", errors="replace").decode("latin-1")
+                paragraph_row.append(Paragraph(safe_cell, cell_style))
+            table_with_paragraphs.append(paragraph_row)
+        
+        # Create table
+        table = Table(table_with_paragraphs, colWidths=[col_width] * num_cols)
+        
+        # Style the table
+        table_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),  # Header row background
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),  # Header row text
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),  # Header row font
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),  # Grid lines
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 6),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ])
+        table.setStyle(table_style)
+        
+        return table
+    
     def _wrap_text(self, text: str, canvas_obj, max_width: float) -> list[str]:
         """Wrap text to fit within the specified width.
 
@@ -889,36 +1006,83 @@ class PrintToPDFTool(Tool):
         try:
             # Create PDF in memory
             pdf_buffer = io.BytesIO()
-            pdf_canvas = canvas.Canvas(pdf_buffer, pagesize=letter)
-            pdf_canvas.setFont(self.PDF_FONT_NAME, self.PDF_FONT_SIZE)
-
-            # Set up text
-            width, height = letter
-            y_position = height - self.PDF_MARGIN_POINTS
-
-            # Split text into lines and write to PDF
+            
+            # Use SimpleDocTemplate for better handling of tables and flowing content
+            doc = SimpleDocTemplate(
+                pdf_buffer,
+                pagesize=letter,
+                leftMargin=self.PDF_MARGIN_POINTS,
+                rightMargin=self.PDF_MARGIN_POINTS,
+                topMargin=self.PDF_MARGIN_POINTS,
+                bottomMargin=self.PDF_MARGIN_POINTS,
+            )
+            
+            # Build story (list of flowable elements)
+            story = []
+            styles = getSampleStyleSheet()
+            normal_style = styles['Normal']
+            heading_style = styles['Heading1']
+            
+            # Split text into lines
             input_lines = text.split("\n")
-            for input_line in input_lines:
-                # Wrap long lines
-                wrapped_lines = self._wrap_text(
-                    input_line, pdf_canvas, self.PDF_MAX_LINE_WIDTH
-                )
-
-                for wrapped_line in wrapped_lines:
-                    # Check if we need a new page
-                    if y_position < self.PDF_MARGIN_POINTS:
-                        pdf_canvas.showPage()
-                        pdf_canvas.setFont(self.PDF_FONT_NAME, self.PDF_FONT_SIZE)
-                        y_position = height - self.PDF_MARGIN_POINTS
-
-                    # Replace characters that can't be encoded in latin-1 (default font encoding)
-                    safe_line = wrapped_line.encode("latin-1", errors="replace").decode(
-                        "latin-1"
-                    )
-                    pdf_canvas.drawString(self.PDF_MARGIN_POINTS, y_position, safe_line)
-                    y_position -= self.PDF_LINE_SPACING  # Move down for next line
-
-            pdf_canvas.save()
+            width, height = letter
+            
+            i = 0
+            while i < len(input_lines):
+                line = input_lines[i]
+                
+                # Check if this is the start of a markdown table
+                if self._is_markdown_table_row(line):
+                    # Parse the entire table
+                    table_data, next_idx = self._parse_markdown_table(input_lines, i)
+                    
+                    if table_data:
+                        # Create and add the table to the story
+                        pdf_table = self._create_pdf_table(table_data, width)
+                        if pdf_table:
+                            story.append(pdf_table)
+                            story.append(Spacer(1, 12))  # Add some space after the table
+                    
+                    i = next_idx
+                    continue
+                
+                # Check for markdown headers
+                if line.strip().startswith("#"):
+                    # Count the # symbols to determine heading level
+                    header_level = len(line) - len(line.lstrip("#"))
+                    header_text = line.lstrip("#").strip()
+                    
+                    if header_text:
+                        # Encode safely for latin-1
+                        safe_text = header_text.encode("latin-1", errors="replace").decode("latin-1")
+                        # Use appropriate heading style
+                        if header_level == 1:
+                            story.append(Paragraph(safe_text, heading_style))
+                        else:
+                            # For other header levels, use bold normal text
+                            bold_style = ParagraphStyle(
+                                'BoldHeading',
+                                parent=normal_style,
+                                fontName='Helvetica-Bold',
+                                fontSize=12 - (header_level - 2),
+                                spaceAfter=6,
+                            )
+                            story.append(Paragraph(safe_text, bold_style))
+                        story.append(Spacer(1, 6))
+                else:
+                    # Regular text line
+                    if line.strip():
+                        # Encode safely for latin-1
+                        safe_line = line.encode("latin-1", errors="replace").decode("latin-1")
+                        story.append(Paragraph(safe_line, normal_style))
+                    else:
+                        # Empty line - add space
+                        story.append(Spacer(1, 6))
+                
+                i += 1
+            
+            # Build the PDF
+            doc.build(story)
 
             # Get PDF bytes
             pdf_bytes = pdf_buffer.getvalue()

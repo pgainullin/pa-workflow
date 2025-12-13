@@ -144,6 +144,44 @@ async def test_print_to_pdf_tool():
 
 
 @pytest.mark.asyncio
+async def test_print_to_pdf_with_markdown_tables():
+    """Test that markdown tables are properly rendered in PDF."""
+    from basic.tools import PrintToPDFTool
+
+    tool = PrintToPDFTool()
+
+    # Test markdown with tables
+    markdown_text = """# Mineral Resources
+
+| Variety | Volume | Density |
+|---------|--------|---------|
+| Oxidized | 9,830 | 2.58 |
+| Sulfide | 67,880 | 2.72 |
+| Oks. + Sulf. | 77,710 | 2.70 |
+
+Additional text after the table.
+"""
+
+    # Mock upload function
+    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+        mock_upload.return_value = "file-456"
+
+        # Test execution with markdown content
+        result = await tool.execute(text=markdown_text, filename="test_table.pdf")
+
+        assert result["success"] is True
+        assert "file_id" in result
+        assert result["file_id"] == "file-456"
+        assert mock_upload.called
+        
+        # Verify PDF was generated (has content)
+        pdf_bytes = mock_upload.call_args[0][0]
+        assert len(pdf_bytes) > 0
+        # PDFs start with %PDF header
+        assert pdf_bytes[:4] == b'%PDF'
+
+
+@pytest.mark.asyncio
 async def test_parse_tool():
     """Test the parse tool."""
     # Mock LlamaParse
