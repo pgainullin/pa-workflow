@@ -99,7 +99,7 @@ def test_observability_graceful_failure_without_package():
         "LANGFUSE_PUBLIC_KEY": "pk-test-key"
     }):
         # Mock the Langfuse import to fail
-        with patch.dict("sys.modules", {"langfuse.llama_index": None}):
+        with patch.dict("sys.modules", {"langfuse.llama_index": None, "langfuse": None}):
             from basic.observability import setup_observability
             
             # Clear callback manager first
