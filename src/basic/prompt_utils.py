@@ -1,5 +1,4 @@
 import html
-import html
 import re
 from importlib import resources
 
