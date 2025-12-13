@@ -23,7 +23,10 @@ logging.basicConfig(
 # Add src to path for standalone execution
 # This allows the script to work even when the package isn't installed,
 # which is helpful for diagnosing installation issues
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+# Only add local src if basic.observability is not importable (not installed)
+import importlib.util
+if importlib.util.find_spec("basic.observability") is None:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 def test_package_installed():
     """Test if the langfuse package is installed."""
