@@ -68,8 +68,6 @@ async def test_plan_parsing():
     """Test parsing of execution plan from LLM response."""
     from basic.models import EmailData
 
-    workflow = EmailWorkflow(timeout=60)
-
     email_data = EmailData(
         from_email="test@example.com", subject="Test", text="Test content"
     )
@@ -99,8 +97,6 @@ async def test_plan_parsing():
 async def test_plan_parsing_with_noise():
     """Test parsing plan when LLM includes extra text."""
     from basic.models import EmailData
-
-    workflow = EmailWorkflow(timeout=60)
 
     email_data = EmailData(
         from_email="test@example.com", subject="Test", text="Test content"
