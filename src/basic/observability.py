@@ -65,7 +65,9 @@ def setup_observability(enabled: bool | None = None) -> None:
     
     try:
         # Import the Langfuse callback handler
-        # The handler is actually in the langfuse package, not llama-index
+        # Note: The llama-index-callbacks-langfuse package is a wrapper that
+        # re-exports LlamaIndexCallbackHandler from the langfuse package.
+        # We import directly from langfuse.llama_index for better clarity.
         from langfuse.llama_index import LlamaIndexCallbackHandler
         
         # Create the callback handler
