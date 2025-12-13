@@ -57,17 +57,18 @@ LANGFUSE_ENABLED=true                # Enable/disable observability (optional)
 
 The workflow includes optional observability using [Langfuse](https://langfuse.com/) for tracing and monitoring workflow execution. When configured, you can view detailed logs and traces of:
 
-- Workflow steps and their execution times
-- LLM calls with prompts and responses
-- Tool executions and their results
-- Errors and exceptions
+- **Workflow logs**: All Python logger.info(), logger.warning(), logger.error() calls are streamed to Langfuse
+- **Workflow steps**: Step execution times and transitions
+- **LLM calls**: Prompts, responses, and token usage
+- **Tool executions**: Parameters and results for each tool
+- **Errors and exceptions**: Full stack traces and context
 
 To enable observability:
 
 1. Sign up for a free account at [langfuse.com](https://langfuse.com/)
 2. Get your API keys from the Langfuse dashboard
 3. Set the environment variables `LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY`
-4. Run your workflow - traces will appear automatically in your Langfuse dashboard
+4. Run your workflow - traces and logs will appear automatically in your Langfuse dashboard
 
 If the Langfuse keys are not set, the workflow will run normally without observability.
 
@@ -242,6 +243,42 @@ The workflow includes automatic retry logic for handling transient API errors:
 - **Connection/Timeout** - Network issues
 
 Retries use exponential backoff (up to 5 attempts) to handle temporary service disruptions gracefully. See [API_RETRY.md](API_RETRY.md) for details.
+
+## Troubleshooting
+
+### Traces Not Showing Up in Langfuse
+
+If you're not seeing traces in Langfuse, check the following:
+
+1. **Verify dependencies are installed**: Make sure you've installed the project with `pip install -e .` to get all dependencies including `llama-index-callbacks-langfuse`
+
+2. **Check environment variables**: Ensure `LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY` are set correctly:
+   ```bash
+   echo $LANGFUSE_SECRET_KEY
+   echo $LANGFUSE_PUBLIC_KEY
+   ```
+
+3. **Check logs for errors**: Run your workflow with logging enabled to see any errors:
+   ```bash
+   python -c "import logging; logging.basicConfig(level=logging.INFO); from basic import observability"
+   ```
+   
+   You should see: `INFO:basic.observability:Langfuse observability enabled`
+   
+   If you see an error about missing packages, reinstall:
+   ```bash
+   pip install llama-index-callbacks-langfuse
+   ```
+
+4. **Verify the package is installed**:
+   ```bash
+   pip show llama-index-callbacks-langfuse
+   ```
+
+5. **Test with demo script**: Run the observability demo to verify everything works:
+   ```bash
+   python demo_observability.py
+   ```
 
 ## References
 
