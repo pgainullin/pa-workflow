@@ -27,6 +27,21 @@ def sanitize_email_content(
     max_subject_len: int = 200,
     max_body_len: int = 2000,
 ) -> tuple[str, str]:
+    """
+    Sanitizes and truncates email subject and body content for safe display or processing.
+
+    Args:
+        subject (str | None): The subject of the email, possibly containing HTML or unsafe characters.
+        text (str | None): The plain text body of the email, if available.
+        html (str | None): The HTML body of the email, if available and text is not provided.
+        max_subject_len (int, optional): Maximum allowed length for the subject. Defaults to 200.
+        max_body_len (int, optional): Maximum allowed length for the body. Defaults to 2000.
+
+    Returns:
+        tuple[str, str]: A tuple containing:
+            - The sanitized and truncated subject string.
+            - The sanitized and truncated body string (or "(empty)" if no content is available).
+    """
     body = text if text else html if html else ""
     body = strip_html(body)
     body = body.strip().replace("\r\n", "\n").replace("\r", "\n")
