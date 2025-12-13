@@ -158,7 +158,7 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                         )
                         return match.group(0)
                     logger.warning(
-                        f"Invalid template reference format: '{ref}'. Expected 'step.field'."
+                        f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
                     )
                     return match.group(0)
 
@@ -183,7 +183,7 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
 
                 resolved_value = re.sub(r"\{\{([^}]+)\}\}", double_brace_replacer, value)
                 resolved_value = re.sub(
-                    r"\{(step_\d+\.[a-zA-Z0-9_]+)\}",
+                    r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}",
                     single_brace_replacer,
                     resolved_value,
                 )
