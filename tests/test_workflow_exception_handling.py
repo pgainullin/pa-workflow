@@ -209,8 +209,8 @@ async def test_send_results_handles_callback_errors():
     workflow._generate_user_response = AsyncMock(return_value="Test response")
     workflow._create_execution_log = MagicMock(return_value="Test log")
     
-    # Patch collect_attachments from response_utils
-    with patch("basic.response_utils.collect_attachments", return_value=[]):
+    # Patch collect_attachments as used in email_workflow
+    with patch("basic.email_workflow.collect_attachments", return_value=[]):
         # Mock _send_callback_email to raise an httpx error
         import httpx
         workflow._send_callback_email = AsyncMock(
