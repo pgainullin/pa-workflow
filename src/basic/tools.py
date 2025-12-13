@@ -843,6 +843,20 @@ class PrintToPDFTool(Tool):
         # Table rows start and end with |, and contain at least one | in the middle
         return stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 3
     
+    def _is_separator_row(self, cells: list[str]) -> bool:
+        """Check if a table row is a separator row (contains only dashes, spaces, and colons).
+        
+        Args:
+            cells: List of cell values
+            
+        Returns:
+            True if this is a separator row
+        """
+        return all(
+            all(c in "-: " for c in cell) and ("-" in cell or not cell)
+            for cell in cells
+        )
+    
     def _parse_markdown_table(self, lines: list[str], start_idx: int) -> tuple[list[list[str]], int]:
         """Parse a markdown table from the given lines.
         
@@ -867,14 +881,8 @@ class PrintToPDFTool(Tool):
             # Split by | and clean up cells
             cells = [cell.strip() for cell in line.split("|")]
             
-            # Check if this is a separator row (contains only dashes, spaces, and colons)
-            is_separator = all(
-                all(c in "-: " for c in cell) and ("-" in cell or not cell)
-                for cell in cells
-            )
-            
             # Skip separator rows
-            if not is_separator:
+            if not self._is_separator_row(cells):
                 table_data.append(cells)
             
             idx += 1
@@ -889,9 +897,13 @@ class PrintToPDFTool(Tool):
             page_width: Available page width in points
             
         Returns:
-            ReportLab Table object
+            ReportLab Table object or None if table_data is empty or invalid
         """
-        if not table_data:
+        if not table_data or len(table_data) == 0:
+            return None
+        
+        # Verify all rows have cells
+        if not table_data[0]:
             return None
         
         # Calculate column widths based on content and available space
@@ -925,10 +937,10 @@ class PrintToPDFTool(Tool):
         # Create table
         table = Table(table_with_paragraphs, colWidths=[col_width] * num_cols)
         
-        # Style the table
+        # Style the table with better contrast for accessibility
         table_style = TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),  # Header row background
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),  # Header row text
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgrey),  # Header row background
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),  # Header row text (white on dark grey for contrast)
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),  # Header row font
             ('FONTSIZE', (0, 0), (-1, 0), 10),
@@ -1059,12 +1071,16 @@ class PrintToPDFTool(Tool):
                         if header_level == 1:
                             story.append(Paragraph(safe_text, heading_style))
                         else:
-                            # For other header levels, use bold normal text
+                            # For other header levels, use bold text with appropriate size
+                            # Map header levels to font sizes: H2=14, H3=12, H4=11, H5=10, H6+=10
+                            header_font_sizes = {2: 14, 3: 12, 4: 11}
+                            font_size = header_font_sizes.get(header_level, 10)
+                            
                             bold_style = ParagraphStyle(
                                 'BoldHeading',
                                 parent=normal_style,
                                 fontName='Helvetica-Bold',
-                                fontSize=12 - (header_level - 2),
+                                fontSize=font_size,
                                 spaceAfter=6,
                             )
                             story.append(Paragraph(safe_text, bold_style))
