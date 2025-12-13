@@ -209,19 +209,45 @@ def test_logging_handler_configured(reset_callback_manager):
     # Clear callback manager
     Settings.callback_manager = None
     
-    # Set environment variables
-    with patch.dict(os.environ, {
-        "LANGFUSE_SECRET_KEY": "sk-test-key",
-        "LANGFUSE_PUBLIC_KEY": "pk-test-key",
-        "LANGFUSE_HOST": "https://test.langfuse.com"
-    }):
-        setup_observability()
-        
-        # Check that logging handler was added to workflow loggers
-        workflow_logger = logging.getLogger('basic.email_workflow')
-        has_langfuse_handler = any(
-            isinstance(h, LangfuseLoggingHandler) 
-            for h in workflow_logger.handlers
-        )
-        
-        assert has_langfuse_handler, "LangfuseLoggingHandler should be added to workflow loggers"
+    # Save original handlers state for cleanup
+    workflow_loggers = [
+        'basic.email_workflow',
+        'basic.workflow',
+        'basic.tools',
+        'basic.utils',
+        'basic.response_utils',
+        'basic.plan_utils',
+    ]
+    original_handlers = {}
+    for logger_name in workflow_loggers:
+        workflow_logger = logging.getLogger(logger_name)
+        original_handlers[logger_name] = workflow_logger.handlers.copy()
+    
+    try:
+        # Set environment variables
+        with patch.dict(os.environ, {
+            "LANGFUSE_SECRET_KEY": "sk-test-key",
+            "LANGFUSE_PUBLIC_KEY": "pk-test-key",
+            "LANGFUSE_HOST": "https://test.langfuse.com"
+        }):
+            setup_observability()
+            
+            # Check that logging handler was added to workflow loggers
+            workflow_logger = logging.getLogger('basic.email_workflow')
+            has_langfuse_handler = any(
+                isinstance(h, LangfuseLoggingHandler) 
+                for h in workflow_logger.handlers
+            )
+            
+            assert has_langfuse_handler, "LangfuseLoggingHandler should be added to workflow loggers"
+    finally:
+        # Clean up: remove LangfuseLoggingHandler instances from all workflow loggers
+        for logger_name in workflow_loggers:
+            workflow_logger = logging.getLogger(logger_name)
+            workflow_logger.handlers = [
+                h for h in workflow_logger.handlers 
+                if not isinstance(h, LangfuseLoggingHandler)
+            ]
+            # Restore original handlers if needed
+            if not workflow_logger.handlers and original_handlers[logger_name]:
+                workflow_logger.handlers = original_handlers[logger_name]

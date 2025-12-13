@@ -19,6 +19,7 @@ Usage:
     setup_observability(enabled=True)
 """
 
+import atexit
 import logging
 import os
 from urllib.parse import urlparse
@@ -104,6 +105,9 @@ class LangfuseLoggingHandler(logging.Handler):
                     )
             except (ImportError, AttributeError) as e:
                 # Fallback: create event directly on client if context not available
+                # Log debug info to help diagnose trace attachment issues
+                import sys
+                print(f"Debug: Failed to attach log to trace: {e}", file=sys.stderr)
                 self.langfuse_client.event(
                     name=f"log.{record.levelname.lower()}",
                     metadata=metadata,
@@ -242,6 +246,9 @@ def setup_observability(enabled: bool | None = None) -> None:
             public_key=public_key,
             host=host,
         )
+        
+        # Register cleanup to flush buffered events on shutdown
+        atexit.register(lambda: langfuse_client.flush())
         
         # Create the callback handler
         langfuse_handler = LlamaIndexCallbackHandler(
