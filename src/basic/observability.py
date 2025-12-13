@@ -77,8 +77,17 @@ def setup_observability(enabled: bool | None = None) -> None:
             host=host,
         )
         
-        # Set up the callback manager with the Langfuse handler
-        Settings.callback_manager = CallbackManager([langfuse_handler])
+        # Set up the callback manager with the Langfuse handler, preserving existing handlers
+        existing_manager = getattr(Settings, "callback_manager", None)
+        if isinstance(existing_manager, CallbackManager):
+            # Avoid adding duplicate handlers
+            if not any(
+                type(h).__name__ == type(langfuse_handler).__name__ and getattr(h, "host", None) == host
+                for h in getattr(existing_manager, "handlers", [])
+            ):
+                existing_manager.handlers.append(langfuse_handler)
+        else:
+            Settings.callback_manager = CallbackManager([langfuse_handler])
         
         logger.info(f"Langfuse observability enabled (host: {host})")
         
