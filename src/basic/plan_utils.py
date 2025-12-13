@@ -9,6 +9,33 @@ from .models import EmailData
 logger = logging.getLogger(__name__)
 
 
+def _create_fallback_plan(email_data: EmailData) -> list[dict]:
+    """Create a fallback plan when LLM response cannot be parsed."""
+    fallback_plan = []
+
+    if email_data.attachments:
+        for i, att in enumerate(email_data.attachments):
+            fallback_plan.append(
+                {
+                    "tool": "parse",
+                    "params": {"file_id": att.id or f"att-{i + 1}"},
+                    "description": f"Parse attachment: {att.name}",
+                }
+            )
+
+    email_content = email_data.text or email_data.html or "(empty)"
+    email_content = email_content[:5000]
+    fallback_plan.append(
+        {
+            "tool": "summarise",
+            "params": {"text": email_content},
+            "description": "Summarize email content",
+        }
+    )
+
+    return fallback_plan
+
+
 def parse_plan(response: str, email_data: EmailData) -> list[dict]:
     """Parse the execution plan from LLM response."""
     try:
@@ -28,56 +55,10 @@ def parse_plan(response: str, email_data: EmailData) -> list[dict]:
                 return plan
 
         logger.warning("Could not parse plan from LLM response, using fallback")
-
-        fallback_plan = []
-
-        if email_data.attachments:
-            for i, att in enumerate(email_data.attachments):
-                fallback_plan.append(
-                    {
-                        "tool": "parse",
-                        "params": {"file_id": att.id or f"att-{i + 1}"},
-                        "description": f"Parse attachment: {att.name}",
-                    }
-                )
-
-        email_content = email_data.text or email_data.html or "(empty)"
-        email_content = email_content[:5000]
-        fallback_plan.append(
-            {
-                "tool": "summarise",
-                "params": {"text": email_content},
-                "description": "Summarize email content",
-            }
-        )
-
-        return fallback_plan
+        return _create_fallback_plan(email_data)
     except Exception:
         logger.exception("Error parsing plan")
-
-        fallback_plan = []
-
-        if email_data.attachments:
-            for i, att in enumerate(email_data.attachments):
-                fallback_plan.append(
-                    {
-                        "tool": "parse",
-                        "params": {"file_id": att.id or f"att-{i + 1}"},
-                        "description": f"Parse attachment: {att.name}",
-                    }
-                )
-
-        email_content = email_data.text or email_data.html or "(empty)"
-        email_content = email_content[:5000]
-        fallback_plan.append(
-            {
-                "tool": "summarise",
-                "params": {"text": email_content},
-                "description": "Summarize email content",
-            }
-        )
-
-        return fallback_plan
+        return _create_fallback_plan(email_data)
 
 
 def _extract_referenced_steps(params: dict) -> set[str]:
@@ -85,8 +66,7 @@ def _extract_referenced_steps(params: dict) -> set[str]:
     for value in params.values():
         if isinstance(value, str):
             has_template = ("{{" in value and "}}" in value) or (
-                re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
-                is not None
+                re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value) is not None
             )
 
             if has_template:
@@ -99,9 +79,7 @@ def _extract_referenced_steps(params: dict) -> set[str]:
                         if step_key.startswith("step_"):
                             referenced_steps.add(step_key)
 
-                matches = re.finditer(
-                    r"\{(step_\d+)\.[a-zA-Z_][a-zA-Z0-9_]*\}", value
-                )
+                matches = re.finditer(r"\{(step_\d+)\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
                 for match in matches:
                     step_key = match.group(1)
                     referenced_steps.add(step_key)
@@ -138,8 +116,7 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
     for key, value in params.items():
         if isinstance(value, str):
             has_template = ("{{" in value and "}}" in value) or (
-                re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value)
-                is not None
+                re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value) is not None
             )
 
             if has_template:
@@ -181,14 +158,18 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                     )
                     return match.group(0)
 
-                resolved_value = re.sub(r"\{\{([^}]+)\}\}", double_brace_replacer, value)
+                resolved_value = re.sub(
+                    r"\{\{([^}]+)\}\}", double_brace_replacer, value
+                )
                 resolved_value = re.sub(
                     r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}",
                     single_brace_replacer,
                     resolved_value,
                 )
                 resolved[key] = resolved_value
-            elif value.startswith("att-") or _is_attachment_reference(value, email_data):
+            elif value.startswith("att-") or _is_attachment_reference(
+                value, email_data
+            ):
                 att_index = value
                 attachment_found = False
                 for att in email_data.attachments:
