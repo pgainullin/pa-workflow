@@ -173,10 +173,7 @@ def _setup_logging_handler(langfuse_client) -> None:
         # Check if handler is already added to avoid duplicates
         if not any(isinstance(h, LangfuseLoggingHandler) for h in workflow_logger.handlers):
             workflow_logger.addHandler(langfuse_log_handler)
-            # Only disable propagation if this is the logger's only handler
-            # This preserves existing logging configurations
-            if len(workflow_logger.handlers) == 1:
-                workflow_logger.propagate = False
+            # Do not disable propagation; allow logs to propagate to the root logger
 
 
 def setup_observability(enabled: bool | None = None) -> None:
