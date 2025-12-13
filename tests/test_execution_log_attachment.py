@@ -15,7 +15,7 @@ os.environ.setdefault("LLAMA_CLOUD_PROJECT_ID", "test-project-id")
 with patch("llama_index.llms.google_genai.GoogleGenAI"):
     with patch("google.genai.Client"):
         with patch("llama_parse.LlamaParse"):
-            from basic.email_workflow import EmailWorkflow, PlanExecutionEvent
+            from basic.email_workflow import EmailWorkflow, PlanExecutionEvent, RESPONSE_BEST_PRACTICES
 
 from basic.models import CallbackConfig, EmailData
 from basic.response_utils import create_execution_log, generate_user_response
@@ -225,9 +225,6 @@ async def test_user_response_generation_with_fallback():
     # Mock LLM to fail
     workflow._llm_complete_with_retry = AsyncMock(side_effect=Exception("LLM error"))
 
-    # Import RESPONSE_BEST_PRACTICES from email_workflow
-    from basic.email_workflow import RESPONSE_BEST_PRACTICES
-    
     response = await generate_user_response(
         results, email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
     )
@@ -259,8 +256,6 @@ async def test_user_response_with_no_successful_results():
         },
     ]
 
-    from basic.email_workflow import RESPONSE_BEST_PRACTICES
-    
     response = await generate_user_response(
         results, email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
     )

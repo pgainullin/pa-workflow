@@ -24,6 +24,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
                 EmailStartEvent,
                 TriageEvent,
                 PlanExecutionEvent,
+                RESPONSE_BEST_PRACTICES,
             )
 
 from basic.models import CallbackConfig, EmailData
@@ -195,8 +196,6 @@ async def test_generate_user_response_handles_none_results():
 
     workflow = EmailWorkflow(timeout=120)
 
-    from basic.email_workflow import RESPONSE_BEST_PRACTICES
-
     # Test with None results
     response = await generate_user_response(
         None, email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
@@ -219,8 +218,6 @@ async def test_generate_user_response_handles_invalid_results():
     )
 
     workflow = EmailWorkflow(timeout=120)
-
-    from basic.email_workflow import RESPONSE_BEST_PRACTICES
 
     # Test with invalid results type (string instead of list)
     response = await generate_user_response(
