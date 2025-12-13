@@ -59,7 +59,7 @@ def setup_observability(enabled: bool | None = None) -> None:
     if not secret_key or not public_key:
         logger.warning(
             "Langfuse observability is enabled but LANGFUSE_SECRET_KEY or "
-            "LANGFUSE_PUBLIC_KEY are not set. Observability will be disabled."
+            "LANGFUSE_PUBLIC_KEY are not set. Skipping observability setup."
         )
         return
     
