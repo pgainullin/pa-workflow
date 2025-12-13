@@ -27,7 +27,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             )
 
 from basic.models import CallbackConfig, EmailData
-from basic.response_utils import create_execution_log, collect_attachments
+from basic.response_utils import create_execution_log, collect_attachments, generate_user_response
 from workflows import Context
 from workflows.events import StopEvent
 
