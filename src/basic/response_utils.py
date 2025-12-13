@@ -10,6 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 def strip_html(text: str) -> str:
+    """Remove HTML tags and decode basic HTML entities from a string.
+
+    Args:
+        text (str): The input string that may contain HTML tags and entities.
+
+    Returns:
+        str: The plain text with HTML tags removed and common entities decoded.
+    """
     if not text:
         return ""
     text = re.sub(r"<[^>]+>", "", text)
