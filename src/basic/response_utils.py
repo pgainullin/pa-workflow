@@ -191,10 +191,14 @@ def create_execution_log(results: list[dict], email_data: EmailData) -> str:
         return f"# Workflow Execution Log\n\n**Error:** Failed to generate detailed log: {e!s}\n\n**Processed Steps:** {len(results) if results else 0}"
 
 
-def collect_attachments(results: list[dict]) -> list[Attachment]:
+def collect_attachments(results: list[dict] | None) -> list[Attachment]:
     try:
+        if not results:
+            logger.info("[COLLECT ATTACHMENTS] Processing 0 result(s)")
+            return []
+
         attachments = []
-        logger.info(f"[COLLECT ATTACHMENTS] Processing {len(results) if results else 0} result(s)")
+        logger.info(f"[COLLECT ATTACHMENTS] Processing {len(results)} result(s)")
 
         for result in results:
             if not result.get("success", False):
