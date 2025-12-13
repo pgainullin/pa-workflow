@@ -45,7 +45,31 @@ LLAMA_CLOUD_PROJECT_ID=proj-...      # Your LlamaCloud project ID
 
 # Required for AI features
 GEMINI_API_KEY=...                   # Google Gemini API key for summarization
+
+# Optional: Observability with Langfuse
+LANGFUSE_SECRET_KEY=sk-...           # Langfuse secret key for tracing
+LANGFUSE_PUBLIC_KEY=pk-...           # Langfuse public key for tracing
+LANGFUSE_HOST=https://cloud.langfuse.com  # Langfuse server URL (optional)
+LANGFUSE_ENABLED=true                # Enable/disable observability (optional)
 ```
+
+### Observability with Langfuse
+
+The workflow includes optional observability using [Langfuse](https://langfuse.com/) for tracing and monitoring workflow execution. When configured, you can view detailed logs and traces of:
+
+- Workflow steps and their execution times
+- LLM calls with prompts and responses
+- Tool executions and their results
+- Errors and exceptions
+
+To enable observability:
+
+1. Sign up for a free account at [langfuse.com](https://langfuse.com/)
+2. Get your API keys from the Langfuse dashboard
+3. Set the environment variables `LANGFUSE_SECRET_KEY` and `LANGFUSE_PUBLIC_KEY`
+4. Run your workflow - traces will appear automatically in your Langfuse dashboard
+
+If the Langfuse keys are not set, the workflow will run normally without observability.
 
 ## Usage
 

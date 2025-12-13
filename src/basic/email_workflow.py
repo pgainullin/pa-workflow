@@ -47,6 +47,7 @@ from .utils import (
     text_to_html,
     api_retry,
 )
+from . import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
 
 logger = logging.getLogger(__name__)
 
