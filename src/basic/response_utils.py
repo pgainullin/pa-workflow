@@ -71,6 +71,18 @@ async def generate_user_response(
     llm_complete: Callable[[str], Awaitable[str]],
     response_best_practices: str,
 ) -> str:
+    """
+    Generate a user-friendly response message based on email processing results.
+
+    Args:
+        results (list[dict]): A list of dictionaries containing the results of each processing step.
+        email_data (EmailData): The original email data, including subject and content.
+        llm_complete (Callable[[str], Awaitable[str]]): An asynchronous callback function that takes a prompt string and returns a generated response string from a language model.
+        response_best_practices (str): A string describing best practices to follow when generating the user response.
+
+    Returns:
+        str: A concise, user-friendly response message summarizing the processing results.
+    """
     try:
         if results is None:
             logger.warning("Results is None in generate_user_response")
