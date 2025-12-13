@@ -17,6 +17,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             from basic.email_workflow import EmailWorkflow
 
 from basic.models import CallbackConfig, EmailData
+from basic.plan_utils import parse_plan
 
 
 @pytest.mark.asyncio
@@ -87,7 +88,7 @@ async def test_plan_parsing():
         }
     ]"""
 
-    plan = workflow._parse_plan(response, email_data)
+    plan = parse_plan(response, email_data)
 
     assert len(plan) == 2
     assert plan[0]["tool"] == "parse"
@@ -116,7 +117,7 @@ async def test_plan_parsing_with_noise():
     ]
     This should work well."""
 
-    plan = workflow._parse_plan(response, email_data)
+    plan = parse_plan(response, email_data)
 
     assert len(plan) == 1
     assert plan[0]["tool"] == "summarise"
