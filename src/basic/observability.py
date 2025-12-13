@@ -64,22 +64,21 @@ def setup_observability(enabled: bool | None = None) -> None:
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
     
-    # Validate host URL if provided
-    if host:
-        try:
-            parsed = urlparse(host)
-            if not parsed.scheme or parsed.scheme not in ("http", "https"):
-                raise ValueError("Invalid scheme")
-            if not parsed.netloc:
-                raise ValueError("Invalid netloc")
-        except (ValueError, Exception):
-            # Format message to avoid misleading ellipsis for short URLs
-            host_display = host if len(host) <= 50 else f"{host[:50]}..."
-            logger.warning(
-                f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
-                "Falling back to default host."
-            )
-            host = "https://cloud.langfuse.com"
+    # Validate host URL format
+    try:
+        parsed = urlparse(host)
+        if not parsed.scheme or parsed.scheme not in ("http", "https"):
+            raise ValueError("Invalid scheme")
+        if not parsed.netloc:
+            raise ValueError("Invalid netloc")
+    except (ValueError, Exception):
+        # Format message to avoid misleading ellipsis for short URLs
+        host_display = host if len(host) <= 50 else f"{host[:50]}..."
+        logger.warning(
+            f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
+            "Falling back to default host."
+        )
+        host = "https://cloud.langfuse.com"
     
     # Determine if observability should be enabled
     if enabled is None:
