@@ -162,6 +162,28 @@ class EmailWorkflow(Workflow):
         response = await self.llm.acomplete(prompt)
         return str(response)
 
+    async def _generate_user_response(
+        self, results: list[dict], email_data: EmailData
+    ) -> str:
+        """Backward-compatible wrapper for generate_user_response.
+
+        This method maintains compatibility with existing tests that call
+        workflow._generate_user_response(results, email_data).
+
+        Args:
+            results: List of execution results
+            email_data: Email data containing subject and body
+
+        Returns:
+            Generated user response string
+        """
+        return await generate_user_response(
+            results,
+            email_data,
+            self._llm_complete_with_retry,
+            RESPONSE_BEST_PRACTICES,
+        )
+
     @step
     async def triage_email(self, ev: EmailStartEvent, ctx: Context) -> TriageEvent:
         """Triage the email and create an execution plan using available tools.
