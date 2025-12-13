@@ -66,7 +66,7 @@ Added 2 new tests in `tests/test_observability.py`:
 - `test_observability_error_message_without_package`: Verifies helpful error when package is missing
 - `test_observability_error_message_without_credentials`: Verifies helpful error when credentials are missing
 
-All 9 observability tests now pass.
+All 10 observability tests now pass.
 
 ### 5. Comprehensive Documentation
 
