@@ -161,9 +161,7 @@ async def test_collect_attachments_from_results():
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
     ) as mock_genai:
-        from basic.email_workflow import EmailWorkflow
-
-        workflow = EmailWorkflow()
+        from basic.response_utils import collect_attachments
 
         # Mock results with a print_to_pdf step that generated a file
         results = [
@@ -187,7 +185,7 @@ async def test_collect_attachments_from_results():
             },
         ]
 
-        attachments = workflow._collect_attachments(results)
+        attachments = collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-123"
@@ -202,9 +200,7 @@ async def test_collect_attachments_skips_failed_steps():
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
     ) as mock_genai:
-        from basic.email_workflow import EmailWorkflow
-
-        workflow = EmailWorkflow()
+        from basic.response_utils import collect_attachments
 
         # Mock results with failed and successful steps
         results = [
@@ -222,7 +218,7 @@ async def test_collect_attachments_skips_failed_steps():
             },
         ]
 
-        attachments = workflow._collect_attachments(results)
+        attachments = collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-456"

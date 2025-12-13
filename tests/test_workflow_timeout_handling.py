@@ -248,11 +248,11 @@ def test_create_execution_log_handles_none_results():
 
 
 def test_collect_attachments_handles_none_results():
-    """Test that _collect_attachments handles None results gracefully."""
-    workflow = EmailWorkflow(timeout=120)
+    """Test that collect_attachments handles None results gracefully."""
+    from basic.response_utils import collect_attachments
 
     # Test with None results
-    attachments = workflow._collect_attachments(None)
+    attachments = collect_attachments(None)
     
     # Should return empty list
     assert isinstance(attachments, list)
