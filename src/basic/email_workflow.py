@@ -47,7 +47,7 @@ from .utils import (
     text_to_html,
     api_retry,
 )
-from . import observability  # Initialize observability (Langfuse tracing)
+from . import observability  # Import observability module to enable Langfuse tracing
 
 logger = logging.getLogger(__name__)
 

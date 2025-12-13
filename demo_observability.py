@@ -1,6 +1,10 @@
 #!/usr/bin/env python
 """Demo script showing Langfuse observability in action.
 
+NOTE: This script is for development and demonstration purposes only.
+      It modifies sys.path to import from the local 'src' directory.
+      When the package is installed via pip, imports work normally without path manipulation.
+
 This script demonstrates how to use the Langfuse observability integration
 to trace workflow execution. It runs a simple workflow and shows how the
 traces appear in Langfuse.
@@ -24,7 +28,8 @@ import asyncio
 import os
 import sys
 
-# Add src directory to path
+# Add src directory to path (for development/demo purposes only)
+# When installed via pip, the 'basic' module is directly importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 

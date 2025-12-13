@@ -10,67 +10,84 @@ from unittest.mock import patch
 import pytest
 
 
-def test_observability_disabled_without_keys():
-    """Test that observability is disabled when Langfuse keys are not set."""
-    # Clear any existing observability settings
+@pytest.fixture
+def reset_callback_manager():
+    """Fixture to save and restore Settings.callback_manager for test isolation."""
     from llama_index.core import Settings
+    original_manager = Settings.callback_manager
+    yield
+    Settings.callback_manager = original_manager
+
+
+def test_observability_disabled_without_keys(reset_callback_manager):
+    """Test that observability is disabled when Langfuse keys are not set."""
+    from basic.observability import setup_observability
+    from llama_index.core import Settings
+    
+    # Clear callback manager
     Settings.callback_manager = None
     
-    # Clear environment variables
+    # Clear environment variables and call setup directly
     with patch.dict(os.environ, {}, clear=True):
-        # Reimport the module to trigger setup
-        import importlib
-        from basic import observability
-        importlib.reload(observability)
+        setup_observability()
         
         # Observability should be disabled (callback_manager is None or empty)
         assert Settings.callback_manager is None or len(Settings.callback_manager.handlers) == 0
 
 
-def test_observability_enabled_with_keys():
+def test_observability_enabled_with_keys(reset_callback_manager):
     """Test that observability is enabled when Langfuse keys are set."""
-    # Clear any existing observability settings
+    from basic.observability import setup_observability
     from llama_index.core import Settings
+    
+    # Clear callback manager
     Settings.callback_manager = None
     
-    # Set environment variables
+    # Set environment variables and call setup directly
     with patch.dict(os.environ, {
         "LANGFUSE_SECRET_KEY": "sk-test-key",
         "LANGFUSE_PUBLIC_KEY": "pk-test-key",
         "LANGFUSE_HOST": "https://test.langfuse.com"
     }):
-        # Reimport the module to trigger setup
-        import importlib
-        from basic import observability
-        importlib.reload(observability)
+        setup_observability()
         
         # Observability should be enabled
         assert Settings.callback_manager is not None
         assert len(Settings.callback_manager.handlers) > 0
 
 
-def test_observability_explicitly_disabled():
+def test_observability_explicitly_disabled(reset_callback_manager):
     """Test that observability can be explicitly disabled even with keys present."""
-    # Clear any existing observability settings
+    from basic.observability import setup_observability
     from llama_index.core import Settings
+    
+    # Clear callback manager
     Settings.callback_manager = None
     
-    # Set environment variables with explicit disable
+    # Test with environment variable LANGFUSE_ENABLED=false
     with patch.dict(os.environ, {
         "LANGFUSE_SECRET_KEY": "sk-test-key",
         "LANGFUSE_PUBLIC_KEY": "pk-test-key",
         "LANGFUSE_ENABLED": "false"
     }):
-        # Reimport the module to trigger setup
-        import importlib
-        from basic import observability
-        importlib.reload(observability)
+        setup_observability()
+        
+        # Observability should be disabled
+        assert Settings.callback_manager is None or len(Settings.callback_manager.handlers) == 0
+    
+    # Test with explicit enabled=False parameter
+    Settings.callback_manager = None
+    with patch.dict(os.environ, {
+        "LANGFUSE_SECRET_KEY": "sk-test-key",
+        "LANGFUSE_PUBLIC_KEY": "pk-test-key"
+    }):
+        setup_observability(enabled=False)
         
         # Observability should be disabled
         assert Settings.callback_manager is None or len(Settings.callback_manager.handlers) == 0
 
 
-def test_observability_setup_function():
+def test_observability_setup_function(reset_callback_manager):
     """Test that the setup_observability function can be called explicitly."""
     from basic.observability import setup_observability
     
@@ -85,12 +102,12 @@ def test_observability_setup_function():
         # Should work with enabled=True (but may not actually initialize if import fails)
         try:
             setup_observability(enabled=True)
-        except Exception as e:
+        except (ImportError, ModuleNotFoundError):
             # It's okay if it fails due to import issues in test environment
-            assert "import" in str(e).lower() or "langfuse" in str(e).lower()
+            pass
 
 
-def test_observability_graceful_failure_without_package():
+def test_observability_graceful_failure_without_package(reset_callback_manager):
     """Test that observability fails gracefully if the package is not installed."""
     from llama_index.core import Settings
     

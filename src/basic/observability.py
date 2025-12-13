@@ -44,6 +44,14 @@ def setup_observability(enabled: bool | None = None) -> None:
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
     
+    # Validate host URL if provided
+    if host and not (host.startswith("http://") or host.startswith("https://")):
+        logger.warning(
+            f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host[:50]}... "
+            "Falling back to default host."
+        )
+        host = "https://cloud.langfuse.com"
+    
     # Determine if observability should be enabled
     if enabled is None:
         # Auto-enable if keys are present and LANGFUSE_ENABLED is not explicitly set to false
@@ -89,7 +97,10 @@ def setup_observability(enabled: bool | None = None) -> None:
         else:
             Settings.callback_manager = CallbackManager([langfuse_handler])
         
-        logger.info(f"Langfuse observability enabled (host: {host})")
+        # Log sanitized host (only log the scheme and domain)
+        host_parts = host.split("://", 1)
+        safe_host = host_parts[0] + "://" + host_parts[1].split("/")[0] if len(host_parts) > 1 else host
+        logger.info(f"Langfuse observability enabled (host: {safe_host})")
         
     except ImportError as e:
         logger.warning(
@@ -97,7 +108,12 @@ def setup_observability(enabled: bool | None = None) -> None:
             "Install llama-index-callbacks-langfuse to enable observability."
         )
     except Exception as e:
-        logger.error(f"Failed to initialize Langfuse observability: {e}", exc_info=True)
+        logger.error(
+            f"Langfuse observability is disabled due to an unexpected error: {e}. "
+            "Please check your Langfuse configuration and that all dependencies are installed. "
+            "See the traceback below for details.",
+            exc_info=True
+        )
 
 
 # Auto-initialize observability on module import
