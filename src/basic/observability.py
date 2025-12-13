@@ -29,6 +29,25 @@ from llama_index.core.callbacks import CallbackManager
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_host_for_logging(host: str) -> str:
+    """Sanitize host URL for logging by extracting only scheme and domain.
+    
+    Args:
+        host: The host URL to sanitize
+        
+    Returns:
+        Sanitized host URL containing only scheme and domain (no path or query)
+    """
+    try:
+        parsed = urlparse(host)
+        if parsed.scheme and parsed.netloc:
+            return f"{parsed.scheme}://{parsed.netloc}"
+        return host
+    except Exception:
+        # Fallback: return as-is if parsing fails
+        return host
+
+
 def setup_observability(enabled: bool | None = None) -> None:
     """Set up Langfuse observability for workflow tracing.
     
@@ -46,14 +65,21 @@ def setup_observability(enabled: bool | None = None) -> None:
     host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
     
     # Validate host URL if provided
-    if host and not (host.startswith("http://") or host.startswith("https://")):
-        # Format message to avoid misleading ellipsis for short URLs
-        host_display = host if len(host) <= 50 else f"{host[:50]}..."
-        logger.warning(
-            f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
-            "Falling back to default host."
-        )
-        host = "https://cloud.langfuse.com"
+    if host:
+        try:
+            parsed = urlparse(host)
+            if not parsed.scheme or parsed.scheme not in ("http", "https"):
+                raise ValueError("Invalid scheme")
+            if not parsed.netloc:
+                raise ValueError("Invalid netloc")
+        except (ValueError, Exception):
+            # Format message to avoid misleading ellipsis for short URLs
+            host_display = host if len(host) <= 50 else f"{host[:50]}..."
+            logger.warning(
+                f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
+                "Falling back to default host."
+            )
+            host = "https://cloud.langfuse.com"
     
     # Determine if observability should be enabled
     if enabled is None:
@@ -101,13 +127,7 @@ def setup_observability(enabled: bool | None = None) -> None:
             Settings.callback_manager = CallbackManager([langfuse_handler])
         
         # Log sanitized host (only log the scheme and domain)
-        try:
-            parsed = urlparse(host)
-            safe_host = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else host
-        except Exception:
-            # Fallback if URL parsing fails
-            safe_host = host.split("://", 1)[0] + "://" + host.split("://", 1)[1].split("/")[0] if "://" in host else host
-        
+        safe_host = _sanitize_host_for_logging(host)
         logger.info(f"Langfuse observability enabled (host: {safe_host})")
         
     except ImportError as e:
