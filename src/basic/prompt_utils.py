@@ -12,7 +12,12 @@ def _load_template(name: str) -> str:
     """Load a prompt template from the prompt_templates directory."""
     if name not in _TEMPLATE_CACHE:
         template_path = resources.files(__package__).joinpath("prompt_templates").joinpath(name)
-        _TEMPLATE_CACHE[name] = template_path.read_text(encoding="utf-8")
+        try:
+            _TEMPLATE_CACHE[name] = template_path.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError, PermissionError) as e:
+            raise FileNotFoundError(
+                f"Template file '{name}' not found or could not be read in prompt_templates directory."
+            ) from e
     return _TEMPLATE_CACHE[name]
 
 
