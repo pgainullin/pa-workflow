@@ -225,7 +225,12 @@ async def test_user_response_generation_with_fallback():
     # Mock LLM to fail
     workflow._llm_complete_with_retry = AsyncMock(side_effect=Exception("LLM error"))
 
-    response = await generate_user_response(results, email_data)
+    # Import RESPONSE_BEST_PRACTICES from email_workflow
+    from basic.email_workflow import RESPONSE_BEST_PRACTICES
+    
+    response = await generate_user_response(
+        results, email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
+    )
 
     # Should use fallback response
     assert "Your email has been processed successfully" in response
@@ -254,7 +259,11 @@ async def test_user_response_with_no_successful_results():
         },
     ]
 
-    response = await generate_user_response(results, email_data)
+    from basic.email_workflow import RESPONSE_BEST_PRACTICES
+    
+    response = await generate_user_response(
+        results, email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
+    )
 
     # Should indicate failure
     assert response == "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."

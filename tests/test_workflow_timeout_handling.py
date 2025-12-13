@@ -195,8 +195,12 @@ async def test_generate_user_response_handles_none_results():
 
     workflow = EmailWorkflow(timeout=120)
 
+    from basic.email_workflow import RESPONSE_BEST_PRACTICES
+
     # Test with None results
-    response = await generate_user_response(None, email_data)
+    response = await generate_user_response(
+        None, email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
+    )
     
     assert isinstance(response, str)
     assert len(response) > 0
@@ -216,8 +220,12 @@ async def test_generate_user_response_handles_invalid_results():
 
     workflow = EmailWorkflow(timeout=120)
 
+    from basic.email_workflow import RESPONSE_BEST_PRACTICES
+
     # Test with invalid results type (string instead of list)
-    response = await generate_user_response("invalid", email_data)
+    response = await generate_user_response(
+        "invalid", email_data, workflow._llm_complete_with_retry, RESPONSE_BEST_PRACTICES
+    )
     
     assert isinstance(response, str)
     assert len(response) > 0
