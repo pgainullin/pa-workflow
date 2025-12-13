@@ -93,9 +93,10 @@ def setup_observability(enabled: bool | None = None) -> None:
         return
     
     if not secret_key or not public_key:
-        logger.warning(
+        logger.error(
             "Langfuse observability is enabled but LANGFUSE_SECRET_KEY or "
-            "LANGFUSE_PUBLIC_KEY are not set. Skipping observability setup."
+            "LANGFUSE_PUBLIC_KEY are not set. Traces will not be sent to Langfuse. "
+            "Set these environment variables to enable observability."
         )
         return
     
@@ -130,9 +131,11 @@ def setup_observability(enabled: bool | None = None) -> None:
         logger.info(f"Langfuse observability enabled (host: {safe_host})")
         
     except ImportError as e:
-        logger.warning(
+        logger.error(
             f"Failed to import Langfuse callback handler: {e}. "
-            "Install llama-index-callbacks-langfuse to enable observability."
+            "Langfuse observability is disabled. "
+            "To enable it, install the required package with: "
+            "pip install llama-index-callbacks-langfuse"
         )
     except Exception as e:
         logger.error(
