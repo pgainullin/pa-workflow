@@ -143,7 +143,9 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
             )
 
             if has_template:
-                def template_replacer(match):
+                # Handler for double-brace templates: {{step.field}}
+                # Strips whitespace since users might write {{ step_1.field }}
+                def double_brace_replacer(match):
                     ref = match.group(1).strip()
                     parts = ref.split(".")
                     if len(parts) == 2:
@@ -160,10 +162,29 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                     )
                     return match.group(0)
 
-                resolved_value = re.sub(r"\{\{([^}]+)\}\}", template_replacer, value)
+                # Handler for single-brace templates: {step_N.field}
+                # No stripping needed - regex already ensures no spaces
+                def single_brace_replacer(match):
+                    ref = match.group(1)  # No .strip() - regex ensures no spaces
+                    parts = ref.split(".")
+                    if len(parts) == 2:
+                        step_key, field = parts
+                        if step_key in context and field in context[step_key]:
+                            return str(context[step_key][field])
+                        logger.warning(
+                            f"Template reference '{ref}' not found in execution context. "
+                            f"Available steps: {list(context.keys())}"
+                        )
+                        return match.group(0)
+                    logger.warning(
+                        f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
+                    )
+                    return match.group(0)
+
+                resolved_value = re.sub(r"\{\{([^}]+)\}\}", double_brace_replacer, value)
                 resolved_value = re.sub(
                     r"\{(step_\d+\.[a-zA-Z0-9_]+)\}",
-                    template_replacer,
+                    single_brace_replacer,
                     resolved_value,
                 )
                 resolved[key] = resolved_value
