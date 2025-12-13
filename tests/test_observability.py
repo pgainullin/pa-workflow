@@ -152,3 +152,49 @@ def test_observability_import_in_email_workflow():
         assert hasattr(observability, 'setup_observability')
     except Exception as e:
         pytest.fail(f"Failed to work with observability module: {e}")
+
+
+def test_observability_error_message_without_package(reset_callback_manager, caplog):
+    """Test that a clear error message is shown when langfuse package is not installed."""
+    from llama_index.core import Settings
+    import logging
+    
+    with patch.dict(os.environ, {
+        "LANGFUSE_SECRET_KEY": "sk-test-key",
+        "LANGFUSE_PUBLIC_KEY": "pk-test-key"
+    }):
+        # Mock the Langfuse import to fail
+        with patch.dict("sys.modules", {"langfuse.llama_index": None, "langfuse": None}):
+            from basic.observability import setup_observability
+            
+            # Clear callback manager first
+            Settings.callback_manager = None
+            
+            # Capture logs at ERROR level
+            with caplog.at_level(logging.ERROR):
+                setup_observability(enabled=True)
+            
+            # Check that the error message contains helpful information
+            assert any("Failed to import Langfuse callback handler" in record.message for record in caplog.records)
+            assert any("pip install llama-index-callbacks-langfuse" in record.message for record in caplog.records)
+
+
+def test_observability_error_message_without_credentials(reset_callback_manager, caplog):
+    """Test that a clear error message is shown when credentials are not set."""
+    from llama_index.core import Settings
+    import logging
+    
+    # Clear environment variables
+    with patch.dict(os.environ, {}, clear=True):
+        from basic.observability import setup_observability
+        
+        # Clear callback manager first
+        Settings.callback_manager = None
+        
+        # Capture logs at ERROR level
+        with caplog.at_level(logging.ERROR):
+            setup_observability(enabled=True)
+        
+        # Check that the error message contains helpful information
+        assert any("LANGFUSE_SECRET_KEY" in record.message and "LANGFUSE_PUBLIC_KEY" in record.message 
+                   for record in caplog.records)
