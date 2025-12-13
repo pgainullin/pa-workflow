@@ -2,7 +2,7 @@ from workflows import Workflow, step, Context
 from workflows.events import StartEvent, StopEvent, Event
 import asyncio
 
-from basic import observability  # Import observability module to enable Langfuse tracing
+from basic import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
 
 
 class Start(StartEvent):
