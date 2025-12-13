@@ -21,6 +21,7 @@ Usage:
 
 import logging
 import os
+from urllib.parse import urlparse
 
 from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
@@ -46,8 +47,10 @@ def setup_observability(enabled: bool | None = None) -> None:
     
     # Validate host URL if provided
     if host and not (host.startswith("http://") or host.startswith("https://")):
+        # Format message to avoid misleading ellipsis for short URLs
+        host_display = host if len(host) <= 50 else f"{host[:50]}..."
         logger.warning(
-            f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host[:50]}... "
+            f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
             "Falling back to default host."
         )
         host = "https://cloud.langfuse.com"
@@ -98,8 +101,13 @@ def setup_observability(enabled: bool | None = None) -> None:
             Settings.callback_manager = CallbackManager([langfuse_handler])
         
         # Log sanitized host (only log the scheme and domain)
-        host_parts = host.split("://", 1)
-        safe_host = host_parts[0] + "://" + host_parts[1].split("/")[0] if len(host_parts) > 1 else host
+        try:
+            parsed = urlparse(host)
+            safe_host = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else host
+        except Exception:
+            # Fallback if URL parsing fails
+            safe_host = host.split("://", 1)[0] + "://" + host.split("://", 1)[1].split("/")[0] if "://" in host else host
+        
         logger.info(f"Langfuse observability enabled (host: {safe_host})")
         
     except ImportError as e:
@@ -117,4 +125,4 @@ def setup_observability(enabled: bool | None = None) -> None:
 
 
 # Auto-initialize observability on module import
-# setup_observability()
+setup_observability()
