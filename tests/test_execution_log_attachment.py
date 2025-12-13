@@ -18,7 +18,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             from basic.email_workflow import EmailWorkflow, PlanExecutionEvent
 
 from basic.models import CallbackConfig, EmailData
-from basic.response_utils import create_execution_log
+from basic.response_utils import create_execution_log, generate_user_response
 
 
 @pytest.mark.asyncio
@@ -225,7 +225,7 @@ async def test_user_response_generation_with_fallback():
     # Mock LLM to fail
     workflow._llm_complete_with_retry = AsyncMock(side_effect=Exception("LLM error"))
 
-    response = await workflow._generate_user_response(results, email_data)
+    response = await generate_user_response(results, email_data)
 
     # Should use fallback response
     assert "Your email has been processed successfully" in response
@@ -254,7 +254,7 @@ async def test_user_response_with_no_successful_results():
         },
     ]
 
-    response = await workflow._generate_user_response(results, email_data)
+    response = await generate_user_response(results, email_data)
 
     # Should indicate failure
     assert response == "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."

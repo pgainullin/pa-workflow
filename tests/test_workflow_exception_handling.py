@@ -160,24 +160,23 @@ async def test_send_results_handles_fatal_errors():
 
     workflow = EmailWorkflow(timeout=60)
     
-    # Mock _generate_user_response to raise an exception
-    workflow._generate_user_response = AsyncMock(side_effect=Exception("Fatal response generation error"))
+    # Mock generate_user_response to raise an exception
+    with patch("basic.response_utils.generate_user_response", new_callable=AsyncMock, side_effect=Exception("Fatal response generation error")):
+        # Run send_results step - should not raise exception
+        ctx = MagicMock(spec=Context)
+        ctx.write_event_to_stream = MagicMock()
+        
+        plan_event = PlanExecutionEvent(
+            results=results, email_data=email_data, callback=callback
+        )
+        
+        result = await workflow.send_results(plan_event, ctx)
 
-    # Run send_results step - should not raise exception
-    ctx = MagicMock(spec=Context)
-    ctx.write_event_to_stream = MagicMock()
-    
-    plan_event = PlanExecutionEvent(
-        results=results, email_data=email_data, callback=callback
-    )
-    
-    result = await workflow.send_results(plan_event, ctx)
-
-    # Should return StopEvent with error information
-    assert isinstance(result, StopEvent)
-    assert hasattr(result, "result")
-    assert result.result.success is False
-    assert "Fatal error" in result.result.message
+        # Should return StopEvent with error information
+        assert isinstance(result, StopEvent)
+        assert hasattr(result, "result")
+        assert result.result.success is False
+        assert "Fatal error" in result.result.message
 
 
 @pytest.mark.asyncio

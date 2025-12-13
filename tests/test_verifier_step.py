@@ -277,9 +277,9 @@ async def test_verify_response_handles_empty_llm_response():
     ) as mock_llm:
         mock_llm.return_value = ""  # Empty response
 
-        # Mock _generate_user_response to return a fallback
-        with patch.object(
-            workflow, "_generate_user_response", new_callable=AsyncMock
+        # Mock generate_user_response to return a fallback
+        with patch(
+            "basic.response_utils.generate_user_response", new_callable=AsyncMock
         ) as mock_generate:
             mock_generate.return_value = "Original response text"
 
@@ -335,9 +335,9 @@ async def test_verify_response_handles_llm_exception():
     ) as mock_llm:
         mock_llm.side_effect = Exception("LLM API error")
 
-        # Mock _generate_user_response to return a fallback
-        with patch.object(
-            workflow, "_generate_user_response", new_callable=AsyncMock
+        # Mock generate_user_response to return a fallback
+        with patch(
+            "basic.response_utils.generate_user_response", new_callable=AsyncMock
         ) as mock_generate:
             mock_generate.return_value = "Original response text"
 
@@ -389,9 +389,9 @@ async def test_verify_response_handles_timeout_error():
     # Create workflow instance
     workflow = EmailWorkflow(timeout=60)
 
-    # Mock _generate_user_response to succeed initially, then be called again in timeout handler
-    with patch.object(
-        workflow, "_generate_user_response", new_callable=AsyncMock
+    # Mock generate_user_response to succeed initially, then be called again in timeout handler
+    with patch(
+        "basic.response_utils.generate_user_response", new_callable=AsyncMock
     ) as mock_generate:
         # First call succeeds for initial response
         # Second call in timeout handler should also succeed

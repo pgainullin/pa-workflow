@@ -166,18 +166,15 @@ async def test_send_results_handles_timeout():
 
     workflow = EmailWorkflow(timeout=120)
 
-    # Mock _generate_user_response to timeout
-    workflow._generate_user_response = AsyncMock(
-        side_effect=asyncio.TimeoutError("Response generation timeout")
-    )
-
-    # Run send_results step - should not raise exception
-    ctx = MagicMock(spec=Context)
-    ctx.write_event_to_stream = MagicMock()
-    
-    plan_execution_event = PlanExecutionEvent(
-        results=results, email_data=email_data, callback=callback
-    )
+    # Mock generate_user_response to timeout
+    with patch("basic.response_utils.generate_user_response", new_callable=AsyncMock, side_effect=asyncio.TimeoutError("Response generation timeout")):
+        # Run send_results step - should not raise exception
+        ctx = MagicMock(spec=Context)
+        ctx.write_event_to_stream = MagicMock()
+        
+        plan_execution_event = PlanExecutionEvent(
+            results=results, email_data=email_data, callback=callback
+        )
     result = await workflow.send_results(plan_execution_event, ctx)
 
     # Should return StopEvent with timeout error
@@ -199,7 +196,7 @@ async def test_generate_user_response_handles_none_results():
     workflow = EmailWorkflow(timeout=120)
 
     # Test with None results
-    response = await workflow._generate_user_response(None, email_data)
+    response = await generate_user_response(None, email_data)
     
     assert isinstance(response, str)
     assert len(response) > 0
@@ -209,7 +206,7 @@ async def test_generate_user_response_handles_none_results():
 
 @pytest.mark.asyncio
 async def test_generate_user_response_handles_invalid_results():
-    """Test that _generate_user_response handles invalid results type."""
+    """Test that generate_user_response handles invalid results type."""
     email_data = EmailData(
         from_email="user@example.com",
         to_email="workflow@example.com",
@@ -220,7 +217,7 @@ async def test_generate_user_response_handles_invalid_results():
     workflow = EmailWorkflow(timeout=120)
 
     # Test with invalid results type (string instead of list)
-    response = await workflow._generate_user_response("invalid", email_data)
+    response = await generate_user_response("invalid", email_data)
     
     assert isinstance(response, str)
     assert len(response) > 0

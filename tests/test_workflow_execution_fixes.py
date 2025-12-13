@@ -162,6 +162,7 @@ async def test_collect_attachments_from_results():
         "google.genai.Client"
     ) as mock_genai:
         from basic.email_workflow import EmailWorkflow
+        from basic.response_utils import collect_attachments
 
         workflow = EmailWorkflow()
 
@@ -187,7 +188,7 @@ async def test_collect_attachments_from_results():
             },
         ]
 
-        attachments = workflow._collect_attachments(results)
+        attachments = collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-123"
@@ -203,6 +204,7 @@ async def test_collect_attachments_skips_failed_steps():
         "google.genai.Client"
     ) as mock_genai:
         from basic.email_workflow import EmailWorkflow
+        from basic.response_utils import collect_attachments
 
         workflow = EmailWorkflow()
 
@@ -222,7 +224,7 @@ async def test_collect_attachments_skips_failed_steps():
             },
         ]
 
-        attachments = workflow._collect_attachments(results)
+        attachments = collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-456"
