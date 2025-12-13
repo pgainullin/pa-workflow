@@ -15,7 +15,8 @@ os.environ.setdefault("LLAMA_CLOUD_PROJECT_ID", "test-project-id")
 with patch("llama_index.llms.google_genai.GoogleGenAI"):
     with patch("google.genai.Client"):
         with patch("llama_parse.LlamaParse"):
-            from basic.email_workflow import EmailWorkflow, PlanExecutionEvent, RESPONSE_BEST_PRACTICES
+            from basic.email_workflow import EmailWorkflow, PlanExecutionEvent
+            from basic.email_workflow import RESPONSE_BEST_PRACTICES
 
 from basic.models import CallbackConfig, EmailData
 from basic.response_utils import create_execution_log, generate_user_response
