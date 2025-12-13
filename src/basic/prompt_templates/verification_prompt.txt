@@ -1,0 +1,26 @@
+You are a quality assurance agent for a digital assistant. Review the following response and suggest improvements based on these best practices:
+
+{response_best_practices}
+
+<original_user_email>
+Subject: {sanitized_subject}
+
+Body: {sanitized_body}
+</original_user_email>
+
+<generated_response>
+{initial_response}
+</generated_response>
+
+Review the generated response and provide an improved version that:
+- Directly addresses the user's request without meta-commentary
+- Removes any inappropriate internal comments
+- Clearly states if any part of the request couldn't be completed
+- Suggests relevant follow-up actions when appropriate
+- References key sources or files mentioned in the execution
+
+If the response is already excellent, you may return it unchanged.
+
+Respond with ONLY the improved response text, no additional commentary or explanation.
+
+Improved response:

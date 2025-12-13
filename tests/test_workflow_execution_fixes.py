@@ -161,9 +161,7 @@ async def test_collect_attachments_from_results():
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
     ) as mock_genai:
-        from basic.email_workflow import EmailWorkflow
-
-        workflow = EmailWorkflow()
+        from basic.response_utils import collect_attachments
 
         # Mock results with a print_to_pdf step that generated a file
         results = [
@@ -187,7 +185,7 @@ async def test_collect_attachments_from_results():
             },
         ]
 
-        attachments = workflow._collect_attachments(results)
+        attachments = collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-123"
@@ -202,9 +200,7 @@ async def test_collect_attachments_skips_failed_steps():
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
     ) as mock_genai:
-        from basic.email_workflow import EmailWorkflow
-
-        workflow = EmailWorkflow()
+        from basic.response_utils import collect_attachments
 
         # Mock results with failed and successful steps
         results = [
@@ -222,7 +218,7 @@ async def test_collect_attachments_skips_failed_steps():
             },
         ]
 
-        attachments = workflow._collect_attachments(results)
+        attachments = collect_attachments(results)
 
         assert len(attachments) == 1
         assert attachments[0].file_id == "test-file-uuid-456"
@@ -287,8 +283,9 @@ async def test_triage_prompt_emphasizes_attachments():
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
     ) as mock_genai:
-        from basic.email_workflow import EmailWorkflow
+        from basic.email_workflow import EmailWorkflow, RESPONSE_BEST_PRACTICES
         from basic.models import Attachment, EmailData
+        from basic.prompt_utils import build_triage_prompt
 
         workflow = EmailWorkflow()
 
@@ -307,7 +304,11 @@ async def test_triage_prompt_emphasizes_attachments():
             ],
         )
 
-        prompt = workflow._build_triage_prompt(email_data)
+        prompt = build_triage_prompt(
+            email_data,
+            workflow.tool_registry.get_tool_descriptions(),
+            RESPONSE_BEST_PRACTICES,
+        )
 
         # Check that prompt emphasizes attachment processing
         assert "MUST process them using appropriate tools" in prompt
@@ -323,8 +324,9 @@ async def test_triage_prompt_without_attachments():
     with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
         "google.genai.Client"
     ) as mock_genai:
-        from basic.email_workflow import EmailWorkflow
+        from basic.email_workflow import EmailWorkflow, RESPONSE_BEST_PRACTICES
         from basic.models import EmailData
+        from basic.prompt_utils import build_triage_prompt
 
         workflow = EmailWorkflow()
 
@@ -336,7 +338,11 @@ async def test_triage_prompt_without_attachments():
             attachments=[],
         )
 
-        prompt = workflow._build_triage_prompt(email_data)
+        prompt = build_triage_prompt(
+            email_data,
+            workflow.tool_registry.get_tool_descriptions(),
+            RESPONSE_BEST_PRACTICES,
+        )
 
         # Should still generate valid prompt
         assert "triage agent" in prompt.lower()

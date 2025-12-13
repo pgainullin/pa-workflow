@@ -205,32 +205,33 @@ async def test_send_results_handles_callback_errors():
 
     workflow = EmailWorkflow(timeout=60)
     
-    # Mock methods to work normally until callback
+    # Mock methods and functions to work normally until callback
     workflow._generate_user_response = AsyncMock(return_value="Test response")
     workflow._create_execution_log = MagicMock(return_value="Test log")
-    workflow._collect_attachments = MagicMock(return_value=[])
     
-    # Mock _send_callback_email to raise an httpx error
-    import httpx
-    workflow._send_callback_email = AsyncMock(
-        side_effect=httpx.HTTPError("Connection failed")
-    )
+    # Patch collect_attachments as used in email_workflow
+    with patch("basic.email_workflow.collect_attachments", return_value=[]):
+        # Mock _send_callback_email to raise an httpx error
+        import httpx
+        workflow._send_callback_email = AsyncMock(
+            side_effect=httpx.HTTPError("Connection failed")
+        )
 
-    # Run send_results step - should not raise exception
-    ctx = MagicMock(spec=Context)
-    ctx.write_event_to_stream = MagicMock()
-    
-    plan_event = PlanExecutionEvent(
-        results=results, email_data=email_data, callback=callback
-    )
-    
-    result = await workflow.send_results(plan_event, ctx)
+        # Run send_results step - should not raise exception
+        ctx = MagicMock(spec=Context)
+        ctx.write_event_to_stream = MagicMock()
+        
+        plan_event = PlanExecutionEvent(
+            results=results, email_data=email_data, callback=callback
+        )
+        
+        result = await workflow.send_results(plan_event, ctx)
 
-    # Should return StopEvent with error information about callback failure
-    assert isinstance(result, StopEvent)
-    assert hasattr(result, "result")
-    assert result.result.success is False
-    assert "callback failed" in result.result.message.lower()
+        # Should return StopEvent with error information about callback failure
+        assert isinstance(result, StopEvent)
+        assert hasattr(result, "result")
+        assert result.result.success is False
+        assert "callback failed" in result.result.message.lower()
 
 
 @pytest.mark.asyncio
