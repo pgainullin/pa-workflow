@@ -21,7 +21,6 @@ Usage:
 
 import logging
 import os
-from typing import Optional
 from urllib.parse import urlparse
 
 from llama_index.core import Settings
