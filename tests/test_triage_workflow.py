@@ -17,6 +17,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             from basic.email_workflow import EmailWorkflow
 
 from basic.models import CallbackConfig, EmailData
+from basic.response_utils import create_execution_log
 
 
 @pytest.mark.asyncio
@@ -213,7 +214,7 @@ async def test_result_formatting():
         },
     ]
 
-    formatted = workflow._create_execution_log(results, email_data)
+    formatted = create_execution_log(results, email_data)
 
     assert "Test Subject" in formatted
     assert "summarise" in formatted

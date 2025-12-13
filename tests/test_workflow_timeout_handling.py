@@ -27,6 +27,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             )
 
 from basic.models import CallbackConfig, EmailData
+from basic.response_utils import create_execution_log, collect_attachments
 from workflows import Context
 from workflows.events import StopEvent
 
@@ -228,7 +229,7 @@ async def test_generate_user_response_handles_invalid_results():
 
 
 def test_create_execution_log_handles_none_results():
-    """Test that _create_execution_log handles None results gracefully."""
+    """Test that create_execution_log handles None results gracefully."""
     email_data = EmailData(
         from_email="user@example.com",
         to_email="workflow@example.com",
@@ -239,7 +240,7 @@ def test_create_execution_log_handles_none_results():
     workflow = EmailWorkflow(timeout=120)
 
     # Test with None results
-    log = workflow._create_execution_log(None, email_data)
+    log = create_execution_log(None, email_data)
     
     assert isinstance(log, str)
     assert len(log) > 0
@@ -248,11 +249,11 @@ def test_create_execution_log_handles_none_results():
 
 
 def test_collect_attachments_handles_none_results():
-    """Test that _collect_attachments handles None results gracefully."""
+    """Test that collect_attachments handles None results gracefully."""
     workflow = EmailWorkflow(timeout=120)
 
     # Test with None results
-    attachments = workflow._collect_attachments(None)
+    attachments = collect_attachments(None)
     
     # Should return empty list
     assert isinstance(attachments, list)

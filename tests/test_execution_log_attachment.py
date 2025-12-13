@@ -18,6 +18,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             from basic.email_workflow import EmailWorkflow, PlanExecutionEvent
 
 from basic.models import CallbackConfig, EmailData
+from basic.response_utils import create_execution_log
 
 
 @pytest.mark.asyncio
@@ -185,7 +186,7 @@ async def test_execution_log_format():
         },
     ]
 
-    log = workflow._create_execution_log(results, email_data)
+    log = create_execution_log(results, email_data)
 
     # Check markdown structure
     assert "# Workflow Execution Log" in log
