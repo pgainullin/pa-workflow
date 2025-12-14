@@ -901,10 +901,6 @@ class PrintToPDFTool(Tool):
         if not table_data:
             return None
         
-        # Verify at least one row has cells
-        if not any(row for row in table_data):
-            return None
-        
         # Normalize table: ensure all rows have the same number of columns
         # Find the maximum number of columns across all rows (filter out empty rows)
         non_empty_rows = [row for row in table_data if row]

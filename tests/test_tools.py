@@ -179,6 +179,12 @@ Additional text after the table.
         assert len(pdf_bytes) > 0
         # PDFs start with %PDF header
         assert pdf_bytes[:4] == b'%PDF'
+        
+        # Verify the PDF is significantly larger than plain text would be
+        # Tables with formatting should produce larger PDFs (with table structures)
+        # A plain text version would be much smaller
+        # This table has 3 rows + header, expect at least 1500 bytes for formatted table
+        assert len(pdf_bytes) > 1500, f"PDF size {len(pdf_bytes)} suggests no table formatting was applied"
 
 
 @pytest.mark.asyncio
