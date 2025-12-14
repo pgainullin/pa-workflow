@@ -51,6 +51,16 @@ except ImportError:
         When Langfuse is not installed, this decorator simply returns
         the original function unchanged, allowing code to work without
         the observability dependency.
+        
+        Works with both sync and async functions:
+            @observe
+            async def my_async_step(...):
+                await some_operation()
+        
+            @observe(name="my_step")
+            async def my_workflow_step(...):
+                result = await process()
+                return result
         """
         def decorator(func):
             return func
