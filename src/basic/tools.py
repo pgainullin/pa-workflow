@@ -898,15 +898,28 @@ class PrintToPDFTool(Tool):
         Returns:
             ReportLab Table object or None if table_data is empty or invalid
         """
-        if not table_data or len(table_data) == 0:
+        if not table_data:
             return None
         
         # Verify all rows have cells
         if not table_data[0]:
             return None
         
+        # Normalize table: ensure all rows have the same number of columns
+        # Find the maximum number of columns across all rows
+        num_cols = max(len(row) for row in table_data)
+        
+        # Pad shorter rows with empty cells to match num_cols
+        normalized_table_data = []
+        for row in table_data:
+            if len(row) < num_cols:
+                # Pad with empty strings
+                padded_row = row + [""] * (num_cols - len(row))
+                normalized_table_data.append(padded_row)
+            else:
+                normalized_table_data.append(row)
+        
         # Calculate column widths based on content and available space
-        num_cols = len(table_data[0])
         # Use available width minus margins
         available_width = page_width - (2 * self.PDF_MARGIN_POINTS)
         col_width = available_width / num_cols
@@ -922,7 +935,7 @@ class PrintToPDFTool(Tool):
         
         # Convert cells to Paragraphs for automatic wrapping
         table_with_paragraphs = []
-        for row in table_data:
+        for row in normalized_table_data:
             paragraph_row = []
             for cell in row:
                 # Handle empty cells
@@ -1087,8 +1100,9 @@ class PrintToPDFTool(Tool):
                             header_font_sizes = {2: 14, 3: 12, 4: 11}
                             font_size = header_font_sizes.get(header_level, 10)
                             
+                            # Use unique style name to avoid conflicts
                             bold_style = ParagraphStyle(
-                                'BoldHeading',
+                                f'BoldHeading{header_level}',
                                 parent=normal_style,
                                 fontName='Helvetica-Bold',
                                 fontSize=font_size,
