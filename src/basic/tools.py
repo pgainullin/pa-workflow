@@ -19,7 +19,6 @@ from deep_translator import GoogleTranslator
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
 
