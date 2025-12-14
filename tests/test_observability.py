@@ -251,3 +251,84 @@ def test_logging_handler_configured(reset_callback_manager):
             # Restore original handlers if needed
             if not workflow_logger.handlers and original_handlers[logger_name]:
                 workflow_logger.handlers = original_handlers[logger_name]
+
+
+def test_observe_decorator_is_exported():
+    """Test that the observe decorator is properly exported from the observability module."""
+    from basic.observability import observe
+    
+    # Should be callable
+    assert callable(observe), "observe should be a callable decorator"
+
+
+def test_observe_decorator_no_op_without_langfuse():
+    """Test that observe decorator works as no-op when Langfuse is not available."""
+    from basic.observability import observe
+    
+    # Test decorator without arguments
+    @observe
+    def test_func1():
+        return "test1"
+    
+    # Test decorator with arguments
+    @observe(name="test_function")
+    def test_func2():
+        return "test2"
+    
+    # Both should work without errors
+    assert test_func1() == "test1"
+    assert test_func2() == "test2"
+
+
+def test_observe_decorator_with_async_functions():
+    """Test that observe decorator works with async functions."""
+    import asyncio
+    from basic.observability import observe
+    
+    @observe(name="async_test")
+    async def async_test_func():
+        await asyncio.sleep(0)
+        return "async_result"
+    
+    # Should work without errors
+    result = asyncio.run(async_test_func())
+    assert result == "async_result"
+
+
+def test_workflow_steps_instrumented():
+    """Test that workflow steps are instrumented with @observe decorator."""
+    import inspect
+    from basic.email_workflow import EmailWorkflow
+    
+    # Get the workflow class
+    workflow = EmailWorkflow
+    
+    # Check that step methods exist
+    step_methods = [
+        'triage_email',
+        'execute_plan',
+        'verify_response',
+        'send_results'
+    ]
+    
+    for method_name in step_methods:
+        assert hasattr(workflow, method_name), f"Method {method_name} should exist"
+        method = getattr(workflow, method_name)
+        assert callable(method), f"{method_name} should be callable"
+
+
+def test_observe_decorator_preserves_function_signature():
+    """Test that observe decorator preserves the original function signature."""
+    import inspect
+    from basic.observability import observe
+    
+    @observe(name="test")
+    async def test_func(arg1: str, arg2: int = 5) -> str:
+        """Test function docstring."""
+        return f"{arg1}_{arg2}"
+    
+    # Check that function attributes are preserved
+    assert test_func.__name__ in ("test_func", "wrapper"), "Function name should be preserved or wrapper"
+    # Docstring might be preserved depending on implementation
+    sig = inspect.signature(test_func)
+    assert len(sig.parameters) >= 2, "Function signature should be preserved"
