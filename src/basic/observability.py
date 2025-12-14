@@ -42,7 +42,16 @@ try:
 except ImportError:
     # Provide a no-op decorator if langfuse is not installed
     def observe(*args, **kwargs):
-        """No-op decorator when Langfuse is not available."""
+        """No-op decorator when Langfuse is not available.
+        
+        This decorator can be used in two ways:
+        1. Without arguments: @observe
+        2. With arguments: @observe(name="my_function")
+        
+        When Langfuse is not installed, this decorator simply returns
+        the original function unchanged, allowing code to work without
+        the observability dependency.
+        """
         def decorator(func):
             return func
         if len(args) == 1 and callable(args[0]):
