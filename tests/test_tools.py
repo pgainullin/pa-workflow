@@ -182,6 +182,60 @@ Additional text after the table.
 
 
 @pytest.mark.asyncio
+async def test_print_to_pdf_edge_cases():
+    """Test edge cases for markdown table rendering."""
+    from basic.tools import PrintToPDFTool
+
+    tool = PrintToPDFTool()
+
+    # Test various edge cases
+    edge_case_markdown = """# Edge Cases Test
+
+## Table with unequal row lengths
+| Name | Age | City |
+|------|-----|------|
+| John | 25 |
+| Jane | 30 | NYC |
+| Bob |
+
+## Table with empty cells
+| Col1 | Col2 | Col3 |
+|------|------|------|
+|      | Data | More |
+| Data |      |      |
+
+## Multiple consecutive tables
+| Table1 | Data |
+|--------|------|
+| A | 1 |
+
+| Table2 | Info |
+|--------|------|
+| B | 2 |
+
+### Different header levels
+#### H4 Header
+##### H5 Header
+###### H6 Header
+
+Regular text with special characters: café, naïve, résumé
+"""
+
+    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+        mock_upload.return_value = "file-edge"
+
+        result = await tool.execute(text=edge_case_markdown, filename="edge_cases.pdf")
+
+        assert result["success"] is True
+        assert "file_id" in result
+        
+        # Verify PDF was generated
+        pdf_bytes = mock_upload.call_args[0][0]
+        assert len(pdf_bytes) > 0
+        assert pdf_bytes[:4] == b'%PDF'
+
+
+@pytest.mark.asyncio
 async def test_parse_tool():
     """Test the parse tool."""
     # Mock LlamaParse
