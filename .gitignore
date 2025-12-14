@@ -7,3 +7,8 @@ __pycache__/
 *.pyc
 
 .env
+
+# Test and demo files
+test_table_pdf.py
+demo_table_fix.py
+*.pdf

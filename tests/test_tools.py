@@ -144,6 +144,104 @@ async def test_print_to_pdf_tool():
 
 
 @pytest.mark.asyncio
+async def test_print_to_pdf_with_markdown_tables():
+    """Test that markdown tables are properly rendered in PDF."""
+    from basic.tools import PrintToPDFTool
+
+    tool = PrintToPDFTool()
+
+    # Test markdown with tables
+    markdown_text = """# Mineral Resources
+
+| Variety | Volume | Density |
+|---------|--------|---------|
+| Oxidized | 9,830 | 2.58 |
+| Sulfide | 67,880 | 2.72 |
+| Oks. + Sulf. | 77,710 | 2.70 |
+
+Additional text after the table.
+"""
+
+    # Mock upload function
+    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+        mock_upload.return_value = "file-456"
+
+        # Test execution with markdown content
+        result = await tool.execute(text=markdown_text, filename="test_table.pdf")
+
+        assert result["success"] is True
+        assert "file_id" in result
+        assert result["file_id"] == "file-456"
+        assert mock_upload.called
+        
+        # Verify PDF was generated (has content)
+        pdf_bytes = mock_upload.call_args[0][0]
+        assert len(pdf_bytes) > 0
+        # PDFs start with %PDF header
+        assert pdf_bytes[:4] == b'%PDF'
+        
+        # Verify the PDF is significantly larger than plain text would be
+        # Tables with formatting should produce larger PDFs (with table structures)
+        # A plain text version would be much smaller
+        # This table has 3 rows + header, expect at least 1500 bytes for formatted table
+        assert len(pdf_bytes) > 1500, f"PDF size {len(pdf_bytes)} suggests no table formatting was applied"
+
+
+@pytest.mark.asyncio
+async def test_print_to_pdf_edge_cases():
+    """Test edge cases for markdown table rendering."""
+    from basic.tools import PrintToPDFTool
+
+    tool = PrintToPDFTool()
+
+    # Test various edge cases
+    edge_case_markdown = """# Edge Cases Test
+
+## Table with unequal row lengths
+| Name | Age | City |
+|------|-----|------|
+| John | 25 |
+| Jane | 30 | NYC |
+| Bob |
+
+## Table with empty cells
+| Col1 | Col2 | Col3 |
+|------|------|------|
+|      | Data | More |
+| Data |      |      |
+
+## Multiple consecutive tables
+| Table1 | Data |
+|--------|------|
+| A | 1 |
+
+| Table2 | Info |
+|--------|------|
+| B | 2 |
+
+### Different header levels
+#### H4 Header
+##### H5 Header
+###### H6 Header
+
+Regular text with special characters: café, naïve, résumé
+"""
+
+    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+        mock_upload.return_value = "file-edge"
+
+        result = await tool.execute(text=edge_case_markdown, filename="edge_cases.pdf")
+
+        assert result["success"] is True
+        assert "file_id" in result
+        
+        # Verify PDF was generated
+        pdf_bytes = mock_upload.call_args[0][0]
+        assert len(pdf_bytes) > 0
+        assert pdf_bytes[:4] == b'%PDF'
+
+
+@pytest.mark.asyncio
 async def test_parse_tool():
     """Test the parse tool."""
     # Mock LlamaParse
