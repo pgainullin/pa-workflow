@@ -13,10 +13,15 @@ Environment Variables:
 Usage:
     Simply import this module in your workflow to enable observability:
     
-    from basic.observability import setup_observability
+    from basic.observability import setup_observability, observe
     
     # Optionally call setup explicitly with custom parameters
     setup_observability(enabled=True)
+    
+    # Use @observe decorator to trace workflow steps:
+    @observe(name="my_step")
+    async def my_step(...):
+        ...
 """
 
 import atexit
@@ -28,6 +33,25 @@ from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
 
 logger = logging.getLogger(__name__)
+
+# Import observe decorator from langfuse for workflow instrumentation
+# This is exported for use in workflow files
+try:
+    from langfuse.decorators import observe
+    _observe_available = True
+except ImportError:
+    # Provide a no-op decorator if langfuse is not installed
+    def observe(*args, **kwargs):
+        """No-op decorator when Langfuse is not available."""
+        def decorator(func):
+            return func
+        if len(args) == 1 and callable(args[0]):
+            # Called without arguments: @observe
+            return args[0]
+        else:
+            # Called with arguments: @observe(name="...")
+            return decorator
+    _observe_available = False
 
 
 class LangfuseLoggingHandler(logging.Handler):

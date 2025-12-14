@@ -3,6 +3,7 @@ from workflows.events import StartEvent, StopEvent, Event
 import asyncio
 
 from basic import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
+from basic.observability import observe  # Import observe decorator for workflow step tracing
 
 
 class Start(StartEvent):
@@ -15,6 +16,7 @@ class Hello(Event):
 
 class BasicWorkflow(Workflow):
     @step
+    @observe(name="hello")
     async def hello(self, event: Start, context: Context) -> StopEvent:
         context.write_event_to_stream(
             Hello(message="🦙 Hello from the basic template.")

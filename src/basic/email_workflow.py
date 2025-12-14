@@ -48,6 +48,7 @@ from .utils import (
     api_retry,
 )
 from . import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
+from .observability import observe  # Import observe decorator for workflow step tracing
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +187,7 @@ class EmailWorkflow(Workflow):
         )
 
     @step
+    @observe(name="triage_email")
     async def triage_email(self, ev: EmailStartEvent, ctx: Context) -> TriageEvent:
         """Triage the email and create an execution plan using available tools.
 
@@ -248,8 +250,8 @@ class EmailWorkflow(Workflow):
             ]
             return TriageEvent(plan=plan, email_data=email_data, callback=callback)
 
-
     @step
+    @observe(name="execute_plan")
     async def execute_plan(self, ev: TriageEvent, ctx: Context) -> PlanExecutionEvent:
         """Execute the plan created by triage agent.
 
@@ -462,6 +464,7 @@ class EmailWorkflow(Workflow):
             response.raise_for_status()
 
     @step
+    @observe(name="verify_response")
     async def verify_response(
         self, ev: PlanExecutionEvent, ctx: Context
     ) -> VerificationEvent:
@@ -552,6 +555,7 @@ class EmailWorkflow(Workflow):
             )
 
     @step
+    @observe(name="send_results")
     async def send_results(self, ev: VerificationEvent, ctx: Context) -> StopEvent:
         """Send the execution results via callback email.
 
