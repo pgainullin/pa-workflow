@@ -72,7 +72,38 @@ for sig in (signal.SIGTERM, signal.SIGINT):
     loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
 ```
 
-### 3. Demo Updates (`demo_observability.py`)
+### 3. Automatic Per-Step Flushing (`src/basic/email_workflow.py`, `src/basic/workflow.py`)
+
+**NEW**: Added automatic flush calls at the end of every workflow step to ensure traces are sent immediately after each step completes.
+
+```python
+from .observability import observe, flush_langfuse
+
+class EmailWorkflow(Workflow):
+    @step
+    @observe(name="triage_email")
+    async def triage_email(self, ev: EmailStartEvent, ctx: Context) -> TriageEvent:
+        # ... step implementation ...
+        result = TriageEvent(plan=plan, email_data=email_data, callback=callback)
+        flush_langfuse()  # Flush traces after step completion
+        return result
+```
+
+**Steps with Auto-Flush:**
+- `triage_email` - Flushes after email triage
+- `execute_plan` - Flushes after tool execution
+- `verify_response` - Flushes after response verification
+- `send_results` - Flushes after sending results (final step)
+- `BasicWorkflow.hello` - Flushes after basic workflow step
+
+**Benefits:**
+- ✅ Works in LlamaCloud execution environment
+- ✅ Works in server.py and standalone contexts
+- ✅ Traces appear immediately after each step
+- ✅ No manual flush needed for workflow execution
+- ✅ Robust - flushes even on step failures
+
+### 4. Demo Updates (`demo_observability.py`)
 
 Updated demo to show proper usage:
 ```python
@@ -182,6 +213,8 @@ finally:
 - ✅ Explicit flush control
 - ✅ Multiple flush options
 - ✅ Server shutdown handlers
+- ✅ **Automatic per-step flushing**
+- ✅ **Works in LlamaCloud context**
 - ✅ Comprehensive documentation
 - ✅ Verified implementation
 
@@ -191,12 +224,15 @@ finally:
 |------|---------|---------|
 | `src/basic/observability.py` | +70 lines | Core flush functionality |
 | `src/basic/server.py` | +20 lines | Shutdown handlers |
+| `src/basic/email_workflow.py` | **+16 lines** | **Per-step flush calls (4 steps)** |
+| `src/basic/workflow.py` | **+3 lines** | **Per-step flush call (basic workflow)** |
 | `demo_observability.py` | +3 lines | Demo usage |
 | `tests/test_observability.py` | +170 lines | Unit tests |
-| `LANGFUSE_MANUAL_FLUSH.md` | +325 lines | Documentation |
+| `LANGFUSE_MANUAL_FLUSH.md` | +350 lines | Documentation |
 | `verify_langfuse_flush.py` | +290 lines | Verification script |
+| `LANGFUSE_MANUAL_FLUSH_FIX_SUMMARY.md` | +260 lines | Fix summary |
 
-**Total**: 6 files, ~878 lines added
+**Total**: 9 files, ~1,182 lines added
 
 ## Verification Steps
 

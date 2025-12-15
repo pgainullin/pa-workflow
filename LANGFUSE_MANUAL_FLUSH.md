@@ -60,6 +60,25 @@ result = await run_workflow_with_flush(
 - Returns the same result as `workflow.run()`
 - Recommended approach for running workflows with Langfuse
 
+### Automatic Flushing in Workflow Steps
+
+**NEW**: All workflow steps now automatically flush traces after completion. This ensures traces are sent immediately after each step, regardless of execution context (server, LlamaCloud, or standalone).
+
+**Workflow Steps with Auto-Flush:**
+- `email_workflow.triage_email` - Flushes after email triage and plan generation
+- `email_workflow.execute_plan` - Flushes after executing all tool steps
+- `email_workflow.verify_response` - Flushes after response verification
+- `email_workflow.send_results` - Flushes after sending final results
+- `workflow.hello` - Flushes after basic workflow step
+
+**Benefits:**
+- ✅ Works in LlamaCloud execution environment
+- ✅ No manual flush needed for standard workflow execution
+- ✅ Traces appear immediately after each step completes
+- ✅ Robust error handling - flushes even on step failures
+
+**Note**: When workflows run in LlamaCloud or via WorkflowServer, the automatic per-step flushing ensures all traces are captured, even if the workflow is interrupted or times out.
+
 ## Usage Examples
 
 ### Example 1: Simple Script
