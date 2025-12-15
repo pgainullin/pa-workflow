@@ -394,6 +394,26 @@ def test_flush_langfuse_calls_handler_flush():
         observability._langfuse_handler = original_handler
 
 
+def test_flush_langfuse_flushes_observe_context():
+    """Test that flush_langfuse also flushes the decorator context."""
+    from basic import observability
+
+    original_client = observability._langfuse_client
+    original_handler = observability._langfuse_handler
+
+    try:
+        # Disable stored clients to ensure context flush is still attempted
+        observability._langfuse_client = None
+        observability._langfuse_handler = None
+
+        with patch("langfuse.decorators.langfuse_context.flush") as mock_flush:
+            observability.flush_langfuse()
+            mock_flush.assert_called_once()
+    finally:
+        observability._langfuse_client = original_client
+        observability._langfuse_handler = original_handler
+
+
 def test_flush_langfuse_handles_errors_gracefully():
     """Test that flush_langfuse handles errors without raising exceptions."""
     from unittest.mock import Mock
