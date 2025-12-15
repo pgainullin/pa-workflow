@@ -68,10 +68,10 @@ except ImportError:
             return args[0]
         else:
             # Called with arguments: @observe(name="...")
-            # Return a decorator that will receive the function
-            def decorator(func):
+            # Return a no-op decorator that will receive the function
+            def identity_decorator(func):
                 return func
-            return decorator
+            return identity_decorator
     _observe_available = False
 
 
