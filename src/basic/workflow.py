@@ -2,11 +2,11 @@ from workflows import Workflow, step, Context
 from workflows.events import StartEvent, StopEvent, Event
 import asyncio
 
-from basic import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
 from basic.observability import (
     observe,
     flush_langfuse,
-)  # Import observe decorator and flush for tracing
+    setup_observability,
+)  # Import observe decorator, flush and setup for tracing
 
 
 class Start(StartEvent):
@@ -18,6 +18,12 @@ class Hello(Event):
 
 
 class BasicWorkflow(Workflow):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Set up observability (Langfuse tracing) after environment is loaded
+        # This ensures credentials from .env files are available when running in LlamaCloud
+        setup_observability()
+
     @step
     @observe(name="hello")
     async def hello(self, event: Start, context: Context) -> StopEvent:

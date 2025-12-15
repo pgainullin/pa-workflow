@@ -46,11 +46,11 @@ from .utils import (
     text_to_html,
     api_retry,
 )
-from . import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
 from .observability import (
     observe,
     flush_langfuse,
-)  # Import observe decorator and flush for tracing
+    setup_observability,
+)  # Import observe decorator, flush and setup for tracing
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +138,9 @@ class EmailWorkflow(Workflow):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Set up observability (Langfuse tracing) after environment is loaded
+        # This ensures credentials from .env files are available when running in LlamaCloud
+        setup_observability()
         # Initialize tool registry
         self.tool_registry = ToolRegistry()
         self._register_tools()

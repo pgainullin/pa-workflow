@@ -384,7 +384,7 @@ def setup_observability(enabled: bool | None = None) -> None:
     if enabled is None:
         # Auto-enable if keys are present and LANGFUSE_ENABLED is not explicitly set to false
         enabled = bool(secret_key and public_key)
-        env_enabled = True #os.getenv("LANGFUSE_ENABLED", "").lower()
+        env_enabled = os.getenv("LANGFUSE_ENABLED", "").lower()
         if env_enabled in ("false", "0", "no"):
             enabled = False
 
@@ -470,5 +470,6 @@ def setup_observability(enabled: bool | None = None) -> None:
         )
 
 
-# Auto-initialize observability on module import
-setup_observability()
+# Note: setup_observability() should be called explicitly by the workflow
+# after environment variables are loaded, not at module import time.
+# This ensures that credentials from .env files are available when running in LlamaCloud.
