@@ -375,7 +375,7 @@ def setup_observability(enabled: bool | None = None) -> None:
         # Format message to avoid misleading ellipsis for short URLs
         host_display = host if len(host) <= 50 else f"{host[:50]}..."
         logger.warning(
-            f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
+            "LANGFUSE_BASE_URL must be a valid HTTP/HTTPS URL. Got: {host_display} "
             "Falling back to default host."
         )
         host = "https://us.cloud.langfuse.com"
@@ -384,7 +384,7 @@ def setup_observability(enabled: bool | None = None) -> None:
     if enabled is None:
         # Auto-enable if keys are present and LANGFUSE_ENABLED is not explicitly set to false
         enabled = bool(secret_key and public_key)
-        env_enabled = os.getenv("LANGFUSE_ENABLED", "").lower()
+        env_enabled = True #os.getenv("LANGFUSE_ENABLED", "").lower()
         if env_enabled in ("false", "0", "no"):
             enabled = False
 
