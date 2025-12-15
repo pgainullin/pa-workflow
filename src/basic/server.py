@@ -8,12 +8,15 @@ Usage:
     Or use llamactl: llamactl serve
 """
 
-import logging
 import asyncio
+import atexit
+import logging
+import signal
 
 from workflows.server import WorkflowServer
 
 from basic.email_workflow import email_workflow
+from basic.observability import flush_langfuse
 from basic.workflow import workflow as basic_workflow
 
 logging.basicConfig(level=logging.INFO)
@@ -29,8 +32,35 @@ server.add_workflow("email", email_workflow)
 server.add_workflow("BasicWorkflow", basic_workflow)
 
 
+def shutdown_handler():
+    """Flush Langfuse traces on server shutdown."""
+    logger.info("Server shutting down, flushing Langfuse traces...")
+    flush_langfuse()
+    logger.info("Langfuse traces flushed")
+
+
+# Register shutdown handler
+atexit.register(shutdown_handler)
+
+
 async def main():
-    await server.serve(host="127.0.0.1", port=8080)
+    # Set up signal handlers for graceful shutdown
+    loop = asyncio.get_event_loop()
+
+    def signal_handler(sig):
+        logger.info(f"Received signal {sig}, shutting down...")
+        flush_langfuse()
+        loop.stop()
+
+    # Register signal handlers
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+
+    try:
+        await server.serve(host="127.0.0.1", port=8080)
+    finally:
+        # Ensure flush on exit
+        flush_langfuse()
 
 
 # def main() -> None:
