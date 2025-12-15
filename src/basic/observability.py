@@ -270,12 +270,28 @@ def flush_langfuse() -> None:
     """
     global _langfuse_client, _langfuse_handler
 
-    if _langfuse_client is None and _langfuse_handler is None:
-        # Langfuse not configured or disabled
+    # Try to also flush the decorator context used by @observe traces.
+    try:
+        from langfuse.decorators import langfuse_context
+    except Exception:
+        langfuse_context = None
+
+    if (
+        _langfuse_client is None
+        and _langfuse_handler is None
+        and langfuse_context is None
+    ):
+        # Langfuse not configured or unavailable
         return
 
     try:
-        # Flush the callback handler first (captures LLM traces)
+        # Flush the decorator context first to ensure workflow-level traces
+        # are sent even if the callback handler/client were not initialized.
+        if langfuse_context is not None:
+            logger.debug("Flushing Langfuse decorator context...")
+            langfuse_context.flush()
+
+        # Flush the callback handler (captures LLM traces)
         if _langfuse_handler is not None:
             logger.debug("Flushing LlamaIndex callback handler...")
             _langfuse_handler.flush()
