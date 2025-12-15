@@ -15,11 +15,11 @@ Prerequisites:
     3. Set environment variables:
        export LANGFUSE_SECRET_KEY="sk-..."
        export LANGFUSE_PUBLIC_KEY="pk-..."
-       
+
 Usage:
     # With observability enabled (requires Langfuse keys)
     python demo_observability.py
-    
+
     # With observability disabled
     LANGFUSE_ENABLED=false python demo_observability.py
 """
@@ -38,12 +38,12 @@ async def main():
     print("=" * 60)
     print("Langfuse Observability Demo")
     print("=" * 60)
-    
+
     # Check if observability is configured
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
     enabled = os.getenv("LANGFUSE_ENABLED", "true").lower() not in ("false", "0", "no")
-    
+
     if secret_key and public_key and enabled:
         print("\n✓ Langfuse observability is ENABLED")
         print(f"  Host: {os.getenv('LANGFUSE_HOST', 'https://cloud.langfuse.com')}")
@@ -57,20 +57,24 @@ async def main():
         print("  3. Set environment variables:")
         print("     export LANGFUSE_SECRET_KEY='sk-...'")
         print("     export LANGFUSE_PUBLIC_KEY='pk-...'")
-    
+
     print("\n" + "=" * 60)
     print("Running BasicWorkflow...")
     print("=" * 60 + "\n")
-    
+
     # Import and run the workflow
     from basic.workflow import workflow
-    
+    from basic.observability import flush_langfuse
+
     # Run the workflow
     result = await workflow.run()
-    
-    print(f"\n✓ Workflow completed successfully!")
+
+    # Flush traces to ensure they're sent immediately
+    flush_langfuse()
+
+    print("\n✓ Workflow completed successfully!")
     print(f"  Result: {result}")
-    
+
     if secret_key and public_key and enabled:
         print("\n" + "=" * 60)
         print("Check your Langfuse dashboard to see the trace!")

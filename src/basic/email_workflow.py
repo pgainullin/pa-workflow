@@ -6,7 +6,6 @@ execution plans using available tools.
 
 import asyncio
 import base64
-import json
 import logging
 import os
 
@@ -48,7 +47,10 @@ from .utils import (
     api_retry,
 )
 from . import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
-from .observability import observe  # Import observe decorator for workflow step tracing
+from .observability import (
+    observe,
+    flush_langfuse,
+)  # Import observe decorator and flush for tracing
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +226,9 @@ class EmailWorkflow(Workflow):
 
             logger.info(f"[TRIAGE COMPLETE] Generated plan with {len(plan)} steps")
 
-            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+            result = TriageEvent(plan=plan, email_data=email_data, callback=callback)
+            flush_langfuse()  # Flush traces after step completion
+            return result
         except asyncio.TimeoutError:
             logger.error("Workflow timeout in triage_email step")
             # Create a simple fallback plan for timeout scenarios
@@ -236,7 +240,9 @@ class EmailWorkflow(Workflow):
                     },
                 }
             ]
-            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+            result = TriageEvent(plan=plan, email_data=email_data, callback=callback)
+            flush_langfuse()  # Flush traces after step completion
+            return result
         except Exception:
             logger.exception("Error during email triage")
             # Create a simple fallback plan
@@ -248,7 +254,9 @@ class EmailWorkflow(Workflow):
                     },
                 }
             ]
-            return TriageEvent(plan=plan, email_data=email_data, callback=callback)
+            result = TriageEvent(plan=plan, email_data=email_data, callback=callback)
+            flush_langfuse()  # Flush traces after step completion
+            return result
 
     @step
     @observe(name="execute_plan")
@@ -272,9 +280,11 @@ class EmailWorkflow(Workflow):
                 logger.error("Plan is None, creating empty plan")
                 plan = []
             if not isinstance(plan, list):
-                logger.error(f"Plan is not a list (type: {type(plan)}), creating empty plan")
+                logger.error(
+                    f"Plan is not a list (type: {type(plan)}), creating empty plan"
+                )
                 plan = []
-            
+
             logger.info(f"[PLAN EXEC START] Executing plan with {len(plan)} steps")
 
             results = []
@@ -369,7 +379,9 @@ class EmailWorkflow(Workflow):
                         }
                     )
 
-                    logger.info(f"[PLAN EXEC STEP {i + 1}] Completed: {result.get('success', False)}")
+                    logger.info(
+                        f"[PLAN EXEC STEP {i + 1}] Completed: {result.get('success', False)}"
+                    )
 
                     # If this is a critical step and it failed, stop execution
                     if critical and not result.get("success", False):
@@ -401,14 +413,16 @@ class EmailWorkflow(Workflow):
                         break
 
             logger.info(f"[PLAN EXEC COMPLETE] Finished {len(results)} steps")
-            return PlanExecutionEvent(
+            result = PlanExecutionEvent(
                 results=results, email_data=email_data, callback=callback
             )
-        
+            flush_langfuse()  # Flush traces after step completion
+            return result
+
         except asyncio.TimeoutError as e:
             logger.error(f"Workflow timeout in execute_plan step: {e}")
             # Return a PlanExecutionEvent with a timeout error result
-            return PlanExecutionEvent(
+            result = PlanExecutionEvent(
                 results=[
                     {
                         "step": 0,
@@ -420,11 +434,13 @@ class EmailWorkflow(Workflow):
                 email_data=email_data,
                 callback=callback,
             )
-        
+            flush_langfuse()  # Flush traces after step completion
+            return result
+
         except Exception as e:
             logger.exception("Fatal error in execute_plan step")
             # Return a PlanExecutionEvent with a single failed result
-            return PlanExecutionEvent(
+            result = PlanExecutionEvent(
                 results=[
                     {
                         "step": 0,
@@ -436,6 +452,8 @@ class EmailWorkflow(Workflow):
                 email_data=email_data,
                 callback=callback,
             )
+            flush_langfuse()  # Flush traces after step completion
+            return result
 
     @api_retry
     async def _send_callback_email(
@@ -506,16 +524,20 @@ class EmailWorkflow(Workflow):
             verified_response = str(verified_response).strip()
 
             if not verified_response or len(verified_response) < 10:
-                logger.warning("Verification produced empty/short response, using original")
+                logger.warning(
+                    "Verification produced empty/short response, using original"
+                )
                 verified_response = initial_response
 
             logger.info("[VERIFY COMPLETE] Response verification complete")
-            return VerificationEvent(
+            result = VerificationEvent(
                 verified_response=verified_response,
                 results=results,
                 email_data=email_data,
                 callback=callback,
             )
+            flush_langfuse()  # Flush traces after step completion
+            return result
 
         except asyncio.TimeoutError:
             logger.error("Workflow timeout in verify_response step")
@@ -529,13 +551,15 @@ class EmailWorkflow(Workflow):
                 )
             except Exception:
                 initial_response = "Your email has been processed. Please see the attached execution log for details."
-            return VerificationEvent(
+            result = VerificationEvent(
                 verified_response=initial_response,
                 results=results,
                 email_data=email_data,
                 callback=callback,
             )
-        except Exception as e:
+            flush_langfuse()  # Flush traces after step completion
+            return result
+        except Exception:
             logger.exception("Error during response verification")
             # Return original response on error
             try:
@@ -547,12 +571,14 @@ class EmailWorkflow(Workflow):
                 )
             except Exception:
                 initial_response = "Your email has been processed. Please see the attached execution log for details."
-            return VerificationEvent(
+            result = VerificationEvent(
                 verified_response=initial_response,
                 results=results,
                 email_data=email_data,
                 callback=callback,
             )
+            flush_langfuse()  # Flush traces after step completion
+            return result
 
     @step
     @observe(name="send_results")
@@ -572,7 +598,9 @@ class EmailWorkflow(Workflow):
         verified_response = ev.verified_response
 
         try:
-            logger.info(f"[SEND RESULTS START] Preparing results for {email_data.from_email}")
+            logger.info(
+                f"[SEND RESULTS START] Preparing results for {email_data.from_email}"
+            )
 
             # Use the verified response from the previous step
             result_text = verified_response
@@ -582,12 +610,18 @@ class EmailWorkflow(Workflow):
 
             # Collect any generated files from the results to attach
             attachments = collect_attachments(results)
-            logger.info(f"[COLLECT ATTACHMENTS] Collected {len(attachments)} file attachment(s) from results")
+            logger.info(
+                f"[COLLECT ATTACHMENTS] Collected {len(attachments)} file attachment(s) from results"
+            )
             for att in attachments:
-                logger.info(f"  - {att.name} (file_id: {att.file_id}, content: {'present' if att.content else 'None'})")
-            
+                logger.info(
+                    f"  - {att.name} (file_id: {att.file_id}, content: {'present' if att.content else 'None'})"
+                )
+
             # Add execution log as an attachment
-            execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode("utf-8")
+            execution_log_b64 = base64.b64encode(execution_log.encode("utf-8")).decode(
+                "utf-8"
+            )
             execution_log_attachment = Attachment(
                 id="execution-log",
                 name="execution_log.md",
@@ -595,10 +629,14 @@ class EmailWorkflow(Workflow):
                 content=execution_log_b64,
             )
             attachments.append(execution_log_attachment)
-            logger.info(f"[ATTACHMENTS FINAL] Total {len(attachments)} attachment(s) will be sent in callback")
+            logger.info(
+                f"[ATTACHMENTS FINAL] Total {len(attachments)} attachment(s) will be sent in callback"
+            )
 
             # Send response email via callback
-            logger.info(f"[SEND RESULTS CALLBACK] Sending results email to {email_data.from_email}")
+            logger.info(
+                f"[SEND RESULTS CALLBACK] Sending results email to {email_data.from_email}"
+            )
 
             response_email = SendEmailRequest(
                 to_email=email_data.from_email,
@@ -623,7 +661,9 @@ class EmailWorkflow(Workflow):
                 email_subject=email_data.subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=result))
-            return StopEvent(result=result)
+            stop_event = StopEvent(result=result)
+            flush_langfuse()  # Flush traces after final step completion
+            return stop_event
 
         except httpx.HTTPError as e:
             logger.error(f"Failed to send callback email: {e}")
@@ -634,7 +674,9 @@ class EmailWorkflow(Workflow):
                 email_subject=email_data.subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
-            return StopEvent(result=failure)
+            stop_event = StopEvent(result=failure)
+            flush_langfuse()  # Flush traces after final step completion
+            return stop_event
         except asyncio.TimeoutError as e:
             logger.error(f"Workflow timeout in send_results step: {e}")
             failure = EmailProcessingResult(
@@ -644,7 +686,9 @@ class EmailWorkflow(Workflow):
                 email_subject=email_data.subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
-            return StopEvent(result=failure)
+            stop_event = StopEvent(result=failure)
+            flush_langfuse()  # Flush traces after final step completion
+            return stop_event
         except Exception as e:
             logger.exception("Unexpected error in send_results step")
             failure = EmailProcessingResult(
@@ -654,7 +698,9 @@ class EmailWorkflow(Workflow):
                 email_subject=email_data.subject,
             )
             ctx.write_event_to_stream(EmailProcessedEvent(result=failure))
-            return StopEvent(result=failure)
+            stop_event = StopEvent(result=failure)
+            flush_langfuse()  # Flush traces after final step completion
+            return stop_event
 
 
 # Timeout increased to 120s to accommodate multiple Parse tool retries

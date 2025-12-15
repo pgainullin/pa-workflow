@@ -332,3 +332,169 @@ def test_observe_decorator_preserves_function_signature():
     # Docstring might be preserved depending on implementation
     sig = inspect.signature(test_func)
     assert len(sig.parameters) >= 2, "Function signature should be preserved"
+
+
+def test_flush_langfuse_function_exists():
+    """Test that flush_langfuse function is exported."""
+    from basic.observability import flush_langfuse
+    
+    # Verify function exists and is callable
+    assert callable(flush_langfuse)
+
+
+def test_flush_langfuse_no_op_when_not_configured():
+    """Test that flush_langfuse is a no-op when Langfuse is not configured."""
+    from basic import observability
+    
+    # Save original state
+    original_client = observability._langfuse_client
+    original_handler = observability._langfuse_handler
+    
+    try:
+        # Set to None to simulate not configured
+        observability._langfuse_client = None
+        observability._langfuse_handler = None
+        
+        # Should not raise any errors
+        observability.flush_langfuse()
+        
+    finally:
+        # Restore original state
+        observability._langfuse_client = original_client
+        observability._langfuse_handler = original_handler
+
+
+def test_flush_langfuse_calls_handler_flush():
+    """Test that flush_langfuse calls flush on both client and handler."""
+    from unittest.mock import Mock
+    from basic import observability
+    
+    # Save original state
+    original_client = observability._langfuse_client
+    original_handler = observability._langfuse_handler
+    
+    try:
+        # Create mock objects
+        mock_client = Mock()
+        mock_handler = Mock()
+        
+        observability._langfuse_client = mock_client
+        observability._langfuse_handler = mock_handler
+        
+        # Call flush
+        observability.flush_langfuse()
+        
+        # Verify both flush methods were called
+        mock_handler.flush.assert_called_once()
+        mock_client.flush.assert_called_once()
+        
+    finally:
+        # Restore original state
+        observability._langfuse_client = original_client
+        observability._langfuse_handler = original_handler
+
+
+def test_flush_langfuse_handles_errors_gracefully():
+    """Test that flush_langfuse handles errors without raising exceptions."""
+    from unittest.mock import Mock
+    from basic import observability
+    
+    # Save original state
+    original_client = observability._langfuse_client
+    original_handler = observability._langfuse_handler
+    
+    try:
+        # Create mock objects that raise errors
+        mock_client = Mock()
+        mock_client.flush.side_effect = Exception("Test error")
+        
+        observability._langfuse_client = mock_client
+        observability._langfuse_handler = None
+        
+        # Should not raise - errors should be caught and logged
+        observability.flush_langfuse()
+        
+    finally:
+        # Restore original state
+        observability._langfuse_client = original_client
+        observability._langfuse_handler = original_handler
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_with_flush_wrapper():
+    """Test that run_workflow_with_flush executes and flushes."""
+    from unittest.mock import Mock, AsyncMock
+    from basic.observability import run_workflow_with_flush
+    from basic import observability
+    
+    # Save original state
+    original_client = observability._langfuse_client
+    original_handler = observability._langfuse_handler
+    
+    try:
+        # Create mock flush targets
+        mock_client = Mock()
+        mock_handler = Mock()
+        
+        observability._langfuse_client = mock_client
+        observability._langfuse_handler = mock_handler
+        
+        # Create a mock workflow
+        mock_workflow = Mock()
+        mock_workflow.run = AsyncMock(return_value="test_result")
+        
+        # Run with flush wrapper
+        result = await run_workflow_with_flush(mock_workflow, test_arg="test_value")
+        
+        # Verify workflow was called
+        mock_workflow.run.assert_called_once_with(test_arg="test_value")
+        
+        # Verify result is correct
+        assert result == "test_result"
+        
+        # Verify flush was called
+        mock_handler.flush.assert_called_once()
+        mock_client.flush.assert_called_once()
+        
+    finally:
+        # Restore original state
+        observability._langfuse_client = original_client
+        observability._langfuse_handler = original_handler
+
+
+@pytest.mark.asyncio
+async def test_run_workflow_with_flush_flushes_on_error():
+    """Test that run_workflow_with_flush flushes even when workflow raises error."""
+    from unittest.mock import Mock, AsyncMock
+    from basic.observability import run_workflow_with_flush
+    from basic import observability
+    
+    # Save original state
+    original_client = observability._langfuse_client
+    original_handler = observability._langfuse_handler
+    
+    try:
+        # Create mock flush targets
+        mock_client = Mock()
+        mock_handler = Mock()
+        
+        observability._langfuse_client = mock_client
+        observability._langfuse_handler = mock_handler
+        
+        # Create a mock workflow that raises an error
+        mock_workflow = Mock()
+        mock_workflow.run = AsyncMock(side_effect=ValueError("Test error"))
+        
+        # Run with flush wrapper - should raise the error
+        with pytest.raises(ValueError, match="Test error"):
+            await run_workflow_with_flush(mock_workflow)
+        
+        # Verify flush was still called despite error
+        mock_handler.flush.assert_called_once()
+        mock_client.flush.assert_called_once()
+        
+    finally:
+        # Restore original state
+        observability._langfuse_client = original_client
+        observability._langfuse_handler = original_handler
+
