@@ -3,7 +3,10 @@ from workflows.events import StartEvent, StopEvent, Event
 import asyncio
 
 from basic import observability  # noqa: F401 - Import for side effect: enables Langfuse tracing
-from basic.observability import observe  # Import observe decorator for workflow step tracing
+from basic.observability import (
+    observe,
+    flush_langfuse,
+)  # Import observe decorator and flush for tracing
 
 
 class Start(StartEvent):
@@ -22,7 +25,9 @@ class BasicWorkflow(Workflow):
             Hello(message="🦙 Hello from the basic template.")
         )
         await asyncio.sleep(0)
-        return StopEvent(result=("Edit src/basic/workflow.py to get started."))
+        result = StopEvent(result=("Edit src/basic/workflow.py to get started."))
+        flush_langfuse()  # Flush traces after step completion
+        return result
 
 
 workflow = BasicWorkflow(timeout=None)
