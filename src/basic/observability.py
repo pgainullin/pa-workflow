@@ -273,7 +273,7 @@ def flush_langfuse() -> None:
     # Try to also flush the decorator context used by @observe traces.
     try:
         from langfuse.decorators import langfuse_context
-    except Exception:
+    except ImportError:
         langfuse_context = None
 
     if (
