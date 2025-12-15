@@ -13,10 +13,15 @@ Environment Variables:
 Usage:
     Simply import this module in your workflow to enable observability:
     
-    from basic.observability import setup_observability
+    from basic.observability import setup_observability, observe
     
     # Optionally call setup explicitly with custom parameters
     setup_observability(enabled=True)
+    
+    # Use @observe decorator to trace workflow steps:
+    @observe(name="my_step")
+    async def my_step(...):
+        ...
 """
 
 import atexit
@@ -28,6 +33,46 @@ from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
 
 logger = logging.getLogger(__name__)
+
+# Import observe decorator from langfuse for workflow instrumentation
+# This is exported for use in workflow files
+try:
+    from langfuse.decorators import observe  # noqa: F401
+    _observe_available = True
+except ImportError:
+    # Provide a no-op decorator if langfuse is not installed
+    def observe(*args, **kwargs):
+        """No-op decorator when Langfuse is not available.
+        
+        This decorator can be used in two ways:
+        1. Without arguments: @observe
+        2. With arguments: @observe(name="my_function")
+        
+        When Langfuse is not installed, this decorator simply returns
+        the original function unchanged, allowing code to work without
+        the observability dependency.
+        
+        Works with both sync and async functions:
+            @observe
+            async def my_async_step(...):
+                await some_operation()
+        
+            @observe(name="my_step")
+            async def my_workflow_step(...):
+                result = await process()
+                return result
+        """
+        if len(args) == 1 and callable(args[0]) and not kwargs:
+            # Called without arguments: @observe
+            # args[0] is the function being decorated
+            return args[0]
+        else:
+            # Called with arguments: @observe(name="...")
+            # Return a no-op decorator that will receive the function
+            def identity_decorator(func):
+                return func
+            return identity_decorator
+    _observe_available = False
 
 
 class LangfuseLoggingHandler(logging.Handler):
