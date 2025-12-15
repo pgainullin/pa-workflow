@@ -7,7 +7,7 @@ from environment variables.
 Environment Variables:
     LANGFUSE_SECRET_KEY: Secret key for Langfuse authentication (required)
     LANGFUSE_PUBLIC_KEY: Public key for Langfuse authentication (required)
-    LANGFUSE_HOST: Langfuse server URL (optional, defaults to https://cloud.langfuse.com)
+    LANGFUSE_BASE_URL: Langfuse server URL (optional, defaults to "https://us.cloud.langfuse.com")
     LANGFUSE_ENABLED: Enable/disable observability (optional, defaults to True if keys are set)
 
 Usage:
@@ -362,7 +362,7 @@ def setup_observability(enabled: bool | None = None) -> None:
     # Check environment variables
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
-    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    host = os.getenv("LANGFUSE_BASE_URL", "https://us.cloud.langfuse.com")
 
     # Validate host URL format
     try:
@@ -378,7 +378,7 @@ def setup_observability(enabled: bool | None = None) -> None:
             f"LANGFUSE_HOST must be a valid HTTP/HTTPS URL. Got: {host_display} "
             "Falling back to default host."
         )
-        host = "https://cloud.langfuse.com"
+        host = "https://us.cloud.langfuse.com"
 
     # Determine if observability should be enabled
     if enabled is None:
