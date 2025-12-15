@@ -226,8 +226,11 @@ async def main():
     
     if secret_key and public_key:
         print("ℹ️  Langfuse credentials detected:")
-        print(f"  LANGFUSE_SECRET_KEY: {'*' * 8}{secret_key[-4:] if len(secret_key) > 4 else '****'}")
-        print(f"  LANGFUSE_PUBLIC_KEY: {'*' * 8}{public_key[-4:] if len(public_key) > 4 else '****'}")
+        # Mask keys properly - always show at least 4 asterisks
+        secret_masked = f"{'*' * max(8, len(secret_key) - 4)}{secret_key[-4:] if len(secret_key) > 4 else ''}"
+        public_masked = f"{'*' * max(8, len(public_key) - 4)}{public_key[-4:] if len(public_key) > 4 else ''}"
+        print(f"  LANGFUSE_SECRET_KEY: {secret_masked}")
+        print(f"  LANGFUSE_PUBLIC_KEY: {public_masked}")
         print(f"  LANGFUSE_HOST: {os.getenv('LANGFUSE_HOST', 'https://cloud.langfuse.com')}")
     else:
         print("ℹ️  Langfuse credentials not set (tests will run in no-op mode)")

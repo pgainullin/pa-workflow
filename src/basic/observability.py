@@ -260,6 +260,9 @@ def flush_langfuse() -> None:
         flush_langfuse()
         ```
 
+    Returns:
+        None
+
     Note:
         - This is a no-op if Langfuse is not configured or disabled
         - Safe to call multiple times
