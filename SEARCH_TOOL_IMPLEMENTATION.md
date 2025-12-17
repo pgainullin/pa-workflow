@@ -1,34 +1,33 @@
 # Search Tool Implementation Summary
 
 ## Overview
-Added a new **SearchTool** to the PA Workflow system that enables semantic search through text content using Retrieval-Augmented Generation (RAG) with LlamaIndex.
+Added a new **SearchTool** to the PA Workflow system that enables web search using DuckDuckGo.
 
 ## Implementation Details
 
 ### 1. SearchTool Class (`src/basic/tools.py`)
-- **Location**: Lines 1140-1231
+- **Location**: Lines 1140-1300 (approximate)
 - **Key Features**:
-  - Semantic similarity search using vector embeddings
-  - RAG-based retrieval using LlamaIndex `VectorStoreIndex`
-  - OpenAI embeddings (text-embedding-3-small) for vector representation
-  - Configurable top_k results (default: 3)
-  - Returns ranked results with similarity scores
+  - Web search using DuckDuckGo HTML API
+  - No API key required
+  - Configurable max_results (default: 5)
+  - Returns search results with title, snippet, and URL
+  - Async implementation using httpx
 
 ### 2. Integration (`src/basic/email_workflow.py`)
-- Added `SearchTool` import (line 42)
-- Registered in `_register_tools()` method (line 158)
+- Added `SearchTool` import
+- Registered in `_register_tools()` method
 - Now available as tool "search" in the triage agent's toolkit
 
 ### 3. API
 
 **Tool Name**: `search`
 
-**Description**: Search through text content using semantic similarity search (RAG)
+**Description**: Search the web for information using DuckDuckGo
 
 **Input Parameters**:
-- `text` (required): Text content to search through
 - `query` (required): Search query
-- `top_k` (optional): Number of top results to return (default: 3)
+- `max_results` (optional): Maximum number of results to return (default: 5)
 
 **Output**:
 ```json
@@ -37,23 +36,23 @@ Added a new **SearchTool** to the PA Workflow system that enables semantic searc
   "query": "What is LlamaIndex?",
   "results": [
     {
-      "text": "LlamaIndex is a framework...",
-      "score": 0.95
+      "title": "LlamaIndex Documentation",
+      "url": "https://docs.llamaindex.ai/",
+      "snippet": "LlamaIndex is a framework for building..."
     }
-  ],
-  "answer": "LlamaIndex is a framework for building..."
+  ]
 }
 ```
 
 ### 4. Testing (`tests/test_tools.py`)
 Added comprehensive test coverage:
-- `test_search_tool()`: Main functionality test with mocked embeddings
-- `test_search_tool_missing_text()`: Error handling for missing text parameter
+- `test_search_tool()`: Main functionality test with mocked HTTP responses
 - `test_search_tool_missing_query()`: Error handling for missing query parameter
+- `test_search_tool_no_results()`: Handling when no search results are found
 
 ### 5. Documentation (`README.md`)
 Updated the "Available Tools" section to include:
-- **Search** - Search through text using semantic similarity (RAG)
+- **Search** - Search the web for information using DuckDuckGo
 
 ## Usage Example
 
@@ -63,38 +62,35 @@ The Search tool can be used in email workflows like this:
 {
   "tool": "search",
   "params": {
-    "text": "{{step_1.parsed_text}}",
-    "query": "Find information about project deadlines",
-    "top_k": 5
+    "query": "latest news about artificial intelligence",
+    "max_results": 5
   },
-  "description": "Search for deadline information in the document"
+  "description": "Search the web for AI news"
 }
 ```
 
 ## Technical Notes
 
-1. **Embedding Model**: Uses OpenAI's `text-embedding-3-small` by default
-2. **Vector Store**: Creates in-memory VectorStoreIndex for each search
-3. **Async Support**: Fully async implementation using `aquery()`
-4. **Error Handling**: Comprehensive error messages for missing parameters
-5. **Extensibility**: Embedding model can be injected for testing or customization
+1. **Search Provider**: Uses DuckDuckGo HTML search API (no API key required)
+2. **HTTP Client**: Uses httpx for async HTTP requests
+3. **HTML Parsing**: Custom HTMLParser to extract results from DuckDuckGo HTML
+4. **Error Handling**: Handles timeouts, connection errors, and empty results
+5. **Async Support**: Fully async implementation
 
 ## Files Modified
-- `src/basic/tools.py`: Added SearchTool class (+94 lines)
-- `src/basic/email_workflow.py`: Added SearchTool import and registration (+2 lines)
-- `tests/test_tools.py`: Added SearchTool tests (+82 lines)
-- `README.md`: Updated tool documentation (+1 line)
-
-**Total Changes**: +179 lines
+- `src/basic/tools.py`: Added SearchTool class for web search
+- `src/basic/email_workflow.py`: Added SearchTool import and registration
+- `tests/test_tools.py`: Added SearchTool tests
+- `README.md`: Updated tool documentation
 
 ## Verification
 All implementation checks passed:
 - ✓ SearchTool class properly defined
 - ✓ Required properties (name, description) implemented
 - ✓ Execute method with correct signature
-- ✓ Parameter validation for text and query
-- ✓ LlamaIndex VectorStoreIndex integration
-- ✓ OpenAI embeddings usage
+- ✓ Parameter validation for query
+- ✓ Web search using DuckDuckGo
+- ✓ HTML parsing for search results
 - ✓ Imported in email_workflow.py
 - ✓ Registered in tool registry
 - ✓ Documented in README.md
@@ -102,8 +98,8 @@ All implementation checks passed:
 
 ## Future Enhancements
 Potential improvements for future iterations:
-1. Support for persistent vector stores (e.g., Chroma, Pinecone)
-2. Batch search across multiple documents
-3. Hybrid search combining keyword and semantic search
-4. Custom embedding model configuration
-5. Search result caching for frequently asked queries
+1. Support for alternative search providers (Google, Bing, etc.)
+2. Search result caching
+3. More advanced result filtering and ranking
+4. Support for image, video, or news-specific searches
+5. Integration with search APIs that require authentication

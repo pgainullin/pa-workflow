@@ -536,97 +536,86 @@ async def test_sheets_tool_missing_file():
 
 @pytest.mark.asyncio
 async def test_search_tool():
-    """Test the search tool with semantic similarity search."""
-    # Mock LlamaIndex imports before importing SearchTool
-    with patch("llama_index.core.Document") as mock_doc_class, \
-         patch("llama_index.core.VectorStoreIndex") as mock_index_class, \
-         patch("llama_index.embeddings.openai.OpenAIEmbedding") as mock_embed_class:
-        
-        # Set up mock embedding
-        mock_embed_model = MagicMock()
-        mock_embed_class.return_value = mock_embed_model
-        
-        # Import after mocking
-        from basic.tools import SearchTool
-        
-        tool = SearchTool(embed_model=mock_embed_model)
+    """Test the web search tool."""
+    from basic.tools import SearchTool
 
-        # Sample text to search through
-        text = """
-        LlamaIndex is a framework for building data-backed LLM applications.
-        It provides tools for indexing, querying, and retrieving information.
-        The framework supports various data sources including PDFs, databases, and APIs.
-        RAG (Retrieval-Augmented Generation) is a key technique used by LlamaIndex.
-        """
+    tool = SearchTool(max_results=3)
 
-        # Set up mock index and query engine
-        mock_index = MagicMock()
-        mock_query_engine = MagicMock()
-
-        # Mock query response with source nodes
+    # Mock httpx client
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
         mock_response = MagicMock()
-        mock_response.__str__ = lambda x: "LlamaIndex is a framework for building applications."
-
-        mock_node = MagicMock()
-        mock_node.node.get_content = MagicMock(
-            return_value="LlamaIndex is a framework for building data-backed LLM applications."
-        )
-        mock_node.score = 0.95
-
-        mock_response.source_nodes = [mock_node]
-        mock_query_engine.aquery = AsyncMock(return_value=mock_response)
-
-        mock_index.as_query_engine = MagicMock(return_value=mock_query_engine)
-        mock_index_class.from_documents = MagicMock(return_value=mock_index)
+        mock_response.status_code = 200
+        mock_response.text = """
+        <html>
+            <div class="result">
+                <a class="result__a" href="https://example.com/1">Example Result 1</a>
+                <a class="result__snippet">This is a snippet for result 1</a>
+            </div>
+            <div class="result">
+                <a class="result__a" href="https://example.com/2">Example Result 2</a>
+                <a class="result__snippet">This is a snippet for result 2</a>
+            </div>
+        </html>
+        """
+        
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
 
         # Test execution
-        result = await tool.execute(text=text, query="What is LlamaIndex?", top_k=3)
+        result = await tool.execute(query="test query", max_results=3)
 
         assert result["success"] is True
         assert "results" in result
-        assert "answer" in result
-        assert len(result["results"]) > 0
-        assert result["results"][0]["text"] == "LlamaIndex is a framework for building data-backed LLM applications."
-        assert result["results"][0]["score"] == 0.95
-        assert result["query"] == "What is LlamaIndex?"
-
-
-@pytest.mark.asyncio
-async def test_search_tool_missing_text():
-    """Test search tool with missing text parameter."""
-    # Mock LlamaIndex imports
-    with patch("llama_index.core.Document"), \
-         patch("llama_index.core.VectorStoreIndex"), \
-         patch("llama_index.embeddings.openai.OpenAIEmbedding"):
-        from basic.tools import SearchTool
-
-        # Use mock embed model to avoid actual API calls
-        mock_embed = MagicMock()
-        tool = SearchTool(embed_model=mock_embed)
-
-        # Test without text
-        result = await tool.execute(query="test query")
-
-        assert result["success"] is False
-        assert "error" in result
-        assert "text" in result["error"].lower()
+        assert result["query"] == "test query"
+        assert len(result["results"]) == 2
+        assert result["results"][0]["title"] == "Example Result 1"
+        assert result["results"][0]["url"] == "https://example.com/1"
+        assert result["results"][0]["snippet"] == "This is a snippet for result 1"
 
 
 @pytest.mark.asyncio
 async def test_search_tool_missing_query():
     """Test search tool with missing query parameter."""
-    # Mock LlamaIndex imports
-    with patch("llama_index.core.Document"), \
-         patch("llama_index.core.VectorStoreIndex"), \
-         patch("llama_index.embeddings.openai.OpenAIEmbedding"):
-        from basic.tools import SearchTool
+    from basic.tools import SearchTool
 
-        # Use mock embed model to avoid actual API calls
-        mock_embed = MagicMock()
-        tool = SearchTool(embed_model=mock_embed)
+    tool = SearchTool()
 
-        # Test without query
-        result = await tool.execute(text="some text content")
+    # Test without query
+    result = await tool.execute()
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "query" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_search_tool_no_results():
+    """Test search tool when no results are found."""
+    from basic.tools import SearchTool
+
+    tool = SearchTool()
+
+    # Mock httpx client with empty results
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body>No results</body></html>"
+        
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
+
+        result = await tool.execute(query="test query")
+
+        assert result["success"] is True
+        assert "results" in result
+        assert len(result["results"]) == 0
+        assert "message" in result
 
         assert result["success"] is False
         assert "error" in result

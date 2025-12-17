@@ -1138,34 +1138,15 @@ class PrintToPDFTool(Tool):
 
 
 class SearchTool(Tool):
-    """Tool for searching through text using semantic search with RAG."""
+    """Tool for searching the web using DuckDuckGo search."""
 
-    # Default embedding model configuration
-    DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-
-    def __init__(self, embed_model=None, embedding_model_name: str | None = None):
+    def __init__(self, max_results: int = 5):
         """Initialize the SearchTool.
 
         Args:
-            embed_model: Optional embedding model instance. If not provided,
-                        one will be created using OpenAI embeddings.
-            embedding_model_name: Optional name of the embedding model to use.
-                                 Only used if embed_model is not provided.
-                                 Defaults to DEFAULT_EMBEDDING_MODEL.
+            max_results: Maximum number of search results to return (default: 5)
         """
-        # Import LlamaIndex dependencies at initialization time
-        from llama_index.core import Document, VectorStoreIndex
-        from llama_index.embeddings.openai import OpenAIEmbedding
-
-        self._Document = Document
-        self._VectorStoreIndex = VectorStoreIndex
-
-        # Initialize embedding model at construction time to avoid repeated instantiation
-        if embed_model is not None:
-            self.embed_model = embed_model
-        else:
-            embedding_name = embedding_model_name or self.DEFAULT_EMBEDDING_MODEL
-            self.embed_model = OpenAIEmbedding(model_name=embedding_name)
+        self.max_results = max_results
 
     @property
     def name(self) -> str:
@@ -1174,69 +1155,146 @@ class SearchTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Search through text content using semantic similarity search (RAG). "
-            "Input: text (text to search in), query (search query), top_k (optional, number of results, default: 3). "
-            "Output: results (list of most relevant text chunks with similarity scores)"
+            "Search the web for information using DuckDuckGo. "
+            "Input: query (search query), max_results (optional, default: 5). "
+            "Output: results (list of search results with title, snippet, and URL)"
         )
 
     async def execute(self, **kwargs) -> dict[str, Any]:
-        """Search through text using semantic similarity.
+        """Search the web for information.
 
         Args:
             **kwargs: Keyword arguments including:
-                - text: Text content to search through (required)
                 - query: Search query (required)
-                - top_k: Number of top results to return (optional, default: 3)
+                - max_results: Maximum number of results (optional, default: 5)
 
         Returns:
             Dictionary with 'success' and 'results' or 'error'
         """
-        text = kwargs.get("text")
-        query = kwargs.get("query")
-        top_k = kwargs.get("top_k", 3)
+        import httpx
 
-        if not text:
-            return {"success": False, "error": "Missing required parameter: text"}
+        query = kwargs.get("query")
+        max_results = kwargs.get("max_results", self.max_results)
 
         if not query:
             return {"success": False, "error": "Missing required parameter: query"}
 
         try:
-            # Create a document from the text
-            document = self._Document(text=text)
-
-            # Create a vector index from the document with explicit embedding model
-            # This avoids race conditions from using global Settings
-            index = self._VectorStoreIndex.from_documents(
-                [document], embed_model=self.embed_model
-            )
-
-            # Create a query engine
-            query_engine = index.as_query_engine(similarity_top_k=top_k)
-
-            # Execute the query
-            response = await query_engine.aquery(query)
-
-            # Extract results with scores
-            results = []
-            for node in response.source_nodes:
-                results.append(
-                    {
-                        "text": node.node.get_content(),
-                        "score": node.score,
-                    }
+            # Use DuckDuckGo Instant Answer API
+            # This is a simple, free API that doesn't require authentication
+            async with httpx.AsyncClient() as client:
+                # DuckDuckGo HTML search (simpler than the instant answer API)
+                response = await client.get(
+                    "https://html.duckduckgo.com/html/",
+                    params={"q": query},
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                    },
+                    timeout=10.0,
+                    follow_redirects=True,
                 )
 
-            return {
-                "success": True,
-                "query": query,
-                "results": results,
-                "answer": str(response),
-            }
+                if response.status_code != 200:
+                    return {
+                        "success": False,
+                        "error": f"Search request failed with status {response.status_code}",
+                    }
 
+                # Parse HTML response to extract search results
+                results = self._parse_duckduckgo_results(
+                    response.text, max_results
+                )
+
+                if not results:
+                    return {
+                        "success": True,
+                        "query": query,
+                        "results": [],
+                        "message": "No results found",
+                    }
+
+                return {
+                    "success": True,
+                    "query": query,
+                    "results": results,
+                }
+
+        except httpx.TimeoutException:
+            logger.exception("Search request timed out")
+            return {"success": False, "error": "Search request timed out"}
         except Exception as e:
-            logger.exception("Error performing search")
+            logger.exception("Error performing web search")
             return {"success": False, "error": str(e)}
+
+    def _parse_duckduckgo_results(self, html: str, max_results: int) -> list[dict]:
+        """Parse DuckDuckGo HTML search results.
+
+        Args:
+            html: HTML response from DuckDuckGo
+            max_results: Maximum number of results to extract
+
+        Returns:
+            List of result dictionaries with title, snippet, and url
+        """
+        from html.parser import HTMLParser
+
+        class DuckDuckGoParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.results = []
+                self.current_result = {}
+                self.in_result = False
+                self.in_title = False
+                self.in_snippet = False
+                self.current_data = []
+
+            def handle_starttag(self, tag, attrs):
+                attrs_dict = dict(attrs)
+                
+                # Result container
+                if tag == "div" and attrs_dict.get("class") == "result":
+                    self.in_result = True
+                    self.current_result = {}
+                
+                # Title link
+                if self.in_result and tag == "a" and "result__a" in attrs_dict.get("class", ""):
+                    self.in_title = True
+                    self.current_result["url"] = attrs_dict.get("href", "")
+                    self.current_data = []
+                
+                # Snippet
+                if self.in_result and tag == "a" and "result__snippet" in attrs_dict.get("class", ""):
+                    self.in_snippet = True
+                    self.current_data = []
+
+            def handle_endtag(self, tag):
+                if tag == "a" and self.in_title:
+                    self.current_result["title"] = "".join(self.current_data).strip()
+                    self.in_title = False
+                    self.current_data = []
+                
+                if tag == "a" and self.in_snippet:
+                    self.current_result["snippet"] = "".join(self.current_data).strip()
+                    self.in_snippet = False
+                    self.current_data = []
+                
+                if tag == "div" and self.in_result:
+                    if "title" in self.current_result and "snippet" in self.current_result:
+                        self.results.append(self.current_result.copy())
+                    self.in_result = False
+                    self.current_result = {}
+
+            def handle_data(self, data):
+                if self.in_title or self.in_snippet:
+                    self.current_data.append(data)
+
+        parser = DuckDuckGoParser()
+        try:
+            parser.feed(html)
+        except Exception as e:
+            logger.warning(f"Error parsing search results: {e}")
+        
+        return parser.results[:max_results]
 
 
 class ToolRegistry:
