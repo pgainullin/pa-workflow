@@ -1153,8 +1153,19 @@ class SearchTool(Tool):
                                  Only used if embed_model is not provided.
                                  Defaults to DEFAULT_EMBEDDING_MODEL.
         """
-        self.embed_model = embed_model
-        self.embedding_model_name = embedding_model_name or self.DEFAULT_EMBEDDING_MODEL
+        # Import LlamaIndex dependencies at initialization time
+        from llama_index.core import Document, VectorStoreIndex
+        from llama_index.embeddings.openai import OpenAIEmbedding
+
+        self._Document = Document
+        self._VectorStoreIndex = VectorStoreIndex
+
+        # Initialize embedding model at construction time to avoid repeated instantiation
+        if embed_model is not None:
+            self.embed_model = embed_model
+        else:
+            embedding_name = embedding_model_name or self.DEFAULT_EMBEDDING_MODEL
+            self.embed_model = OpenAIEmbedding(model_name=embedding_name)
 
     @property
     def name(self) -> str:
@@ -1191,24 +1202,14 @@ class SearchTool(Tool):
             return {"success": False, "error": "Missing required parameter: query"}
 
         try:
-            from llama_index.core import Document, VectorStoreIndex, Settings
-            from llama_index.embeddings.openai import OpenAIEmbedding
-
-            # Get or create embedding model
-            if self.embed_model is None:
-                # Use OpenAI embeddings with configurable model name
-                self.embed_model = OpenAIEmbedding(
-                    model_name=self.embedding_model_name
-                )
-
-            # Set embedding model in Settings
-            Settings.embed_model = self.embed_model
-
             # Create a document from the text
-            document = Document(text=text)
+            document = self._Document(text=text)
 
-            # Create a vector index from the document
-            index = VectorStoreIndex.from_documents([document])
+            # Create a vector index from the document with explicit embedding model
+            # This avoids race conditions from using global Settings
+            index = self._VectorStoreIndex.from_documents(
+                [document], embed_model=self.embed_model
+            )
 
             # Create a query engine
             query_engine = index.as_query_engine(similarity_top_k=top_k)

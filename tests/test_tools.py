@@ -537,23 +537,29 @@ async def test_sheets_tool_missing_file():
 @pytest.mark.asyncio
 async def test_search_tool():
     """Test the search tool with semantic similarity search."""
-    from basic.tools import SearchTool
+    # Mock LlamaIndex imports before importing SearchTool
+    with patch("llama_index.core.Document") as mock_doc_class, \
+         patch("llama_index.core.VectorStoreIndex") as mock_index_class, \
+         patch("llama_index.embeddings.openai.OpenAIEmbedding") as mock_embed_class:
+        
+        # Set up mock embedding
+        mock_embed_model = MagicMock()
+        mock_embed_class.return_value = mock_embed_model
+        
+        # Import after mocking
+        from basic.tools import SearchTool
+        
+        tool = SearchTool(embed_model=mock_embed_model)
 
-    # Mock embedding model and index
-    mock_embed_model = MagicMock()
+        # Sample text to search through
+        text = """
+        LlamaIndex is a framework for building data-backed LLM applications.
+        It provides tools for indexing, querying, and retrieving information.
+        The framework supports various data sources including PDFs, databases, and APIs.
+        RAG (Retrieval-Augmented Generation) is a key technique used by LlamaIndex.
+        """
 
-    tool = SearchTool(embed_model=mock_embed_model)
-
-    # Sample text to search through
-    text = """
-    LlamaIndex is a framework for building data-backed LLM applications.
-    It provides tools for indexing, querying, and retrieving information.
-    The framework supports various data sources including PDFs, databases, and APIs.
-    RAG (Retrieval-Augmented Generation) is a key technique used by LlamaIndex.
-    """
-
-    # Mock the VectorStoreIndex and query engine
-    with patch("basic.tools.VectorStoreIndex") as mock_index_class:
+        # Set up mock index and query engine
         mock_index = MagicMock()
         mock_query_engine = MagicMock()
 
@@ -588,28 +594,40 @@ async def test_search_tool():
 @pytest.mark.asyncio
 async def test_search_tool_missing_text():
     """Test search tool with missing text parameter."""
-    from basic.tools import SearchTool
+    # Mock LlamaIndex imports
+    with patch("llama_index.core.Document"), \
+         patch("llama_index.core.VectorStoreIndex"), \
+         patch("llama_index.embeddings.openai.OpenAIEmbedding"):
+        from basic.tools import SearchTool
 
-    tool = SearchTool()
+        # Use mock embed model to avoid actual API calls
+        mock_embed = MagicMock()
+        tool = SearchTool(embed_model=mock_embed)
 
-    # Test without text
-    result = await tool.execute(query="test query")
+        # Test without text
+        result = await tool.execute(query="test query")
 
-    assert result["success"] is False
-    assert "error" in result
-    assert "text" in result["error"].lower()
+        assert result["success"] is False
+        assert "error" in result
+        assert "text" in result["error"].lower()
 
 
 @pytest.mark.asyncio
 async def test_search_tool_missing_query():
     """Test search tool with missing query parameter."""
-    from basic.tools import SearchTool
+    # Mock LlamaIndex imports
+    with patch("llama_index.core.Document"), \
+         patch("llama_index.core.VectorStoreIndex"), \
+         patch("llama_index.embeddings.openai.OpenAIEmbedding"):
+        from basic.tools import SearchTool
 
-    tool = SearchTool()
+        # Use mock embed model to avoid actual API calls
+        mock_embed = MagicMock()
+        tool = SearchTool(embed_model=mock_embed)
 
-    # Test without query
-    result = await tool.execute(text="some text content")
+        # Test without query
+        result = await tool.execute(text="some text content")
 
-    assert result["success"] is False
-    assert "error" in result
-    assert "query" in result["error"].lower()
+        assert result["success"] is False
+        assert "error" in result
+        assert "query" in result["error"].lower()
