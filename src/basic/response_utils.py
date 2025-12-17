@@ -121,6 +121,22 @@ async def generate_user_response(
                 if len(text) > 500:
                     text = text[:500] + "..."
                 context += f"  Result: {text}\n"
+            if "results" in result and isinstance(result["results"], list):
+                # Handle search results
+                search_results = result["results"]
+                if search_results:
+                    context += f"  Found {len(search_results)} search result(s):\n"
+                    for i, res in enumerate(search_results[:5], 1):  # Limit to first 5 results
+                        title = res.get("title", "")
+                        snippet = res.get("snippet", "")
+                        url = res.get("url", "")
+                        context += f"    {i}. {title}\n"
+                        if snippet:
+                            context += f"       {snippet}\n"
+                        if url:
+                            context += f"       URL: {url}\n"
+                else:
+                    context += f"  No search results found\n"
 
         prompt = f"""Based on the following email processing results, generate a brief, natural language response to send to the user.
 
@@ -153,6 +169,15 @@ Response:"""
                     output += f"Category: {result['category']}\n\n"
                 if "file_id" in result:
                     output += f"Generated file: {result['file_id']}\n\n"
+                if "results" in result and isinstance(result["results"], list):
+                    search_results = result["results"]
+                    if search_results:
+                        output += f"Search Results ({len(search_results)} found):\n"
+                        for i, res in enumerate(search_results[:5], 1):
+                            output += f"{i}. {res.get('title', 'No title')}\n"
+                            if res.get('snippet'):
+                                output += f"   {res['snippet']}\n"
+                        output += "\n"
 
             output += "See the attached execution_log.md for detailed information about the processing steps."
             return output
@@ -194,6 +219,27 @@ def create_execution_log(results: list[dict], email_data: EmailData) -> str:
                     output += f"**Category:** {result['category']}\n\n"
                 if "file_id" in result:
                     output += f"**Generated File ID:** `{result['file_id']}`\n\n"
+                
+                if "results" in result and isinstance(result["results"], list):
+                    # Handle search results
+                    search_results = result["results"]
+                    query = result.get("query", "")
+                    if query:
+                        output += f"**Search Query:** {query}\n\n"
+                    if search_results:
+                        output += f"**Search Results:** ({len(search_results)} found)\n\n"
+                        for i, res in enumerate(search_results, 1):
+                            title = res.get("title", "No title")
+                            snippet = res.get("snippet", "")
+                            url = res.get("url", "")
+                            output += f"{i}. **{title}**\n"
+                            if snippet:
+                                output += f"   {snippet}\n"
+                            if url:
+                                output += f"   URL: {url}\n"
+                            output += "\n"
+                    else:
+                        output += f"**Search Results:** No results found\n\n"
 
                 SAFE_ADDITIONAL_FIELDS = ["extracted_data", "sheet_url", "other_info"]
                 for key, value in result.items():
