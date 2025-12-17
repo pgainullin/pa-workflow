@@ -40,6 +40,7 @@ from .tools import (
     TranslateTool,
     SummariseTool,
     PrintToPDFTool,
+    SearchTool,
     ToolRegistry,
 )
 from .utils import (
@@ -155,6 +156,7 @@ class EmailWorkflow(Workflow):
         self.tool_registry.register(TranslateTool())
         self.tool_registry.register(SummariseTool(self.llm))
         self.tool_registry.register(PrintToPDFTool())
+        self.tool_registry.register(SearchTool())
 
     @llm_api_retry
     async def _llm_complete_with_retry(self, prompt: str) -> str:

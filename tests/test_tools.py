@@ -10,6 +10,7 @@ import pytest
 os.environ.setdefault("GEMINI_API_KEY", "test-dummy-key-for-testing")
 os.environ.setdefault("LLAMA_CLOUD_API_KEY", "test-dummy-key-for-testing")
 os.environ.setdefault("LLAMA_CLOUD_PROJECT_ID", "test-project-id")
+os.environ.setdefault("OPENAI_API_KEY", "test-dummy-openai-key-for-testing")
 
 
 @pytest.mark.asyncio
@@ -531,3 +532,84 @@ async def test_sheets_tool_missing_file():
         "file_id" in result["error"].lower()
         or "file_content" in result["error"].lower()
     )
+
+
+@pytest.mark.asyncio
+async def test_search_tool():
+    """Test the search tool with semantic similarity search."""
+    from basic.tools import SearchTool
+
+    # Mock embedding model and index
+    mock_embed_model = MagicMock()
+
+    tool = SearchTool(embed_model=mock_embed_model)
+
+    # Sample text to search through
+    text = """
+    LlamaIndex is a framework for building data-backed LLM applications.
+    It provides tools for indexing, querying, and retrieving information.
+    The framework supports various data sources including PDFs, databases, and APIs.
+    RAG (Retrieval-Augmented Generation) is a key technique used by LlamaIndex.
+    """
+
+    # Mock the VectorStoreIndex and query engine
+    with patch("basic.tools.VectorStoreIndex") as mock_index_class:
+        mock_index = MagicMock()
+        mock_query_engine = MagicMock()
+
+        # Mock query response with source nodes
+        mock_response = MagicMock()
+        mock_response.__str__ = lambda x: "LlamaIndex is a framework for building applications."
+
+        mock_node = MagicMock()
+        mock_node.node.get_content = MagicMock(
+            return_value="LlamaIndex is a framework for building data-backed LLM applications."
+        )
+        mock_node.score = 0.95
+
+        mock_response.source_nodes = [mock_node]
+        mock_query_engine.aquery = AsyncMock(return_value=mock_response)
+
+        mock_index.as_query_engine = MagicMock(return_value=mock_query_engine)
+        mock_index_class.from_documents = MagicMock(return_value=mock_index)
+
+        # Test execution
+        result = await tool.execute(text=text, query="What is LlamaIndex?", top_k=3)
+
+        assert result["success"] is True
+        assert "results" in result
+        assert "answer" in result
+        assert len(result["results"]) > 0
+        assert result["results"][0]["text"] == "LlamaIndex is a framework for building data-backed LLM applications."
+        assert result["results"][0]["score"] == 0.95
+        assert result["query"] == "What is LlamaIndex?"
+
+
+@pytest.mark.asyncio
+async def test_search_tool_missing_text():
+    """Test search tool with missing text parameter."""
+    from basic.tools import SearchTool
+
+    tool = SearchTool()
+
+    # Test without text
+    result = await tool.execute(query="test query")
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "text" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_search_tool_missing_query():
+    """Test search tool with missing query parameter."""
+    from basic.tools import SearchTool
+
+    tool = SearchTool()
+
+    # Test without query
+    result = await tool.execute(text="some text content")
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "query" in result["error"].lower()

@@ -1137,6 +1137,100 @@ class PrintToPDFTool(Tool):
             return {"success": False, "error": str(e)}
 
 
+class SearchTool(Tool):
+    """Tool for searching through text using semantic search with RAG."""
+
+    def __init__(self, embed_model=None):
+        """Initialize the SearchTool.
+
+        Args:
+            embed_model: Optional embedding model. If not provided,
+                        one will be created using OpenAI embeddings.
+        """
+        self.embed_model = embed_model
+
+    @property
+    def name(self) -> str:
+        return "search"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Search through text content using semantic similarity search (RAG). "
+            "Input: text (text to search in), query (search query), top_k (optional, number of results, default: 3). "
+            "Output: results (list of most relevant text chunks with similarity scores)"
+        )
+
+    async def execute(self, **kwargs) -> dict[str, Any]:
+        """Search through text using semantic similarity.
+
+        Args:
+            **kwargs: Keyword arguments including:
+                - text: Text content to search through (required)
+                - query: Search query (required)
+                - top_k: Number of top results to return (optional, default: 3)
+
+        Returns:
+            Dictionary with 'success' and 'results' or 'error'
+        """
+        text = kwargs.get("text")
+        query = kwargs.get("query")
+        top_k = kwargs.get("top_k", 3)
+
+        if not text:
+            return {"success": False, "error": "Missing required parameter: text"}
+
+        if not query:
+            return {"success": False, "error": "Missing required parameter: query"}
+
+        try:
+            from llama_index.core import Document, VectorStoreIndex, Settings
+            from llama_index.embeddings.openai import OpenAIEmbedding
+
+            # Get or create embedding model
+            if self.embed_model is None:
+                # Use OpenAI embeddings by default
+                self.embed_model = OpenAIEmbedding(
+                    model_name="text-embedding-3-small"
+                )
+
+            # Set embedding model in Settings
+            Settings.embed_model = self.embed_model
+
+            # Create a document from the text
+            document = Document(text=text)
+
+            # Create a vector index from the document
+            index = VectorStoreIndex.from_documents([document])
+
+            # Create a query engine
+            query_engine = index.as_query_engine(similarity_top_k=top_k)
+
+            # Execute the query
+            response = await query_engine.aquery(query)
+
+            # Extract results with scores
+            results = []
+            for node in response.source_nodes:
+                results.append(
+                    {
+                        "text": node.node.get_content(),
+                        "score": node.score,
+                    }
+                )
+
+            return {
+                "success": True,
+                "query": query,
+                "results": results,
+                "answer": str(response),
+            }
+
+        except Exception as e:
+            logger.exception("Error performing search")
+            return {"success": False, "error": str(e)}
+
+
 class ToolRegistry:
     """Registry for managing available tools."""
 
