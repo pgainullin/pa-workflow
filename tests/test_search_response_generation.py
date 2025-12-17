@@ -17,6 +17,7 @@ with patch("llama_index.llms.google_genai.GoogleGenAI"):
             from basic.email_workflow import EmailWorkflow
 
 from basic.models import EmailData
+from basic.response_utils import create_execution_log
 
 
 @pytest.mark.asyncio
@@ -55,9 +56,9 @@ async def test_search_results_in_user_response():
     # Mock the LLM response - capture the prompt that was passed
     captured_prompt = None
     
-    def mock_complete(prompt):
+    def mock_complete(prompt_str):
         nonlocal captured_prompt
-        captured_prompt = prompt
+        captured_prompt = prompt_str
         mock_response = MagicMock()
         mock_response.__str__ = lambda x: "I found some great Python tutorials for you!"
         return mock_response
@@ -105,7 +106,7 @@ async def test_search_results_in_execution_log():
         },
     ]
 
-    log = workflow._create_execution_log(results, email_data)
+    log = create_execution_log(results, email_data)
 
     # Verify search results are in the log
     assert "## Step 1: search" in log
@@ -139,7 +140,7 @@ async def test_search_no_results_in_execution_log():
         },
     ]
 
-    log = workflow._create_execution_log(results, email_data)
+    log = create_execution_log(results, email_data)
 
     # Verify no results message is in the log
     assert "## Step 1: search" in log
@@ -232,16 +233,16 @@ async def test_search_results_with_multiple_tools():
     # Mock the LLM response - capture the prompt that was passed
     captured_prompt = None
     
-    def mock_complete(prompt):
+    def mock_complete(prompt_str):
         nonlocal captured_prompt
-        captured_prompt = prompt
+        captured_prompt = prompt_str
         mock_response = MagicMock()
         mock_response.__str__ = lambda x: "I found information about LlamaIndex and summarized it for you."
         return mock_response
     
     workflow._llm_complete_with_retry = AsyncMock(side_effect=mock_complete)
 
-    response = await workflow._generate_user_response(results, email_data)
+    await workflow._generate_user_response(results, email_data)
 
     # Verify both search and summary are in the prompt
     assert captured_prompt is not None
