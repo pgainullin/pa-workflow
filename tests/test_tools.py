@@ -10,6 +10,7 @@ import pytest
 os.environ.setdefault("GEMINI_API_KEY", "test-dummy-key-for-testing")
 os.environ.setdefault("LLAMA_CLOUD_API_KEY", "test-dummy-key-for-testing")
 os.environ.setdefault("LLAMA_CLOUD_PROJECT_ID", "test-project-id")
+os.environ.setdefault("OPENAI_API_KEY", "test-dummy-openai-key-for-testing")
 
 
 @pytest.mark.asyncio
@@ -531,3 +532,87 @@ async def test_sheets_tool_missing_file():
         "file_id" in result["error"].lower()
         or "file_content" in result["error"].lower()
     )
+
+
+@pytest.mark.asyncio
+async def test_search_tool():
+    """Test the web search tool."""
+    from basic.tools import SearchTool
+
+    tool = SearchTool(max_results=3)
+
+    # Mock httpx client
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = """
+        <html>
+            <div class="result">
+                <a class="result__a" href="https://example.com/1">Example Result 1</a>
+                <a class="result__snippet">This is a snippet for result 1</a>
+            </div>
+            <div class="result">
+                <a class="result__a" href="https://example.com/2">Example Result 2</a>
+                <a class="result__snippet">This is a snippet for result 2</a>
+            </div>
+        </html>
+        """
+        
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
+
+        # Test execution
+        result = await tool.execute(query="test query", max_results=3)
+
+        assert result["success"] is True
+        assert "results" in result
+        assert result["query"] == "test query"
+        assert len(result["results"]) == 2
+        assert result["results"][0]["title"] == "Example Result 1"
+        assert result["results"][0]["url"] == "https://example.com/1"
+        assert result["results"][0]["snippet"] == "This is a snippet for result 1"
+
+
+@pytest.mark.asyncio
+async def test_search_tool_missing_query():
+    """Test search tool with missing query parameter."""
+    from basic.tools import SearchTool
+
+    tool = SearchTool()
+
+    # Test without query
+    result = await tool.execute()
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "query" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_search_tool_no_results():
+    """Test search tool when no results are found."""
+    from basic.tools import SearchTool
+
+    tool = SearchTool()
+
+    # Mock httpx client with empty results
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.text = "<html><body>No results</body></html>"
+        
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
+
+        result = await tool.execute(query="test query")
+
+        assert result["success"] is True
+        assert "results" in result
+        assert len(result["results"]) == 0
+        assert "message" in result
