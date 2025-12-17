@@ -74,22 +74,25 @@ async def main():
             print(f"Query: {query}")
             print("-" * 80)
 
-            # Mock response for this query
+            # Mock response with query-specific content
             mock_response = MagicMock()
-            mock_response.__str__ = lambda x: f"LlamaIndex is a framework that {query.lower()}"
-
-            # Create mock nodes with relevant content
+            
+            # Create mock nodes with relevant content based on query
             mock_node = MagicMock()
             if "what is" in query.lower():
                 content = "LlamaIndex is a framework for building data-backed LLM applications."
+                answer = "LlamaIndex is a framework for building data-backed LLM applications that specializes in agentic workflows and Retrieval-Augmented Generation (RAG)."
                 score = 0.95
             elif "features" in query.lower():
                 content = "Key features include document loading, vector indexing, and query engines."
+                answer = "LlamaIndex provides key features including document loading and parsing, vector indexing for efficient retrieval, query engines for asking questions over data, and chat engines for conversational interfaces."
                 score = 0.88
             else:
                 content = "LlamaIndex supports dozens of LLM providers including OpenAI and Anthropic."
+                answer = "LlamaIndex supports dozens of LLM providers including OpenAI, Anthropic, and local models, with hundreds of data connectors for ingesting diverse data sources."
                 score = 0.91
-
+            
+            mock_response.__str__ = lambda a=answer: a  # Capture answer in closure
             mock_node.node.get_content = MagicMock(return_value=content)
             mock_node.score = score
 

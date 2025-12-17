@@ -1140,14 +1140,21 @@ class PrintToPDFTool(Tool):
 class SearchTool(Tool):
     """Tool for searching through text using semantic search with RAG."""
 
-    def __init__(self, embed_model=None):
+    # Default embedding model configuration
+    DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+
+    def __init__(self, embed_model=None, embedding_model_name: str | None = None):
         """Initialize the SearchTool.
 
         Args:
-            embed_model: Optional embedding model. If not provided,
+            embed_model: Optional embedding model instance. If not provided,
                         one will be created using OpenAI embeddings.
+            embedding_model_name: Optional name of the embedding model to use.
+                                 Only used if embed_model is not provided.
+                                 Defaults to DEFAULT_EMBEDDING_MODEL.
         """
         self.embed_model = embed_model
+        self.embedding_model_name = embedding_model_name or self.DEFAULT_EMBEDDING_MODEL
 
     @property
     def name(self) -> str:
@@ -1189,9 +1196,9 @@ class SearchTool(Tool):
 
             # Get or create embedding model
             if self.embed_model is None:
-                # Use OpenAI embeddings by default
+                # Use OpenAI embeddings with configurable model name
                 self.embed_model = OpenAIEmbedding(
-                    model_name="text-embedding-3-small"
+                    model_name=self.embedding_model_name
                 )
 
             # Set embedding model in Settings
