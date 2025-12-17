@@ -1,11 +1,8 @@
 """Verification script to check SearchTool implementation.
 
 This script verifies that the SearchTool has been correctly implemented
-without requiring full dependency installation.
+for web search using DuckDuckGo.
 """
-
-import ast
-import re
 
 
 def verify_search_tool():
@@ -33,8 +30,8 @@ def verify_search_tool():
     else:
         checks.append(("✗", "name property NOT properly defined"))
 
-    if "def description(self) -> str:" in content and "semantic similarity" in content.lower():
-        checks.append(("✓", "description property includes 'semantic similarity'"))
+    if "def description(self) -> str:" in content and "web" in content.lower():
+        checks.append(("✓", "description property includes 'web' search"))
     else:
         checks.append(("✗", "description property NOT properly defined"))
 
@@ -46,21 +43,16 @@ def verify_search_tool():
     # 3. Check for required parameters
     search_tool_section = content[content.find("class SearchTool"):content.find("class ToolRegistry")]
     
-    if "text" in search_tool_section and "query" in search_tool_section:
-        checks.append(("✓", "Required parameters (text, query) present"))
+    if "query" in search_tool_section:
+        checks.append(("✓", "Required parameter (query) present"))
     else:
-        checks.append(("✗", "Required parameters missing"))
+        checks.append(("✗", "Required parameter missing"))
 
-    # 4. Check for LlamaIndex imports
-    if "VectorStoreIndex" in search_tool_section:
-        checks.append(("✓", "Uses VectorStoreIndex for search"))
+    # 4. Check for web search implementation
+    if "duckduckgo" in search_tool_section.lower() or "httpx" in search_tool_section.lower():
+        checks.append(("✓", "Uses web search (DuckDuckGo/httpx)"))
     else:
-        checks.append(("✗", "VectorStoreIndex NOT used"))
-
-    if "OpenAIEmbedding" in search_tool_section:
-        checks.append(("✓", "Uses OpenAIEmbedding for embeddings"))
-    else:
-        checks.append(("✗", "OpenAIEmbedding NOT used"))
+        checks.append(("✗", "Web search implementation NOT found"))
 
     # Print results
     print("Implementation Checks:")
@@ -109,7 +101,7 @@ def verify_search_tool():
 
     doc_checks = []
 
-    if "Search" in readme_content and "semantic" in readme_content.lower():
+    if "Search" in readme_content and ("web" in readme_content.lower() or "duckduckgo" in readme_content.lower()):
         doc_checks.append(("✓", "Search tool documented in README.md"))
     else:
         doc_checks.append(("✗", "Search tool NOT documented"))
@@ -136,15 +128,15 @@ def verify_search_tool():
     else:
         test_checks.append(("✗", "test_search_tool() NOT found"))
 
-    if "test_search_tool_missing_text" in test_content:
-        test_checks.append(("✓", "test_search_tool_missing_text() defined"))
-    else:
-        test_checks.append(("✗", "Missing text parameter test NOT found"))
-
     if "test_search_tool_missing_query" in test_content:
         test_checks.append(("✓", "test_search_tool_missing_query() defined"))
     else:
         test_checks.append(("✗", "Missing query parameter test NOT found"))
+    
+    if "test_search_tool_no_results" in test_content:
+        test_checks.append(("✓", "test_search_tool_no_results() defined"))
+    else:
+        test_checks.append(("✗", "No results test NOT found"))
 
     print("Test Checks:")
     print("-" * 80)

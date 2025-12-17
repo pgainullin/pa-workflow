@@ -1,7 +1,7 @@
 """Demo script to demonstrate the Search tool functionality.
 
-This script shows how the Search tool can be used to perform semantic search
-through text content using RAG (Retrieval-Augmented Generation).
+This script shows how the Search tool can be used to perform web search
+using DuckDuckGo.
 """
 
 import asyncio
@@ -12,104 +12,97 @@ from unittest.mock import MagicMock, AsyncMock, patch
 os.environ.setdefault("GEMINI_API_KEY", "demo-key")
 os.environ.setdefault("LLAMA_CLOUD_API_KEY", "demo-key")
 os.environ.setdefault("LLAMA_CLOUD_PROJECT_ID", "demo-project")
-os.environ.setdefault("OPENAI_API_KEY", "demo-openai-key")
 
 
 async def main():
     """Demonstrate the Search tool with a mock setup."""
     print("=" * 80)
-    print("Search Tool Demo")
+    print("Web Search Tool Demo")
     print("=" * 80)
     print()
 
     # Import the SearchTool
     from src.basic.tools import SearchTool
 
-    # Sample text about LlamaIndex
-    sample_text = """
-    LlamaIndex is a framework for building data-backed LLM applications.
-    It specializes in agentic workflows and Retrieval-Augmented Generation (RAG).
-    
-    The framework enables developers to build AI applications that combine Large 
-    Language Models with real-world data sources. LlamaIndex addresses the challenge 
-    that LLMs are trained on public data with knowledge cutoffs, but most valuable 
-    business applications require access to private documents, databases, APIs, 
-    and real-time information.
-    
-    Key features include:
-    - Document loading and parsing
-    - Vector indexing for efficient retrieval
-    - Query engines for asking questions over data
-    - Chat engines for conversational interfaces
-    - Multi-modal support for images, videos, and documents
-    
-    LlamaIndex supports dozens of LLM providers including OpenAI, Anthropic, and 
-    local models, with hundreds of data connectors for ingesting diverse data sources.
-    """
+    # Create a SearchTool instance
+    tool = SearchTool(max_results=3)
 
-    # Create a SearchTool instance with mock embedding
-    mock_embed_model = MagicMock()
-    tool = SearchTool(embed_model=mock_embed_model)
-
-    print("Sample Text:")
+    print("Search Tool Configuration:")
     print("-" * 80)
-    print(sample_text.strip())
+    print(f"Tool Name: {tool.name}")
+    print(f"Description: {tool.description}")
+    print(f"Max Results: {tool.max_results}")
     print()
     print("=" * 80)
     print()
 
-    # Mock the VectorStoreIndex to simulate search results
-    with patch("src.basic.tools.VectorStoreIndex") as mock_index_class:
-        mock_index = MagicMock()
-        mock_query_engine = MagicMock()
-
+    # Mock httpx client to simulate web search
+    with patch("httpx.AsyncClient") as mock_client_class:
+        mock_client = MagicMock()
+        
         # Simulate query responses for different queries
         queries = [
             "What is LlamaIndex?",
-            "What features does LlamaIndex provide?",
-            "Which LLM providers are supported?",
+            "Latest AI news",
+            "Python programming tutorials",
         ]
 
         for query in queries:
             print(f"Query: {query}")
             print("-" * 80)
 
-            # Mock response with query-specific content
+            # Mock HTML response with search results
             mock_response = MagicMock()
+            mock_response.status_code = 200
             
-            # Create mock nodes with relevant content based on query
-            mock_node = MagicMock()
-            if "what is" in query.lower():
-                content = "LlamaIndex is a framework for building data-backed LLM applications."
-                answer = "LlamaIndex is a framework for building data-backed LLM applications that specializes in agentic workflows and Retrieval-Augmented Generation (RAG)."
-                score = 0.95
-            elif "features" in query.lower():
-                content = "Key features include document loading, vector indexing, and query engines."
-                answer = "LlamaIndex provides key features including document loading and parsing, vector indexing for efficient retrieval, query engines for asking questions over data, and chat engines for conversational interfaces."
-                score = 0.88
+            if "llamaindex" in query.lower():
+                mock_response.text = """
+                <html>
+                    <div class="result">
+                        <a class="result__a" href="https://docs.llamaindex.ai/">LlamaIndex Documentation</a>
+                        <a class="result__snippet">Official documentation for LlamaIndex, a framework for building data-backed LLM applications.</a>
+                    </div>
+                    <div class="result">
+                        <a class="result__a" href="https://github.com/run-llama/llama_index">LlamaIndex GitHub</a>
+                        <a class="result__snippet">LlamaIndex is a data framework for LLM applications to ingest, structure, and access data.</a>
+                    </div>
+                </html>
+                """
+            elif "ai news" in query.lower():
+                mock_response.text = """
+                <html>
+                    <div class="result">
+                        <a class="result__a" href="https://example.com/ai-news">Latest AI Developments</a>
+                        <a class="result__snippet">Breaking news in artificial intelligence and machine learning technologies.</a>
+                    </div>
+                </html>
+                """
             else:
-                content = "LlamaIndex supports dozens of LLM providers including OpenAI and Anthropic."
-                answer = "LlamaIndex supports dozens of LLM providers including OpenAI, Anthropic, and local models, with hundreds of data connectors for ingesting diverse data sources."
-                score = 0.91
+                mock_response.text = """
+                <html>
+                    <div class="result">
+                        <a class="result__a" href="https://python.org/tutorials">Python Tutorials</a>
+                        <a class="result__snippet">Learn Python programming with official tutorials and guides.</a>
+                    </div>
+                </html>
+                """
             
-            mock_response.__str__ = lambda a=answer: a  # Capture answer in closure
-            mock_node.node.get_content = MagicMock(return_value=content)
-            mock_node.score = score
-
-            mock_response.source_nodes = [mock_node]
-            mock_query_engine.aquery = AsyncMock(return_value=mock_response)
-
-            mock_index.as_query_engine = MagicMock(return_value=mock_query_engine)
-            mock_index_class.from_documents = MagicMock(return_value=mock_index)
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
 
             # Execute the search
-            result = await tool.execute(text=sample_text, query=query, top_k=1)
+            result = await tool.execute(query=query, max_results=3)
 
             # Display results
             if result["success"]:
                 print(f"✓ Search completed successfully")
-                print(f"  Top Result (score: {result['results'][0]['score']:.2f}):")
-                print(f"  {result['results'][0]['text']}")
+                print(f"  Found {len(result['results'])} result(s):")
+                for i, res in enumerate(result['results'], 1):
+                    print(f"  {i}. {res['title']}")
+                    print(f"     URL: {res['url']}")
+                    print(f"     Snippet: {res['snippet']}")
                 print()
             else:
                 print(f"✗ Search failed: {result.get('error', 'Unknown error')}")
@@ -118,9 +111,9 @@ async def main():
     print("=" * 80)
     print("Demo Complete!")
     print()
-    print("The Search tool enables semantic search through text content using")
-    print("LlamaIndex's RAG capabilities. It can be used to find relevant")
-    print("information within documents, emails, or any text-based content.")
+    print("The Search tool enables web search using DuckDuckGo.")
+    print("It can be used to find information on the internet, retrieve")
+    print("current news, research topics, or answer questions using web results.")
     print("=" * 80)
 
 

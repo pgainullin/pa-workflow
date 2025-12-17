@@ -616,7 +616,3 @@ async def test_search_tool_no_results():
         assert "results" in result
         assert len(result["results"]) == 0
         assert "message" in result
-
-        assert result["success"] is False
-        assert "error" in result
-        assert "query" in result["error"].lower()
