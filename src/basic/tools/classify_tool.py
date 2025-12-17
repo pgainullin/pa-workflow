@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from llama_index.core.program import LLMTextCompletionProgram
+from pydantic import BaseModel, Field
+
 from .base import Tool
 
 logger = logging.getLogger(__name__)
@@ -39,9 +42,6 @@ class ClassifyTool(Tool):
         Returns:
             Dictionary with 'success', 'category' or 'error'
         """
-        from llama_index.core.program import LLMTextCompletionProgram
-        from pydantic import BaseModel, Field
-
         text = kwargs.get("text")
         categories = kwargs.get("categories")
 

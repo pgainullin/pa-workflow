@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from llama_index.core.node_parser import SentenceSplitter
+
 from .base import Tool
 from ..utils import download_file_from_llamacloud
 
@@ -49,8 +51,6 @@ class SplitTool(Tool):
         Returns:
             Dictionary with 'success' and 'splits' or 'error'
         """
-        from llama_index.core.node_parser import SentenceSplitter
-
         text = kwargs.get("text")
         file_id = kwargs.get("file_id")
         chunk_size = kwargs.get("chunk_size", self.chunk_size)

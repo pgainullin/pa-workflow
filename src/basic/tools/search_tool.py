@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import httpx
+
 from .base import Tool
 
 logger = logging.getLogger(__name__)
@@ -44,8 +46,6 @@ class SearchTool(Tool):
         Returns:
             Dictionary with 'success' and 'results' or 'error'
         """
-        import httpx
-
         query = kwargs.get("query")
         max_results = kwargs.get("max_results", self.max_results)
 

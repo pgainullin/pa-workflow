@@ -9,6 +9,8 @@ import pathlib
 import tempfile
 from typing import Any
 
+from llama_parse import LlamaParse
+
 from .base import Tool
 from ..utils import download_file_from_llamacloud
 
@@ -57,8 +59,6 @@ class SheetsTool(Tool):
         filename = kwargs.get("filename") or kwargs.get("file_id_filename")
 
         try:
-            from llama_parse import LlamaParse
-
             # Get or create LlamaParse instance
             if self.llama_parser is None:
                 self.llama_parser = LlamaParse(result_type="markdown")

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
+
+from deep_translator import GoogleTranslator
 
 from .base import Tool
 from ..utils import process_text_in_batches
@@ -47,9 +50,6 @@ class TranslateTool(Tool):
             return {"success": False, "error": "Missing required parameter: text"}
 
         try:
-            import asyncio
-            from deep_translator import GoogleTranslator
-
             # Validate language codes
             # Create a temporary instance to get supported languages
             temp_translator = GoogleTranslator(source="auto", target="en")

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import os
 import pathlib
 import tempfile
+import uuid
 from typing import Any
 
 from .base import Tool
@@ -42,8 +45,6 @@ class ParseTool(Tool):
             True if the string is a valid UUID format
         """
         try:
-            import uuid
-
             uuid.UUID(value)
             return True
         except (ValueError, AttributeError):
@@ -63,8 +64,6 @@ class ParseTool(Tool):
         Raises:
             Exception: If parsing fails after all retry attempts or if content is empty
         """
-        import asyncio
-
         documents = await asyncio.to_thread(self.llama_parser.load_data, tmp_path)
         parsed_text = "\n".join([doc.get_content() for doc in documents])
         
@@ -94,9 +93,6 @@ class ParseTool(Tool):
         Returns:
             Dictionary with 'success' and 'parsed_text' or 'error'
         """
-        import tempfile
-        import pathlib
-
         file_id = kwargs.get("file_id")
         file_content = kwargs.get("file_content")
         file_content_from_param = kwargs.get(
@@ -141,8 +137,6 @@ class ParseTool(Tool):
             # Determine file extension from filename if provided
             file_extension = ".pdf"  # Default to .pdf
             if filename:
-                import os
-
                 _, ext = os.path.splitext(filename)
                 if ext:
                     file_extension = ext

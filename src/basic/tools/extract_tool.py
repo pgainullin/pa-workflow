@@ -6,6 +6,11 @@ import hashlib
 import logging
 from typing import Any
 
+from llama_cloud import ExtractConfig, ExtractMode
+from llama_cloud_services import LlamaExtract
+from llama_cloud_services.extract.extract import SourceText
+from pydantic import BaseModel
+
 from .base import Tool
 from ..utils import process_text_in_batches
 
@@ -49,10 +54,6 @@ class ExtractTool(Tool):
             Dictionary with 'success' and 'extracted_data' or 'error'
         """
         try:
-            from llama_cloud_services import LlamaExtract
-            from llama_cloud_services.extract.extract import SourceText
-            from pydantic import BaseModel
-
             text = kwargs.get("text")
             schema = kwargs.get("schema")
             file_id = kwargs.get("file_id")
@@ -115,8 +116,6 @@ class ExtractTool(Tool):
                     f"Failed to get agent '{agent_name}': {e}. Creating a new agent."
                 )
                 # Agent doesn't exist, create it
-                from llama_cloud import ExtractConfig, ExtractMode
-
                 extract_config = ExtractConfig(
                     extraction_mode=ExtractMode.BALANCED,
                 )
