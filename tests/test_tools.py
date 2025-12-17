@@ -43,7 +43,7 @@ async def test_translate_tool():
     tool = TranslateTool()
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         mock_translator = MagicMock()
         mock_translator.translate = MagicMock(return_value="Bonjour le monde")
         # Mock get_supported_languages as instance method
@@ -164,7 +164,7 @@ Additional text after the table.
 """
 
     # Mock upload function
-    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+    with patch("basic.tools.print_to_pdf_tool.upload_file_to_llamacloud") as mock_upload:
         mock_upload.return_value = "file-456"
 
         # Test execution with markdown content
@@ -228,7 +228,7 @@ async def test_print_to_pdf_edge_cases():
 Regular text with special characters: café, naïve, résumé
 """
 
-    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+    with patch("basic.tools.print_to_pdf_tool.upload_file_to_llamacloud") as mock_upload:
         mock_upload.return_value = "file-edge"
 
         result = await tool.execute(text=edge_case_markdown, filename="edge_cases.pdf")
@@ -256,7 +256,7 @@ async def test_parse_tool():
     tool = ParseTool(mock_parser)
 
     # Mock download function
-    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+    with patch("basic.tools.parse_tool.download_file_from_llamacloud") as mock_download:
         mock_download.return_value = b"PDF content"
 
         # Test execution with valid UUID file_id
@@ -288,7 +288,7 @@ async def test_parse_tool_retries_on_transient_errors():
     tool = ParseTool(mock_parser)
 
     # Mock download function
-    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+    with patch("basic.tools.parse_tool.download_file_from_llamacloud") as mock_download:
         mock_download.return_value = b"PDF content"
 
         # Test execution - should succeed after retry
@@ -328,7 +328,7 @@ async def test_parse_tool_retries_on_empty_content():
     tool = ParseTool(mock_parser)
 
     # Mock download function
-    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+    with patch("basic.tools.parse_tool.download_file_from_llamacloud") as mock_download:
         mock_download.return_value = b"PDF content"
 
         # Test execution - should succeed after retry
@@ -359,7 +359,7 @@ async def test_parse_tool_fails_after_max_retries_on_empty_content():
     tool = ParseTool(mock_parser)
 
     # Mock download function
-    with patch("basic.tools.download_file_from_llamacloud") as mock_download:
+    with patch("basic.tools.parse_tool.download_file_from_llamacloud") as mock_download:
         mock_download.return_value = b"PDF content"
 
         # Test execution - should fail after max retries
@@ -470,7 +470,7 @@ async def test_sheets_tool_csv():
     base64_content = base64.b64encode(csv_bytes).decode("utf-8")
 
     # Mock download function (won't be called since we're using file_content)
-    with patch("basic.tools.download_file_from_llamacloud"):
+    with patch("basic.tools.sheets_tool.download_file_from_llamacloud"):
         # Test with base64 content
         result = await tool.execute(file_content=base64_content, filename="test.csv")
 
