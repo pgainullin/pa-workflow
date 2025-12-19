@@ -135,15 +135,12 @@ class LangfuseLoggingHandler(logging.Handler):
                 trace_id = langfuse_context.get_current_trace_id()
 
                 if trace_id:
-                    # Update current trace with the log event
-                    # Retrieve existing metadata to append log events
-                    current_metadata = (
-                        langfuse_context.get_current_trace_metadata() or {}
-                    )
-                    log_events = current_metadata.get("log_events", [])
-                    log_events.append({"message": log_message, **metadata})
-                    langfuse_context.update_current_trace(
-                        metadata={**current_metadata, "log_events": log_events}
+                    # Send log as an event attached to the current trace
+                    self.langfuse_client.event(
+                        name=f"log.{record.levelname.lower()}",
+                        metadata=metadata,
+                        input=log_message,
+                        trace_id=trace_id,
                     )
                 else:
                     # Create a standalone event if no active trace
