@@ -32,6 +32,34 @@ def strip_html(text: str) -> str:
     return text
 
 
+def sanitize_filename_from_prompt(prompt: str, max_length: int = 50) -> str:
+    """Create a safe filename from a text prompt.
+
+    Args:
+        prompt (str): The text prompt to convert to a filename.
+        max_length (int): Maximum length for the filename (default: 50).
+
+    Returns:
+        str: A sanitized filename-safe string.
+    """
+    if not prompt:
+        return "generated_image"
+    
+    # Convert to lowercase and replace spaces/special chars with underscores
+    filename = re.sub(r'[^\w\s-]', '', prompt.lower())
+    filename = re.sub(r'[-\s]+', '_', filename)
+    
+    # Truncate to max_length
+    if len(filename) > max_length:
+        filename = filename[:max_length]
+    
+    # Remove trailing underscores
+    filename = filename.rstrip('_')
+    
+    # Return default if empty after sanitization
+    return filename if filename else "generated_image"
+
+
 def sanitize_email_content(
     subject: str | None,
     text: str | None,
@@ -316,6 +344,15 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                 if tool == "print_to_pdf":
                     filename = f"output_step_{step_num}.pdf"
                     mime_type = "application/pdf"
+                elif tool == "image_gen":
+                    # Create intuitive filename from prompt if available
+                    prompt = result.get("prompt", "")
+                    if prompt:
+                        base_filename = sanitize_filename_from_prompt(prompt)
+                        filename = f"{base_filename}.png"
+                    else:
+                        filename = f"generated_image_step_{step_num}.png"
+                    mime_type = "image/png"
                 else:
                     filename = f"generated_file_step_{step_num}.dat"
                     mime_type = "application/octet-stream"
