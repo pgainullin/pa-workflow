@@ -64,8 +64,8 @@ Modified `src/basic/prompt_templates/triage_prompt.txt` to add explicit guidance
 **Added Guidelines:**
 1. ONLY process attachments that are EXPLICITLY listed in the Attachments section
 2. DO NOT assume there are attachments if none are listed
-3. DO NOT schedule parse/sheets/extract steps unless you can see a specific attachment name and type
-4. Emphasized that file_id is required for parse/sheets/extract tools
+3. DO NOT schedule **parse** or **sheets** steps unless you can see a specific attachment name and type; only use **extract** steps when you have text already available (e.g., email body or `parsed_text` from a previous step)
+4. Emphasized that `file_id` is required only for **parse** and **sheets** tools (which operate on attachments), while **extract** tools operate on text input that has already been extracted
 
 These changes help prevent the LLM from incorrectly scheduling parse steps in the first place.
 
