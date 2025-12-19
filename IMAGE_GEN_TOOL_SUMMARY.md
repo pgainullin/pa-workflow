@@ -11,7 +11,7 @@ Successfully implemented an image generation tool that uses Google Gemini's Imag
 **File**: `src/basic/tools/image_gen_tool.py`
 
 **Features**:
-- Generate images from text descriptions using Google Gemini's `imagen-3.0-generate-002` model
+- Generate images from text descriptions using Google Gemini's `imagen-4.0-generate-001` model
 - Support for generating 1-4 images per request
 - Automatic upload of generated images to LlamaCloud
 - Returns file_id(s) for generated images
