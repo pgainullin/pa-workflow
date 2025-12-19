@@ -565,7 +565,6 @@ async def test_sheets_tool_missing_file():
     assert result["sheet_data"]["table_count"] == 0
     assert "message" in result
     assert "No file provided" in result["message"]
-    )
 
 
 @pytest.mark.asyncio
