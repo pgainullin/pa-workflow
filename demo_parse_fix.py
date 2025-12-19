@@ -97,8 +97,10 @@ Updated prompt guidelines to prevent this scenario:
 IMPORTANT GUIDELINES:
 1. ONLY process attachments that are EXPLICITLY listed in the Attachments section
 2. DO NOT assume there are attachments if none are listed
-3. DO NOT schedule parse/sheets/extract steps unless you can see a specific
+3. DO NOT schedule parse or sheets steps unless you can see a specific
    attachment name and type
+4. Extract steps operate on text from previous steps (not attachments), so they
+   do not require visible attachments to be scheduled
 
 With improved prompt, ideal behavior:
 
