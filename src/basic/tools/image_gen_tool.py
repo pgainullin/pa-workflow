@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import os
 from typing import Any
 
 import google.genai as genai
+from google.genai import types
 
 from .base import Tool
 from ..utils import upload_file_to_llamacloud
@@ -42,20 +42,11 @@ class ImageGenTool(Tool):
             "Output: file_id (single image) or file_ids array with count (multiple images)"
         )
 
-    def _image_to_bytes(self, image) -> bytes:
-        """Convert PIL Image to bytes.
 
-        Args:
-            image: PIL Image object
 
-        Returns:
-            Image data as bytes in PNG format
-        """
-        img_byte_arr = io.BytesIO()
-        image.save(img_byte_arr, format="PNG")
-        return img_byte_arr.getvalue()
-
-    async def _generate_single_image(self, prompt: str, request_num: int, total: int):
+    async def _generate_single_image(
+        self, prompt: str, request_num: int, total: int
+    ) -> bytes | None:
         """Generate a single image asynchronously.
 
         Args:
@@ -64,21 +55,27 @@ class ImageGenTool(Tool):
             total: Total number of images being generated
 
         Returns:
-            PIL Image object if successful, None otherwise
+            Image bytes if successful, None otherwise
         """
         try:
+            # Configure the request to generate images
+            config = types.GenerateContentConfig(
+                response_modalities=["IMAGE"],
+            )
+
             # Run the synchronous generate_content call in a thread pool
             response = await asyncio.to_thread(
                 self.client.models.generate_content,
                 model="gemini-2.5-flash-image",
                 contents=[prompt],
+                config=config,
             )
 
-            # Extract image from response parts
+            # Extract image bytes from response parts
             for part in response.parts:
                 if part.inline_data is not None:
-                    image = part.as_image()
-                    return image
+                    # Return the raw image bytes
+                    return part.inline_data.data
 
             logger.warning(
                 f"No image found in response for request {request_num}/{total}"
@@ -169,12 +166,11 @@ class ImageGenTool(Tool):
 
             # Process single image case
             if number_of_images == 1:
-                image_data = generated_images[0]
-                img_bytes = self._image_to_bytes(image_data)
+                image_bytes = generated_images[0]
 
                 # Upload to LlamaCloud
                 file_id = await upload_file_to_llamacloud(
-                    img_bytes, filename="generated_image.png"
+                    image_bytes, filename="generated_image.png"
                 )
 
                 result = {
@@ -196,11 +192,9 @@ class ImageGenTool(Tool):
 
             # Process multiple images case
             file_ids = []
-            for i, image_data in enumerate(generated_images, start=1):
-                img_bytes = self._image_to_bytes(image_data)
-
+            for i, image_bytes in enumerate(generated_images, start=1):
                 file_id = await upload_file_to_llamacloud(
-                    img_bytes, filename=f"generated_image_{i}.png"
+                    image_bytes, filename=f"generated_image_{i}.png"
                 )
                 file_ids.append(file_id)
 

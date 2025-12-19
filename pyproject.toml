@@ -12,6 +12,7 @@ dependencies = [
     "llama-index>=0.14.10",
     "llama-index-llms-openai>=0.6.10",
     "llama-index-llms-google-genai>=0.7.4",
+    "google-genai>=1.0.0",  # Google Gemini API for image generation
     "llama-index-workflows>=2.5.0,<3.0.0",
     "llama-parse>=0.6.54",
     "llama-cloud-services>=0.0.17",
