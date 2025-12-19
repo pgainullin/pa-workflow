@@ -38,7 +38,7 @@ class ImageGenTool(Tool):
             "Generate images based on a text description using Google Gemini's Imagen API. "
             "Input: prompt (text description of the image to generate), "
             "number_of_images (optional, default: 1, max: 4). "
-            "Output: file_id (LlamaCloud file ID of the generated image)"
+            "Output: file_id (single image) or file_ids array with count (multiple images)"
         )
 
     def _image_to_bytes(self, image) -> bytes:
@@ -119,47 +119,80 @@ class ImageGenTool(Tool):
                     "error": "No images were generated. The prompt may have been filtered.",
                 }
 
-            # Upload the first generated image to LlamaCloud
-            image_data = response.generated_images[0].image
-            img_bytes = self._image_to_bytes(image_data)
+            # Check if we got the expected number of images
+            actual_count = len(response.generated_images)
+            if actual_count < number_of_images:
+                logger.warning(
+                    f"Requested {number_of_images} images but only received {actual_count}"
+                )
 
-            # Upload to LlamaCloud
-            file_id = await upload_file_to_llamacloud(
-                img_bytes, filename="generated_image.png"
-            )
+            # Process single image case
+            if number_of_images == 1:
+                image_data = response.generated_images[0].image
+                img_bytes = self._image_to_bytes(image_data)
+
+                # Upload to LlamaCloud
+                file_id = await upload_file_to_llamacloud(
+                    img_bytes, filename="generated_image.png"
+                )
+
+                result = {
+                    "success": True,
+                    "file_id": file_id,
+                    "prompt": prompt,
+                }
+
+                # Add RAI (Responsible AI) information if available
+                if (
+                    hasattr(response.generated_images[0], "rai_filtered_reason")
+                    and response.generated_images[0].rai_filtered_reason
+                ):
+                    result["rai_reason"] = response.generated_images[
+                        0
+                    ].rai_filtered_reason
+
+                # Add warning if fewer images were received than requested
+                if actual_count < number_of_images:
+                    result["warning"] = (
+                        f"Requested {number_of_images} images but only {actual_count} generated"
+                    )
+
+                logger.info(
+                    f"Successfully generated and uploaded image with file_id: {file_id}"
+                )
+                return result
+
+            # Process multiple images case
+            file_ids = []
+            for i, generated_image in enumerate(response.generated_images, start=1):
+                img_bytes = self._image_to_bytes(generated_image.image)
+
+                file_id = await upload_file_to_llamacloud(
+                    img_bytes, filename=f"generated_image_{i}.png"
+                )
+                file_ids.append(file_id)
 
             result = {
                 "success": True,
-                "file_id": file_id,
+                "file_ids": file_ids,
+                "count": len(file_ids),
                 "prompt": prompt,
             }
 
-            # Add RAI (Responsible AI) information if available
+            # Add RAI information from the first image if available
             if (
                 hasattr(response.generated_images[0], "rai_filtered_reason")
                 and response.generated_images[0].rai_filtered_reason
             ):
                 result["rai_reason"] = response.generated_images[0].rai_filtered_reason
 
-            # If multiple images were generated, upload them all and return all file IDs
-            if number_of_images > 1:
-                file_ids = [file_id]
-                for i, generated_image in enumerate(
-                    response.generated_images[1:], start=2
-                ):
-                    img_bytes = self._image_to_bytes(generated_image.image)
+            # Add warning if fewer images were received than requested
+            if actual_count < number_of_images:
+                result["warning"] = (
+                    f"Requested {number_of_images} images but only {actual_count} generated"
+                )
 
-                    additional_file_id = await upload_file_to_llamacloud(
-                        img_bytes, filename=f"generated_image_{i}.png"
-                    )
-                    file_ids.append(additional_file_id)
-
-                result["file_ids"] = file_ids
-                result["count"] = len(file_ids)
-
-            logger.info(
-                f"Successfully generated and uploaded image(s) with file_id: {file_id}"
-            )
+            logger.info(f"Successfully generated and uploaded {len(file_ids)} image(s)")
             return result
 
         except Exception as e:

@@ -666,6 +666,9 @@ async def test_image_gen_tool():
                 assert "file_id" in result
                 assert result["file_id"] == "file-image-123"
                 assert result["prompt"] == "A beautiful sunset over mountains"
+                # Verify single image doesn't have file_ids field
+                assert "file_ids" not in result
+                assert "count" not in result
                 assert mock_upload.called
                 assert mock_client.models.generate_images.called
 
@@ -712,6 +715,8 @@ async def test_image_gen_tool_multiple_images():
                 assert "file_ids" in result
                 assert len(result["file_ids"]) == 3
                 assert result["count"] == 3
+                # Verify multiple images doesn't have file_id field
+                assert "file_id" not in result
                 assert mock_upload.call_count == 3
 
 
@@ -767,3 +772,49 @@ async def test_image_gen_tool_no_images_generated():
         assert result["success"] is False
         assert "error" in result
         assert "filtered" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_image_gen_tool_fewer_images_than_requested():
+    """Test when API returns fewer images than requested."""
+    from basic.tools import ImageGenTool
+
+    with patch("basic.tools.image_gen_tool.genai.Client") as mock_client_class:
+        mock_client = MagicMock()
+
+        # Create only 2 mock images when 4 were requested
+        mock_images = []
+        for i in range(2):
+            mock_image = MagicMock()
+            mock_generated_image = MagicMock()
+            mock_generated_image.image = mock_image
+            mock_generated_image.rai_filtered_reason = None
+            mock_images.append(mock_generated_image)
+
+        mock_response = MagicMock()
+        mock_response.generated_images = mock_images
+
+        mock_client.models.generate_images = MagicMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        mock_buffer = MagicMock()
+        mock_buffer.getvalue = MagicMock(return_value=b"fake_image_data")
+
+        with patch("io.BytesIO", return_value=mock_buffer):
+            with patch(
+                "basic.tools.image_gen_tool.upload_file_to_llamacloud"
+            ) as mock_upload:
+                mock_upload.side_effect = ["file-1", "file-2"]
+
+                tool = ImageGenTool()
+                result = await tool.execute(prompt="Test prompt", number_of_images=4)
+
+                # Should still succeed but with a warning
+                assert result["success"] is True
+                assert "file_ids" in result
+                assert len(result["file_ids"]) == 2
+                assert result["count"] == 2
+                assert "warning" in result
+                assert "4" in result["warning"]
+                assert "2" in result["warning"]
+                assert mock_upload.call_count == 2
