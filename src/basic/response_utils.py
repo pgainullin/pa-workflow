@@ -334,10 +334,12 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
             if not result.get("success", False):
                 continue
 
+            tool = result.get("tool", "unknown")
+            step_num = result.get("step", "?")
+            
+            # Handle single file_id
             file_id = result.get("file_id")
             if file_id:
-                tool = result.get("tool", "unknown")
-                step_num = result.get("step", "?")
                 logger.info(
                     f"[COLLECT ATTACHMENTS] Found file_id '{file_id}' from tool '{tool}' (step {step_num})"
                 )
@@ -366,6 +368,36 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                 )
                 attachments.append(attachment)
                 logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
+            
+            # Handle multiple file_ids (e.g., from image_gen with multiple images)
+            file_ids = result.get("file_ids")
+            if file_ids and isinstance(file_ids, list):
+                logger.info(
+                    f"[COLLECT ATTACHMENTS] Found {len(file_ids)} file_ids from tool '{tool}' (step {step_num})"
+                )
+                
+                for idx, fid in enumerate(file_ids, start=1):
+                    if tool == "image_gen":
+                        # Create intuitive filename from prompt if available
+                        prompt = result.get("prompt", "")
+                        if prompt:
+                            base_filename = sanitize_filename_from_prompt(prompt)
+                            filename = f"{base_filename}_step_{step_num}_{idx}.png"
+                        else:
+                            filename = f"generated_image_step_{step_num}_{idx}.png"
+                        mime_type = "image/png"
+                    else:
+                        filename = f"generated_file_step_{step_num}_{idx}.dat"
+                        mime_type = "application/octet-stream"
+                    
+                    attachment = Attachment(
+                        id=f"generated-{step_num}-{idx}",
+                        name=filename,
+                        type=mime_type,
+                        file_id=fid,
+                    )
+                    attachments.append(attachment)
+                    logger.info(f"Adding attachment: {filename} (file_id: {fid})")
 
         logger.info(f"[COLLECT ATTACHMENTS] Returning {len(attachments)} attachment(s)")
         return attachments

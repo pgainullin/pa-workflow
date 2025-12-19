@@ -284,7 +284,7 @@ async def test_collect_attachments_image_gen_with_prompt():
 
     assert len(attachments) == 1
     assert attachments[0].file_id == "test-image-uuid-123"
-    assert attachments[0].name == "a_beautiful_sunset_over_snow_capped_mountains.png"
+    assert attachments[0].name == "a_beautiful_sunset_over_snow_capped_mountains_step_1.png"
     assert attachments[0].type == "image/png"
     assert attachments[0].id == "generated-1"
 
@@ -334,9 +334,9 @@ async def test_collect_attachments_image_gen_long_prompt():
 
     assert len(attachments) == 1
     assert attachments[0].file_id == "test-image-uuid-789"
-    # Should be truncated to 50 characters max (plus 4 for ".png")
-    assert len(attachments[0].name) <= 50 + len(".png")
-    assert attachments[0].name.endswith(".png")
+    # Should be truncated to 50 characters max (plus step suffix and ".png")
+    # Format: "{base_filename}_step_{step_num}.png" where base is max 50 chars
+    assert attachments[0].name.endswith("_step_3.png")
     assert attachments[0].type == "image/png"
 
 
@@ -361,8 +361,81 @@ async def test_collect_attachments_image_gen_special_characters():
     assert len(attachments) == 1
     assert attachments[0].file_id == "test-image-uuid-abc"
     # Special characters should be removed, spaces converted to underscores
-    assert attachments[0].name == "a_cats_portrait_home_with_toys_fun.png"
+    assert attachments[0].name == "a_cats_portrait_home_with_toys_fun_step_4.png"
     assert attachments[0].type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_multiple_images_with_prompt():
+    """Test that image_gen attachments handle multiple images with file_ids array."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step with multiple images
+    results = [
+        {
+            "step": 5,
+            "tool": "image_gen",
+            "success": True,
+            "file_ids": ["test-image-uuid-001", "test-image-uuid-002", "test-image-uuid-003"],
+            "count": 3,
+            "prompt": "A playful kitten with yarn",
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 3
+    
+    # Check first attachment
+    assert attachments[0].file_id == "test-image-uuid-001"
+    assert attachments[0].name == "a_playful_kitten_with_yarn_step_5_1.png"
+    assert attachments[0].type == "image/png"
+    assert attachments[0].id == "generated-5-1"
+    
+    # Check second attachment
+    assert attachments[1].file_id == "test-image-uuid-002"
+    assert attachments[1].name == "a_playful_kitten_with_yarn_step_5_2.png"
+    assert attachments[1].type == "image/png"
+    assert attachments[1].id == "generated-5-2"
+    
+    # Check third attachment
+    assert attachments[2].file_id == "test-image-uuid-003"
+    assert attachments[2].name == "a_playful_kitten_with_yarn_step_5_3.png"
+    assert attachments[2].type == "image/png"
+    assert attachments[2].id == "generated-5-3"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_multiple_images_without_prompt():
+    """Test that image_gen attachments handle multiple images without prompt."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step with multiple images but no prompt
+    results = [
+        {
+            "step": 6,
+            "tool": "image_gen",
+            "success": True,
+            "file_ids": ["test-image-uuid-100", "test-image-uuid-101"],
+            "count": 2,
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 2
+    
+    # Check first attachment
+    assert attachments[0].file_id == "test-image-uuid-100"
+    assert attachments[0].name == "generated_image_step_6_1.png"
+    assert attachments[0].type == "image/png"
+    assert attachments[0].id == "generated-6-1"
+    
+    # Check second attachment
+    assert attachments[1].file_id == "test-image-uuid-101"
+    assert attachments[1].name == "generated_image_step_6_2.png"
+    assert attachments[1].type == "image/png"
+    assert attachments[1].id == "generated-6-2"
 
 
 @pytest.mark.asyncio
