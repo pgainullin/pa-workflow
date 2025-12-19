@@ -128,9 +128,18 @@ class ParseTool(Tool):
             elif file_content or file_content_from_param:
                 content = base64.b64decode(file_content or file_content_from_param)
             else:
+                # No file provided - this can happen when LLM incorrectly schedules a parse step
+                # for non-existent attachments. Fail gracefully to avoid breaking downstream steps.
+                logger.warning(
+                    "ParseTool called without file_id or file_content. "
+                    "This likely means the LLM scheduled a parse step for a non-existent attachment. "
+                    "Skipping parse and returning empty result."
+                )
                 return {
-                    "success": False,
-                    "error": "Either file_id or file_content must be provided",
+                    "success": True,
+                    "parsed_text": "",
+                    "skipped": True,
+                    "message": "No file provided to parse - step skipped",
                 }
 
             # Create temporary file for LlamaParse
