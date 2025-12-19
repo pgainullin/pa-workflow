@@ -631,7 +631,6 @@ async def test_search_tool_no_results():
 async def test_image_gen_tool():
     """Test the image generation tool."""
     from basic.tools import ImageGenTool
-    import io
 
     # Mock the genai client
     with patch("basic.tools.image_gen_tool.genai.Client") as mock_client_class:
