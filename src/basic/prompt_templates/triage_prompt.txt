@@ -16,11 +16,15 @@ Create a step-by-step plan to process this email. Each step should use one of th
 The plan can include loops (repeating steps) where needed.
 
 IMPORTANT GUIDELINES:
-1. If the email has attachments, you MUST process them using appropriate tools (parse, sheets, extract, etc.)
-2. Do not create overly simplistic plans that just summarize the email body
-3. Analyze what type of processing each attachment needs and create appropriate steps
-4. Reference previous step outputs using the template syntax: {{{{step_N.field_name}}}}
-5. Ensure each step has all required parameters
+1. ONLY process attachments that are EXPLICITLY listed in the Attachments section above
+2. DO NOT assume there are attachments if none are listed
+3. DO NOT schedule parse/sheets steps unless you can see a specific attachment name and type
+4. If the email has attachments, you MUST process them using appropriate tools (parse for documents, sheets for spreadsheets)
+5. The extract tool processes TEXT (from email body or previous steps), NOT attachments or files
+6. Do not create overly simplistic plans that just summarize the email body
+7. Analyze what type of processing each attachment needs and create appropriate steps
+8. Reference previous step outputs using the template syntax: {{{{step_N.field_name}}}}
+9. Ensure each step has all required parameters, especially file_id for parse/sheets tools (extract tool takes text input only)
 
 RESPONSE BEST PRACTICES:
 Remember that the final response to the user should follow these best practices:

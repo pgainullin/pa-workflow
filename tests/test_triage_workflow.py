@@ -397,3 +397,55 @@ async def test_dependency_checking_skips_dependent_steps():
     assert result.results[1]["success"] is False
     assert "Dependent step(s) failed" in result.results[1]["error"]
     assert result.results[1].get("skipped") is True
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_with_no_attachments():
+    """Test that parse tool handles case when LLM schedules parse for non-existent attachments."""
+    email_data = EmailData(
+        from_email="user@example.com",
+        subject="Test email with no attachments",
+        text="This email has no attachments but LLM might assume it does",
+        attachments=[],  # No attachments
+    )
+
+    callback = CallbackConfig(
+        callback_url="http://test.local/callback", auth_token="test-token"
+    )
+
+    workflow = EmailWorkflow(timeout=60)
+
+    # Mock the parse tool to use the real implementation
+    from basic.tools import ParseTool
+    mock_parser = MagicMock()
+    workflow.tool_registry.tools["parse"] = ParseTool(mock_parser)
+
+    from basic.email_workflow import TriageEvent
+
+    # Create a plan where LLM incorrectly schedules a parse step
+    # This might happen if LLM assumes there are attachments
+    plan = [
+        {
+            "tool": "parse",
+            "params": {"file_id": None},  # No file_id provided
+            "description": "Parse attachment (incorrectly scheduled)",
+        },
+        {
+            "tool": "summarise",
+            "params": {"text": "Email content"},
+            "description": "Summarize email",
+        },
+    ]
+
+    triage_event = TriageEvent(plan=plan, email_data=email_data, callback=callback)
+
+    # Execute the plan
+    result = await workflow.execute_plan(triage_event, MagicMock())
+
+    # Parse step should succeed gracefully with skip flag
+    assert len(result.results) == 2
+    assert result.results[0]["success"] is True  # Parse step succeeded (gracefully)
+    assert result.results[0].get("skipped") is True  # But was skipped
+    assert result.results[0].get("parsed_text") == ""
+    # Parser should not have been called
+    assert mock_parser.load_data.call_count == 0

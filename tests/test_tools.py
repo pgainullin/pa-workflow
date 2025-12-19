@@ -383,6 +383,29 @@ async def test_parse_tool_fails_after_max_retries_on_empty_content():
 
 
 @pytest.mark.asyncio
+async def test_parse_tool_graceful_handling_of_missing_file():
+    """Test that ParseTool handles missing file_id/file_content gracefully."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse (won't be called in this case)
+    mock_parser = MagicMock()
+    tool = ParseTool(mock_parser)
+
+    # Test execution with no file_id or file_content
+    # This simulates when LLM incorrectly schedules a parse step for non-existent attachments
+    result = await tool.execute()
+
+    # Should succeed gracefully instead of failing
+    assert result["success"] is True
+    assert result["parsed_text"] == ""
+    assert result["skipped"] is True
+    assert "message" in result
+    assert "No file provided" in result["message"]
+    # Parser should not be called at all
+    assert mock_parser.load_data.call_count == 0
+
+
+@pytest.mark.asyncio
 async def test_tool_registry():
     """Test the tool registry."""
     from basic.tools import ToolRegistry, SummariseTool
@@ -527,20 +550,21 @@ async def test_sheets_tool_excel():
 
 @pytest.mark.asyncio
 async def test_sheets_tool_missing_file():
-    """Test sheets tool with missing file input."""
+    """Test that SheetsTool handles missing file input gracefully by returning success with skipped flag."""
     from basic.tools import SheetsTool
 
     tool = SheetsTool()
 
     # Test without file_id or file_content
+    # Should now succeed gracefully instead of failing
     result = await tool.execute()
 
-    assert result["success"] is False
-    assert "error" in result
-    assert (
-        "file_id" in result["error"].lower()
-        or "file_content" in result["error"].lower()
-    )
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert "sheet_data" in result
+    assert result["sheet_data"]["table_count"] == 0
+    assert "message" in result
+    assert "No file provided" in result["message"]
 
 
 @pytest.mark.asyncio
