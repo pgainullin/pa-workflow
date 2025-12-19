@@ -13,15 +13,21 @@ Environment Variables:
 Usage:
     Simply import this module in your workflow to enable observability:
 
-    from basic.observability import setup_observability, observe
+    from basic.observability import setup_observability, flush_langfuse
 
     # Optionally call setup explicitly with custom parameters
     setup_observability(enabled=True)
 
-    # Use @observe decorator to trace workflow steps:
-    @observe(name="my_step")
-    async def my_step(...):
-        ...
+    # Call flush_langfuse() after workflow steps to ensure traces are sent
+    flush_langfuse()
+
+Important Note:
+    The @observe decorator from Langfuse is available for use in utility functions,
+    but should NOT be used on workflow step methods decorated with @step.
+    The @observe decorator can interfere with the workflows library's event routing
+    by obscuring function type annotations. Instead, observability for LLM calls
+    is automatically captured through the LlamaIndex callback handler configured
+    in setup_observability().
 """
 
 import atexit
