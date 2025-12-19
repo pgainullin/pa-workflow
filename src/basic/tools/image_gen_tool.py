@@ -42,8 +42,6 @@ class ImageGenTool(Tool):
             "Output: file_id (single image) or file_ids array with count (multiple images)"
         )
 
-
-
     async def _generate_single_image(
         self, prompt: str, request_num: int, total: int
     ) -> bytes | None:
