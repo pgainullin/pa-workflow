@@ -105,7 +105,7 @@ class ImageGenTool(Tool):
 
             # Generate images using Gemini's Imagen API
             response = self.client.models.generate_images(
-                model="imagen-4.0-generate-001",
+                model="gemini-2.5-flash-image",
                 prompt=prompt,
                 config=genai.types.GenerateImagesConfig(
                     number_of_images=number_of_images,
