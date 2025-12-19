@@ -142,6 +142,18 @@ class ParseTool(Tool):
                     "message": "No file provided to parse - step skipped",
                 }
 
+            if not content:
+                logger.warning(
+                    f"Empty file content provided to ParseTool (filename: {filename or 'unknown'}). "
+                    "Skipping parse and returning empty result."
+                )
+                return {
+                    "success": True,
+                    "parsed_text": "",
+                    "skipped": True,
+                    "message": "File content is empty - step skipped",
+                }
+
             # Create temporary file for LlamaParse
             # Determine file extension from filename if provided
             file_extension = ".pdf"  # Default to .pdf
@@ -167,9 +179,13 @@ class ParseTool(Tool):
                 pathlib.Path(tmp_path).unlink()
 
         except Exception as e:
-            logger.exception("Error parsing document")
             error_msg = str(e)
             # Make error message more user-friendly for empty content issues
             if "no text content" in error_msg.lower():
+                # Log as warning instead of exception to avoid scary tracebacks for expected failures
+                logger.warning(f"ParseTool failed: {error_msg}")
                 error_msg = "Document parsing returned no text content. The document may be empty, corrupted, or in an unsupported format."
+            else:
+                logger.exception("Error parsing document")
+            
             return {"success": False, "error": error_msg}
