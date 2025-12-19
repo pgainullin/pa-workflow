@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import os
@@ -54,6 +55,45 @@ class ImageGenTool(Tool):
         image.save(img_byte_arr, format="PNG")
         return img_byte_arr.getvalue()
 
+    async def _generate_single_image(self, prompt: str, request_num: int, total: int):
+        """Generate a single image asynchronously.
+
+        Args:
+            prompt: Text description of the image to generate
+            request_num: Current request number (1-indexed for logging)
+            total: Total number of images being generated
+
+        Returns:
+            PIL Image object if successful, None otherwise
+        """
+        try:
+            # Run the synchronous generate_content call in a thread pool
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model="gemini-2.5-flash-image",
+                contents=[prompt],
+            )
+
+            # Extract image from response parts
+            for part in response.parts:
+                if part.inline_data is not None:
+                    image = part.as_image()
+                    return image
+
+            logger.warning(
+                f"No image found in response for request {request_num}/{total}"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                "Error generating image for request %d/%d: %s",
+                request_num,
+                total,
+                str(e),
+            )
+            return None
+
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Generate an image based on a text prompt.
 
@@ -101,40 +141,19 @@ class ImageGenTool(Tool):
         try:
             logger.info(f"Generating {number_of_images} image(s) with prompt: {prompt}")
 
-            # Collect all generated images
-            generated_images = []
-            
-            # Generate images using Gemini's generate_content API
-            # The API generates one image per call, so we call it multiple times for multiple images
-            for i in range(number_of_images):
-                try:
-                    response = self.client.models.generate_content(
-                        model="gemini-2.5-flash-image",
-                        contents=[prompt],
-                    )
+            # Generate images concurrently using asyncio.gather
+            # Create tasks for all image generation requests
+            tasks = [
+                self._generate_single_image(prompt, i + 1, number_of_images)
+                for i in range(number_of_images)
+            ]
 
-                    # Extract image from response parts
-                    image_found = False
-                    for part in response.parts:
-                        if part.inline_data is not None:
-                            image = part.as_image()
-                            generated_images.append(image)
-                            image_found = True
-                            break
+            # Run all tasks concurrently and collect results
+            results = await asyncio.gather(*tasks)
 
-                    if not image_found:
-                        logger.warning(
-                            f"No image found in response for request {i+1}/{number_of_images}"
-                        )
-                except Exception as e:
-                    logger.error(
-                        "Error generating image for request %d/%d: %s",
-                        i + 1,
-                        number_of_images,
-                        str(e),
-                    )
-                    # Continue with the next request to allow partial success
-                    continue
+            # Filter out None values (failed generations)
+            generated_images = [img for img in results if img is not None]
+
             if not generated_images:
                 return {
                     "success": False,
