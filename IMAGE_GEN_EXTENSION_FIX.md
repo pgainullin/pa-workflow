@@ -27,7 +27,7 @@ Added specific handling for the `image_gen` tool:
 
 **File: `src/basic/response_utils.py`**
 - Added `sanitize_filename_from_prompt()` function (lines 35-60)
-- Updated `collect_attachments()` to handle `image_gen` tool (lines 347-353)
+- Updated `collect_attachments()` to handle `image_gen` tool (lines 348-356)
 
 **File: `tests/test_workflow_execution_fixes.py`**
 - Added 5 unit tests for `sanitize_filename_from_prompt()` function
