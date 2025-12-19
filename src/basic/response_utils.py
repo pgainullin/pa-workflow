@@ -61,6 +61,30 @@ def sanitize_filename_from_prompt(prompt: str, max_length: int = 50) -> str:
     return filename if filename else "generated_image"
 
 
+def generate_image_filename(prompt: str, step_num: int | str, index: int | None = None) -> str:
+    """Generate a filename for an image_gen tool output.
+    
+    Args:
+        prompt (str): The image generation prompt (may be empty).
+        step_num (int | str): The workflow step number.
+        index (int | None): Optional index for multiple images (1-based).
+    
+    Returns:
+        str: A generated filename with .png extension.
+    """
+    if prompt:
+        base_filename = sanitize_filename_from_prompt(prompt)
+        if index is not None:
+            return f"{base_filename}_step_{step_num}_{index}.png"
+        else:
+            return f"{base_filename}_step_{step_num}.png"
+    else:
+        if index is not None:
+            return f"generated_image_step_{step_num}_{index}.png"
+        else:
+            return f"generated_image_step_{step_num}.png"
+
+
 def sanitize_email_content(
     subject: str | None,
     text: str | None,
@@ -348,13 +372,8 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                     filename = f"output_step_{step_num}.pdf"
                     mime_type = "application/pdf"
                 elif tool == "image_gen":
-                    # Create intuitive filename from prompt if available
                     prompt = result.get("prompt", "")
-                    if prompt:
-                        base_filename = sanitize_filename_from_prompt(prompt)
-                        filename = f"{base_filename}_step_{step_num}.png"
-                    else:
-                        filename = f"generated_image_step_{step_num}.png"
+                    filename = generate_image_filename(prompt, step_num)
                     mime_type = "image/png"
                 else:
                     filename = f"generated_file_step_{step_num}.dat"
@@ -378,13 +397,8 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                 
                 for idx, fid in enumerate(file_ids, start=1):
                     if tool == "image_gen":
-                        # Create intuitive filename from prompt if available
                         prompt = result.get("prompt", "")
-                        if prompt:
-                            base_filename = sanitize_filename_from_prompt(prompt)
-                            filename = f"{base_filename}_step_{step_num}_{idx}.png"
-                        else:
-                            filename = f"generated_image_step_{step_num}_{idx}.png"
+                        filename = generate_image_filename(prompt, step_num, index=idx)
                         mime_type = "image/png"
                     else:
                         filename = f"generated_file_step_{step_num}_{idx}.dat"
