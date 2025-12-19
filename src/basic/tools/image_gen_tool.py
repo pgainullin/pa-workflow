@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 from typing import Any
@@ -39,6 +40,19 @@ class ImageGenTool(Tool):
             "number_of_images (optional, default: 1, max: 4). "
             "Output: file_id (LlamaCloud file ID of the generated image)"
         )
+
+    def _image_to_bytes(self, image) -> bytes:
+        """Convert PIL Image to bytes.
+
+        Args:
+            image: PIL Image object
+
+        Returns:
+            Image data as bytes in PNG format
+        """
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format="PNG")
+        return img_byte_arr.getvalue()
 
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Generate an image based on a text prompt.
@@ -88,15 +102,8 @@ class ImageGenTool(Tool):
                 }
 
             # Upload the first generated image to LlamaCloud
-            # Get the image data as bytes
             image_data = response.generated_images[0].image
-
-            # Convert PIL Image to bytes
-            import io
-
-            img_byte_arr = io.BytesIO()
-            image_data.save(img_byte_arr, format="PNG")
-            img_bytes = img_byte_arr.getvalue()
+            img_bytes = self._image_to_bytes(image_data)
 
             # Upload to LlamaCloud
             file_id = await upload_file_to_llamacloud(
@@ -122,10 +129,7 @@ class ImageGenTool(Tool):
                 for i, generated_image in enumerate(
                     response.generated_images[1:], start=2
                 ):
-                    img_data = generated_image.image
-                    img_byte_arr = io.BytesIO()
-                    img_data.save(img_byte_arr, format="PNG")
-                    img_bytes = img_byte_arr.getvalue()
+                    img_bytes = self._image_to_bytes(generated_image.image)
 
                     additional_file_id = await upload_file_to_llamacloud(
                         img_bytes, filename=f"generated_image_{i}.png"
