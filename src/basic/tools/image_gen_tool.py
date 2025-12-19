@@ -1,4 +1,4 @@
-"""Tool for generating images using Google Gemini's Imagen API."""
+"""Tool for generating images using Google Gemini's generate_content API."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class ImageGenTool(Tool):
-    """Tool for generating images using Google Gemini's Imagen API."""
+    """Tool for generating images using Google Gemini's generate_content API."""
 
     def __init__(self):
         """Initialize the ImageGenTool.
@@ -35,7 +35,7 @@ class ImageGenTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Generate images based on a text description using Google Gemini's Imagen API. "
+            "Generate images based on a text description using Google Gemini's generate_content API. "
             "Input: prompt (text description of the image to generate), "
             "number_of_images (optional, default: 1, max: 4). "
             "Output: file_id (single image) or file_ids array with count (multiple images)"
@@ -103,24 +103,37 @@ class ImageGenTool(Tool):
         try:
             logger.info(f"Generating {number_of_images} image(s) with prompt: {prompt}")
 
-            # Generate images using Gemini's Imagen API
-            response = self.client.models.generate_images(
-                model="gemini-2.5-flash-image",
-                prompt=prompt,
-                config=genai.types.GenerateImagesConfig(
-                    number_of_images=number_of_images,
-                    include_rai_reason=True,
-                ),
-            )
+            # Collect all generated images
+            generated_images = []
+            
+            # Generate images using Gemini's generate_content API
+            # The API generates one image per call, so we call it multiple times for multiple images
+            for i in range(number_of_images):
+                response = self.client.models.generate_content(
+                    model="gemini-2.5-flash-image",
+                    contents=[prompt],
+                )
 
-            if not response.generated_images:
+                # Extract image from response parts
+                image_found = False
+                for part in response.parts:
+                    if part.inline_data is not None:
+                        image = part.as_image()
+                        generated_images.append(image)
+                        image_found = True
+                        break
+                
+                if not image_found:
+                    logger.warning(f"No image found in response for request {i+1}/{number_of_images}")
+
+            if not generated_images:
                 return {
                     "success": False,
                     "error": "No images were generated. The prompt may have been filtered.",
                 }
 
             # Check if we got the expected number of images
-            actual_count = len(response.generated_images)
+            actual_count = len(generated_images)
             if actual_count < number_of_images:
                 logger.warning(
                     f"Requested {number_of_images} images but only received {actual_count}"
@@ -128,7 +141,7 @@ class ImageGenTool(Tool):
 
             # Process single image case
             if number_of_images == 1:
-                image_data = response.generated_images[0].image
+                image_data = generated_images[0]
                 img_bytes = self._image_to_bytes(image_data)
 
                 # Upload to LlamaCloud
@@ -141,15 +154,6 @@ class ImageGenTool(Tool):
                     "file_id": file_id,
                     "prompt": prompt,
                 }
-
-                # Add RAI (Responsible AI) information if available
-                if (
-                    hasattr(response.generated_images[0], "rai_filtered_reason")
-                    and response.generated_images[0].rai_filtered_reason
-                ):
-                    result["rai_reason"] = response.generated_images[
-                        0
-                    ].rai_filtered_reason
 
                 # Add warning if fewer images were received than requested
                 if actual_count < number_of_images:
@@ -164,8 +168,8 @@ class ImageGenTool(Tool):
 
             # Process multiple images case
             file_ids = []
-            for i, generated_image in enumerate(response.generated_images, start=1):
-                img_bytes = self._image_to_bytes(generated_image.image)
+            for i, image_data in enumerate(generated_images, start=1):
+                img_bytes = self._image_to_bytes(image_data)
 
                 file_id = await upload_file_to_llamacloud(
                     img_bytes, filename=f"generated_image_{i}.png"
@@ -178,13 +182,6 @@ class ImageGenTool(Tool):
                 "count": len(file_ids),
                 "prompt": prompt,
             }
-
-            # Add RAI information from the first image if available
-            if (
-                hasattr(response.generated_images[0], "rai_filtered_reason")
-                and response.generated_images[0].rai_filtered_reason
-            ):
-                result["rai_reason"] = response.generated_images[0].rai_filtered_reason
 
             # Add warning if fewer images were received than requested
             if actual_count < number_of_images:

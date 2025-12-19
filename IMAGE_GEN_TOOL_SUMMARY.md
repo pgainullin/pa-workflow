@@ -16,7 +16,6 @@ Successfully implemented an image generation tool that uses Google Gemini's Imag
 - Automatic upload of generated images to LlamaCloud
 - Returns file_id(s) for generated images
 - Comprehensive error handling
-- Responsible AI filtering support
 
 **API**:
 ```python
@@ -33,8 +32,7 @@ result = await tool.execute(
     "file_id": "file-123",  # Single image
     "file_ids": ["file-1", "file-2", "file-3"],  # Multiple images
     "count": 3,  # Number of images generated (when multiple)
-    "prompt": "A beautiful sunset over mountains",
-    "rai_reason": None  # Responsible AI filtering reason (if any)
+    "prompt": "A beautiful sunset over mountains"
 }
 ```
 
@@ -42,7 +40,7 @@ result = await tool.execute(
 
 ### 1. Created ImageGenTool
 - `src/basic/tools/image_gen_tool.py` - New tool implementation
-- Uses Google Gemini's `generate_images` API
+- Uses Google Gemini's `generate_content` API with `gemini-2.5-flash-image` model
 - Converts generated PIL images to bytes and uploads to LlamaCloud
 - Handles single and multiple image generation
 
