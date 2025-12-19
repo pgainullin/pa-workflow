@@ -22,16 +22,18 @@ Added specific handling for the `image_gen` tool:
 - Uses `image/png` MIME type
 - Creates intuitive filenames from the prompt when available
 - Falls back to `generated_image_step_N.png` when prompt is missing
+- **NEW:** Handles multiple images via `file_ids` array with indexed filenames
 
 ### 3. Changes Made
 
 **File: `src/basic/response_utils.py`**
 - Added `sanitize_filename_from_prompt()` function (lines 35-60)
-- Updated `collect_attachments()` to handle `image_gen` tool (lines 348-356)
+- Updated `collect_attachments()` to handle `image_gen` tool for single images (lines 350-358)
+- Added support for multiple images via `file_ids` array (lines 370-395)
 
 **File: `tests/test_workflow_execution_fixes.py`**
 - Added 5 unit tests for `sanitize_filename_from_prompt()` function
-- Added 4 integration tests for `collect_attachments()` with image_gen tool
+- Added 6 integration tests for `collect_attachments()` with image_gen tool (including multiple images)
 - Fixed 2 existing tests that had unnecessary mock patches
 
 ## Test Results
@@ -46,6 +48,8 @@ All new tests pass:
 - ✅ `test_collect_attachments_image_gen_without_prompt`
 - ✅ `test_collect_attachments_image_gen_long_prompt`
 - ✅ `test_collect_attachments_image_gen_special_characters`
+- ✅ `test_collect_attachments_image_gen_multiple_images_with_prompt`
+- ✅ `test_collect_attachments_image_gen_multiple_images_without_prompt`
 
 Existing tests still pass:
 - ✅ `test_collect_attachments_from_results`
@@ -62,12 +66,20 @@ mime_type: "application/octet-stream"
 
 ### After Fix
 ```python
-# Image gen with prompt "A beautiful sunset"
-filename: "a_beautiful_sunset.png"
+# Single image with prompt
+filename: "a_beautiful_sunset_step_1.png"
 mime_type: "image/png"
 
-# Image gen without prompt
+# Single image without prompt
 filename: "generated_image_step_1.png"
+mime_type: "image/png"
+
+# Multiple images with prompt (NEW)
+filenames: ["a_kitten_step_2_1.png", "a_kitten_step_2_2.png", "a_kitten_step_2_3.png"]
+mime_type: "image/png"
+
+# Multiple images without prompt (NEW)
+filenames: ["generated_image_step_3_1.png", "generated_image_step_3_2.png"]
 mime_type: "image/png"
 ```
 
