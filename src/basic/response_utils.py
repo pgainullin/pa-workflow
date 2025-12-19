@@ -32,6 +32,59 @@ def strip_html(text: str) -> str:
     return text
 
 
+def sanitize_filename_from_prompt(prompt: str, max_length: int = 50) -> str:
+    """Create a safe filename from a text prompt.
+
+    Args:
+        prompt (str): The text prompt to convert to a filename.
+        max_length (int): Maximum length for the filename (default: 50).
+
+    Returns:
+        str: A sanitized filename-safe string.
+    """
+    if not prompt:
+        return "generated_image"
+    
+    # Convert to lowercase and remove special characters (keeping ASCII alphanumeric, spaces, and hyphens)
+    filename = re.sub(r'[^a-zA-Z0-9\s-]', '', prompt.lower())
+    # Replace spaces and hyphens with underscores
+    filename = re.sub(r'[-\s]+', '_', filename)
+    
+    # Truncate to max_length
+    if len(filename) > max_length:
+        filename = filename[:max_length]
+    
+    # Remove trailing underscores
+    filename = filename.rstrip('_')
+    
+    # Return default if empty after sanitization
+    return filename if filename else "generated_image"
+
+
+def generate_image_filename(prompt: str, step_num: int | str, index: int | None = None) -> str:
+    """Generate a filename for an image_gen tool output.
+    
+    Args:
+        prompt (str): The image generation prompt (may be empty).
+        step_num (int | str): The workflow step number.
+        index (int | None): Optional index for multiple images (1-based).
+    
+    Returns:
+        str: A generated filename with .png extension.
+    """
+    if prompt:
+        base_filename = sanitize_filename_from_prompt(prompt)
+        if index is not None:
+            return f"{base_filename}_step_{step_num}_{index}.png"
+        else:
+            return f"{base_filename}_step_{step_num}.png"
+    else:
+        if index is not None:
+            return f"generated_image_step_{step_num}_{index}.png"
+        else:
+            return f"generated_image_step_{step_num}.png"
+
+
 def sanitize_email_content(
     subject: str | None,
     text: str | None,
@@ -305,10 +358,12 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
             if not result.get("success", False):
                 continue
 
+            tool = result.get("tool", "unknown")
+            step_num = result.get("step", "?")
+            
+            # Handle single file_id
             file_id = result.get("file_id")
             if file_id:
-                tool = result.get("tool", "unknown")
-                step_num = result.get("step", "?")
                 logger.info(
                     f"[COLLECT ATTACHMENTS] Found file_id '{file_id}' from tool '{tool}' (step {step_num})"
                 )
@@ -316,6 +371,10 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                 if tool == "print_to_pdf":
                     filename = f"output_step_{step_num}.pdf"
                     mime_type = "application/pdf"
+                elif tool == "image_gen":
+                    prompt = result.get("prompt", "")
+                    filename = generate_image_filename(prompt, step_num)
+                    mime_type = "image/png"
                 else:
                     filename = f"generated_file_step_{step_num}.dat"
                     mime_type = "application/octet-stream"
@@ -328,6 +387,31 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                 )
                 attachments.append(attachment)
                 logger.info(f"Adding attachment: {filename} (file_id: {file_id})")
+            
+            # Handle multiple file_ids (e.g., from image_gen with multiple images)
+            file_ids = result.get("file_ids")
+            if file_ids and isinstance(file_ids, list):
+                logger.info(
+                    f"[COLLECT ATTACHMENTS] Found {len(file_ids)} file_ids from tool '{tool}' (step {step_num})"
+                )
+                
+                for idx, fid in enumerate(file_ids, start=1):
+                    if tool == "image_gen":
+                        prompt = result.get("prompt", "")
+                        filename = generate_image_filename(prompt, step_num, index=idx)
+                        mime_type = "image/png"
+                    else:
+                        filename = f"generated_file_step_{step_num}_{idx}.dat"
+                        mime_type = "application/octet-stream"
+                    
+                    attachment = Attachment(
+                        id=f"generated-{step_num}-{idx}",
+                        name=filename,
+                        type=mime_type,
+                        file_id=fid,
+                    )
+                    attachments.append(attachment)
+                    logger.info(f"Adding attachment: {filename} (file_id: {fid})")
 
         logger.info(f"[COLLECT ATTACHMENTS] Returning {len(attachments)} attachment(s)")
         return attachments

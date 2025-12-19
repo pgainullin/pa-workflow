@@ -155,73 +155,287 @@ async def test_parse_tool_accepts_non_empty_results():
     assert result["parsed_text"] == "Some parsed content"
 
 
+def test_sanitize_filename_from_prompt_basic():
+    """Test basic sanitization of prompts to filenames."""
+    from basic.response_utils import sanitize_filename_from_prompt
+    
+    assert sanitize_filename_from_prompt("A beautiful sunset") == "a_beautiful_sunset"
+    assert sanitize_filename_from_prompt("Simple text") == "simple_text"
+    assert sanitize_filename_from_prompt("Multiple   spaces") == "multiple_spaces"
+
+
+def test_sanitize_filename_from_prompt_special_chars():
+    """Test that special characters are removed from filenames."""
+    from basic.response_utils import sanitize_filename_from_prompt
+    
+    assert sanitize_filename_from_prompt("Hello@World!") == "helloworld"
+    assert sanitize_filename_from_prompt("Test#123$456") == "test123456"
+    assert sanitize_filename_from_prompt("A cat's toy") == "a_cats_toy"
+    assert sanitize_filename_from_prompt("100% perfect!") == "100_perfect"
+
+
+def test_sanitize_filename_from_prompt_truncation():
+    """Test that long prompts are truncated."""
+    from basic.response_utils import sanitize_filename_from_prompt
+    
+    long_prompt = "This is a very long prompt that should be truncated to the maximum length"
+    result = sanitize_filename_from_prompt(long_prompt, max_length=20)
+    assert len(result) <= 20
+    assert result == "this_is_a_very_long"
+
+
+def test_sanitize_filename_from_prompt_empty():
+    """Test handling of empty or whitespace-only prompts."""
+    from basic.response_utils import sanitize_filename_from_prompt
+    
+    assert sanitize_filename_from_prompt("") == "generated_image"
+    assert sanitize_filename_from_prompt("   ") == "generated_image"
+    assert sanitize_filename_from_prompt("!!!") == "generated_image"
+
+
+def test_sanitize_filename_from_prompt_trailing_underscores():
+    """Test that trailing underscores are removed."""
+    from basic.response_utils import sanitize_filename_from_prompt
+    
+    assert sanitize_filename_from_prompt("Test   ") == "test"
+    assert sanitize_filename_from_prompt("End with spaces   ", max_length=10) == "end_with_s"
+
+
 @pytest.mark.asyncio
 async def test_collect_attachments_from_results():
     """Test that workflow collects file attachments from tool results."""
-    with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
-        "google.genai.Client"
-    ) as mock_genai:
-        from basic.response_utils import collect_attachments
+    from basic.response_utils import collect_attachments
 
-        # Mock results with a print_to_pdf step that generated a file
-        results = [
-            {
-                "step": 1,
-                "tool": "parse",
-                "success": True,
-                "parsed_text": "Some text",
-            },
-            {
-                "step": 2,
-                "tool": "print_to_pdf",
-                "success": True,
-                "file_id": "test-file-uuid-123",
-            },
-            {
-                "step": 3,
-                "tool": "summarise",
-                "success": True,
-                "summary": "Summary text",
-            },
-        ]
+    # Mock results with a print_to_pdf step that generated a file
+    results = [
+        {
+            "step": 1,
+            "tool": "parse",
+            "success": True,
+            "parsed_text": "Some text",
+        },
+        {
+            "step": 2,
+            "tool": "print_to_pdf",
+            "success": True,
+            "file_id": "test-file-uuid-123",
+        },
+        {
+            "step": 3,
+            "tool": "summarise",
+            "success": True,
+            "summary": "Summary text",
+        },
+    ]
 
-        attachments = collect_attachments(results)
+    attachments = collect_attachments(results)
 
-        assert len(attachments) == 1
-        assert attachments[0].file_id == "test-file-uuid-123"
-        assert attachments[0].name == "output_step_2.pdf"
-        assert attachments[0].type == "application/pdf"
-        assert attachments[0].id == "generated-2"
+    assert len(attachments) == 1
+    assert attachments[0].file_id == "test-file-uuid-123"
+    assert attachments[0].name == "output_step_2.pdf"
+    assert attachments[0].type == "application/pdf"
+    assert attachments[0].id == "generated-2"
 
 
 @pytest.mark.asyncio
 async def test_collect_attachments_skips_failed_steps():
     """Test that workflow only collects attachments from successful steps."""
-    with patch("llama_index.llms.google_genai.GoogleGenAI") as mock_llm, patch(
-        "google.genai.Client"
-    ) as mock_genai:
-        from basic.response_utils import collect_attachments
+    from basic.response_utils import collect_attachments
 
-        # Mock results with failed and successful steps
-        results = [
-            {
-                "step": 1,
-                "tool": "print_to_pdf",
-                "success": False,
-                "error": "Some error",
-            },
-            {
-                "step": 2,
-                "tool": "print_to_pdf",
-                "success": True,
-                "file_id": "test-file-uuid-456",
-            },
-        ]
+    # Mock results with failed and successful steps
+    results = [
+        {
+            "step": 1,
+            "tool": "print_to_pdf",
+            "success": False,
+            "error": "Some error",
+        },
+        {
+            "step": 2,
+            "tool": "print_to_pdf",
+            "success": True,
+            "file_id": "test-file-uuid-456",
+        },
+    ]
 
-        attachments = collect_attachments(results)
+    attachments = collect_attachments(results)
 
-        assert len(attachments) == 1
-        assert attachments[0].file_id == "test-file-uuid-456"
+    assert len(attachments) == 1
+    assert attachments[0].file_id == "test-file-uuid-456"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_with_prompt():
+    """Test that image_gen attachments use .png extension and intuitive filename from prompt."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step including prompt
+    results = [
+        {
+            "step": 1,
+            "tool": "image_gen",
+            "success": True,
+            "file_id": "test-image-uuid-123",
+            "prompt": "A beautiful sunset over snow-capped mountains",
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 1
+    assert attachments[0].file_id == "test-image-uuid-123"
+    assert attachments[0].name == "a_beautiful_sunset_over_snow_capped_mountains_step_1.png"
+    assert attachments[0].type == "image/png"
+    assert attachments[0].id == "generated-1"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_without_prompt():
+    """Test that image_gen attachments use default filename when prompt is missing."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step without prompt
+    results = [
+        {
+            "step": 2,
+            "tool": "image_gen",
+            "success": True,
+            "file_id": "test-image-uuid-456",
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 1
+    assert attachments[0].file_id == "test-image-uuid-456"
+    assert attachments[0].name == "generated_image_step_2.png"
+    assert attachments[0].type == "image/png"
+    assert attachments[0].id == "generated-2"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_long_prompt():
+    """Test that image_gen attachments truncate very long prompts."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step with very long prompt
+    long_prompt = "A very detailed and extremely long description that goes on and on about various aspects of the image including colors, composition, lighting, and many other elements"
+    results = [
+        {
+            "step": 3,
+            "tool": "image_gen",
+            "success": True,
+            "file_id": "test-image-uuid-789",
+            "prompt": long_prompt,
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 1
+    assert attachments[0].file_id == "test-image-uuid-789"
+    # Should be truncated to 50 characters max (plus step suffix and ".png")
+    # Format: "{base_filename}_step_{step_num}.png" where base is max 50 chars
+    assert attachments[0].name.endswith("_step_3.png")
+    assert attachments[0].type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_special_characters():
+    """Test that image_gen attachments sanitize special characters in prompt."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step with special characters in prompt
+    results = [
+        {
+            "step": 4,
+            "tool": "image_gen",
+            "success": True,
+            "file_id": "test-image-uuid-abc",
+            "prompt": "A cat's portrait @ home! (With toys & fun)",
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 1
+    assert attachments[0].file_id == "test-image-uuid-abc"
+    # Special characters should be removed, spaces converted to underscores
+    assert attachments[0].name == "a_cats_portrait_home_with_toys_fun_step_4.png"
+    assert attachments[0].type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_multiple_images_with_prompt():
+    """Test that image_gen attachments handle multiple images with file_ids array."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step with multiple images
+    results = [
+        {
+            "step": 5,
+            "tool": "image_gen",
+            "success": True,
+            "file_ids": ["test-image-uuid-001", "test-image-uuid-002", "test-image-uuid-003"],
+            "count": 3,
+            "prompt": "A playful kitten with yarn",
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 3
+    
+    # Check first attachment
+    assert attachments[0].file_id == "test-image-uuid-001"
+    assert attachments[0].name == "a_playful_kitten_with_yarn_step_5_1.png"
+    assert attachments[0].type == "image/png"
+    assert attachments[0].id == "generated-5-1"
+    
+    # Check second attachment
+    assert attachments[1].file_id == "test-image-uuid-002"
+    assert attachments[1].name == "a_playful_kitten_with_yarn_step_5_2.png"
+    assert attachments[1].type == "image/png"
+    assert attachments[1].id == "generated-5-2"
+    
+    # Check third attachment
+    assert attachments[2].file_id == "test-image-uuid-003"
+    assert attachments[2].name == "a_playful_kitten_with_yarn_step_5_3.png"
+    assert attachments[2].type == "image/png"
+    assert attachments[2].id == "generated-5-3"
+
+
+@pytest.mark.asyncio
+async def test_collect_attachments_image_gen_multiple_images_without_prompt():
+    """Test that image_gen attachments handle multiple images without prompt."""
+    from basic.response_utils import collect_attachments
+
+    # Mock results with image_gen step with multiple images but no prompt
+    results = [
+        {
+            "step": 6,
+            "tool": "image_gen",
+            "success": True,
+            "file_ids": ["test-image-uuid-100", "test-image-uuid-101"],
+            "count": 2,
+        },
+    ]
+
+    attachments = collect_attachments(results)
+
+    assert len(attachments) == 2
+    
+    # Check first attachment
+    assert attachments[0].file_id == "test-image-uuid-100"
+    assert attachments[0].name == "generated_image_step_6_1.png"
+    assert attachments[0].type == "image/png"
+    assert attachments[0].id == "generated-6-1"
+    
+    # Check second attachment
+    assert attachments[1].file_id == "test-image-uuid-101"
+    assert attachments[1].name == "generated_image_step_6_2.png"
+    assert attachments[1].type == "image/png"
+    assert attachments[1].id == "generated-6-2"
 
 
 @pytest.mark.asyncio
