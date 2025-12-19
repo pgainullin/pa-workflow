@@ -23,7 +23,7 @@ IMPORTANT GUIDELINES:
 5. Do not create overly simplistic plans that just summarize the email body
 6. Analyze what type of processing each attachment needs and create appropriate steps
 7. Reference previous step outputs using the template syntax: {{{{step_N.field_name}}}}
-8. Ensure each step has all required parameters, especially file_id for parse/sheets/extract tools
+8. Ensure each step has all required parameters, especially file_id for parse/sheets tools (extract tool takes text input only)
 
 RESPONSE BEST PRACTICES:
 Remember that the final response to the user should follow these best practices:

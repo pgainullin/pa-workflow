@@ -550,7 +550,7 @@ async def test_sheets_tool_excel():
 
 @pytest.mark.asyncio
 async def test_sheets_tool_missing_file():
-    """Test sheets tool with missing file input - should handle gracefully."""
+    """Test that SheetsTool handles missing file input gracefully by returning success with skipped flag."""
     from basic.tools import SheetsTool
 
     tool = SheetsTool()
