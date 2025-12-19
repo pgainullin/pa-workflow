@@ -73,15 +73,13 @@ class ImageGenTool(Tool):
                       multiple images are generated.
                     - count (int): Number of images that were generated and uploaded.
                     - prompt (str): The prompt used for generation.
-                    - rai_reason (str | None): Reason provided by the RAI/safety system if
-                      the prompt or output was modified, filtered, or blocked (if applicable).
+                    - warning (str, optional): Warning message if fewer images were generated
+                      than requested.
 
                 On error:
                     - success (bool): False.
                     - error (str): Description of the error that occurred.
                     - prompt (str, optional): The prompt that was attempted, if available.
-                    - rai_reason (str | None, optional): Reason provided by the RAI/safety
-                      system if the request was blocked or modified (if applicable).
         """
         prompt = kwargs.get("prompt")
         number_of_images = kwargs.get("number_of_images", 1)
