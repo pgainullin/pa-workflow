@@ -550,19 +550,21 @@ async def test_sheets_tool_excel():
 
 @pytest.mark.asyncio
 async def test_sheets_tool_missing_file():
-    """Test sheets tool with missing file input."""
+    """Test sheets tool with missing file input - should handle gracefully."""
     from basic.tools import SheetsTool
 
     tool = SheetsTool()
 
     # Test without file_id or file_content
+    # Should now succeed gracefully instead of failing
     result = await tool.execute()
 
-    assert result["success"] is False
-    assert "error" in result
-    assert (
-        "file_id" in result["error"].lower()
-        or "file_content" in result["error"].lower()
+    assert result["success"] is True
+    assert result["skipped"] is True
+    assert "sheet_data" in result
+    assert result["sheet_data"]["table_count"] == 0
+    assert "message" in result
+    assert "No file provided" in result["message"]
     )
 
 
