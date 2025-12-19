@@ -63,7 +63,25 @@ class ImageGenTool(Tool):
                 - number_of_images: Number of images to generate (optional, default: 1, max: 4)
 
         Returns:
-            Dictionary with 'success' and 'file_id' or 'error'
+            dict[str, Any]: A dictionary describing the result of the image generation.
+
+                On success:
+                    - success (bool): True.
+                    - file_id (str): LlamaCloud file ID of the generated image when a single
+                      image is generated.
+                    - file_ids (list[str]): LlamaCloud file IDs of the generated images when
+                      multiple images are generated.
+                    - count (int): Number of images that were generated and uploaded.
+                    - prompt (str): The prompt used for generation.
+                    - rai_reason (str | None): Reason provided by the RAI/safety system if
+                      the prompt or output was modified, filtered, or blocked (if applicable).
+
+                On error:
+                    - success (bool): False.
+                    - error (str): Description of the error that occurred.
+                    - prompt (str, optional): The prompt that was attempted, if available.
+                    - rai_reason (str | None, optional): Reason provided by the RAI/safety
+                      system if the request was blocked or modified (if applicable).
         """
         prompt = kwargs.get("prompt")
         number_of_images = kwargs.get("number_of_images", 1)
