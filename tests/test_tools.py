@@ -164,7 +164,9 @@ Additional text after the table.
 """
 
     # Mock upload function
-    with patch("basic.tools.print_to_pdf_tool.upload_file_to_llamacloud") as mock_upload:
+    with patch(
+        "basic.tools.print_to_pdf_tool.upload_file_to_llamacloud"
+    ) as mock_upload:
         mock_upload.return_value = "file-456"
 
         # Test execution with markdown content
@@ -174,18 +176,20 @@ Additional text after the table.
         assert "file_id" in result
         assert result["file_id"] == "file-456"
         assert mock_upload.called
-        
+
         # Verify PDF was generated (has content)
         pdf_bytes = mock_upload.call_args[0][0]
         assert len(pdf_bytes) > 0
         # PDFs start with %PDF header
-        assert pdf_bytes[:4] == b'%PDF'
-        
+        assert pdf_bytes[:4] == b"%PDF"
+
         # Verify the PDF is significantly larger than plain text would be
         # Tables with formatting should produce larger PDFs (with table structures)
         # A plain text version would be much smaller
         # This table has 3 rows + header, expect at least 1500 bytes for formatted table
-        assert len(pdf_bytes) > 1500, f"PDF size {len(pdf_bytes)} suggests no table formatting was applied"
+        assert len(pdf_bytes) > 1500, (
+            f"PDF size {len(pdf_bytes)} suggests no table formatting was applied"
+        )
 
 
 @pytest.mark.asyncio
@@ -228,18 +232,20 @@ async def test_print_to_pdf_edge_cases():
 Regular text with special characters: café, naïve, résumé
 """
 
-    with patch("basic.tools.print_to_pdf_tool.upload_file_to_llamacloud") as mock_upload:
+    with patch(
+        "basic.tools.print_to_pdf_tool.upload_file_to_llamacloud"
+    ) as mock_upload:
         mock_upload.return_value = "file-edge"
 
         result = await tool.execute(text=edge_case_markdown, filename="edge_cases.pdf")
 
         assert result["success"] is True
         assert "file_id" in result
-        
+
         # Verify PDF was generated
         pdf_bytes = mock_upload.call_args[0][0]
         assert len(pdf_bytes) > 0
-        assert pdf_bytes[:4] == b'%PDF'
+        assert pdf_bytes[:4] == b"%PDF"
 
 
 @pytest.mark.asyncio
@@ -308,14 +314,14 @@ async def test_parse_tool_retries_on_empty_content():
 
     # Mock LlamaParse
     mock_parser = MagicMock()
-    
+
     # Create mock documents - some with empty content, some with real content
     empty_doc = MagicMock()
     empty_doc.get_content = MagicMock(return_value="")  # Empty content
-    
+
     valid_doc = MagicMock()
     valid_doc.get_content = MagicMock(return_value="Parsed document content")
-    
+
     # Simulate empty content on first attempt, valid content on second attempt
     # This simulates the intermittent empty content issue
     mock_parser.load_data = MagicMock(
@@ -348,11 +354,11 @@ async def test_parse_tool_fails_after_max_retries_on_empty_content():
 
     # Mock LlamaParse
     mock_parser = MagicMock()
-    
+
     # Create mock document with empty content
     empty_doc = MagicMock()
     empty_doc.get_content = MagicMock(return_value="")  # Always empty content
-    
+
     # Always return empty content to exhaust retries
     mock_parser.load_data = MagicMock(return_value=[empty_doc])
 
@@ -368,7 +374,10 @@ async def test_parse_tool_fails_after_max_retries_on_empty_content():
         assert result["success"] is False
         assert "error" in result
         # Should have user-friendly error message
-        assert "empty" in result["error"].lower() or "no text content" in result["error"].lower()
+        assert (
+            "empty" in result["error"].lower()
+            or "no text content" in result["error"].lower()
+        )
         # Verify it was called 5 times (initial + 4 retries as per api_retry config)
         assert mock_parser.load_data.call_count == 5
 
@@ -558,7 +567,7 @@ async def test_search_tool():
             </div>
         </html>
         """
-        
+
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
@@ -604,7 +613,7 @@ async def test_search_tool_no_results():
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.text = "<html><body>No results</body></html>"
-        
+
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
@@ -616,3 +625,146 @@ async def test_search_tool_no_results():
         assert "results" in result
         assert len(result["results"]) == 0
         assert "message" in result
+
+
+@pytest.mark.asyncio
+async def test_image_gen_tool():
+    """Test the image generation tool."""
+    from basic.tools import ImageGenTool
+    import io
+
+    # Mock the genai client
+    with patch("basic.tools.image_gen_tool.genai.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_image = MagicMock()
+        mock_generated_image = MagicMock()
+        mock_generated_image.image = mock_image
+        mock_generated_image.rai_filtered_reason = None
+
+        mock_response = MagicMock()
+        mock_response.generated_images = [mock_generated_image]
+
+        mock_client.models.generate_images = MagicMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        # Mock PIL Image save by patching io.BytesIO
+        mock_buffer = MagicMock()
+        mock_buffer.getvalue = MagicMock(return_value=b"fake_image_data")
+
+        with patch("io.BytesIO", return_value=mock_buffer):
+            # Mock upload function
+            with patch(
+                "basic.tools.image_gen_tool.upload_file_to_llamacloud"
+            ) as mock_upload:
+                mock_upload.return_value = "file-image-123"
+
+                tool = ImageGenTool()
+
+                # Test execution
+                result = await tool.execute(prompt="A beautiful sunset over mountains")
+
+                assert result["success"] is True
+                assert "file_id" in result
+                assert result["file_id"] == "file-image-123"
+                assert result["prompt"] == "A beautiful sunset over mountains"
+                assert mock_upload.called
+                assert mock_client.models.generate_images.called
+
+
+@pytest.mark.asyncio
+async def test_image_gen_tool_multiple_images():
+    """Test generating multiple images."""
+    from basic.tools import ImageGenTool
+
+    with patch("basic.tools.image_gen_tool.genai.Client") as mock_client_class:
+        mock_client = MagicMock()
+
+        # Create multiple mock images
+        mock_images = []
+        for i in range(3):
+            mock_image = MagicMock()
+            mock_generated_image = MagicMock()
+            mock_generated_image.image = mock_image
+            mock_generated_image.rai_filtered_reason = None
+            mock_images.append(mock_generated_image)
+
+        mock_response = MagicMock()
+        mock_response.generated_images = mock_images
+
+        mock_client.models.generate_images = MagicMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        mock_buffer = MagicMock()
+        mock_buffer.getvalue = MagicMock(return_value=b"fake_image_data")
+
+        with patch("io.BytesIO", return_value=mock_buffer):
+            with patch(
+                "basic.tools.image_gen_tool.upload_file_to_llamacloud"
+            ) as mock_upload:
+                # Return different file IDs for each upload
+                mock_upload.side_effect = ["file-1", "file-2", "file-3"]
+
+                tool = ImageGenTool()
+                result = await tool.execute(
+                    prompt="A cat playing with a ball", number_of_images=3
+                )
+
+                assert result["success"] is True
+                assert "file_ids" in result
+                assert len(result["file_ids"]) == 3
+                assert result["count"] == 3
+                assert mock_upload.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_image_gen_tool_missing_prompt():
+    """Test image gen tool with missing prompt."""
+    from basic.tools import ImageGenTool
+
+    with patch("basic.tools.image_gen_tool.genai.Client"):
+        tool = ImageGenTool()
+        result = await tool.execute()
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "prompt" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_image_gen_tool_invalid_number_of_images():
+    """Test image gen tool with invalid number_of_images parameter."""
+    from basic.tools import ImageGenTool
+
+    with patch("basic.tools.image_gen_tool.genai.Client"):
+        tool = ImageGenTool()
+
+        # Test with number > 4
+        result = await tool.execute(prompt="test prompt", number_of_images=5)
+        assert result["success"] is False
+        assert "error" in result
+
+        # Test with number < 1
+        result = await tool.execute(prompt="test prompt", number_of_images=0)
+        assert result["success"] is False
+        assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_image_gen_tool_no_images_generated():
+    """Test when API returns no images (filtered)."""
+    from basic.tools import ImageGenTool
+
+    with patch("basic.tools.image_gen_tool.genai.Client") as mock_client_class:
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.generated_images = []
+
+        mock_client.models.generate_images = MagicMock(return_value=mock_response)
+        mock_client_class.return_value = mock_client
+
+        tool = ImageGenTool()
+        result = await tool.execute(prompt="inappropriate content")
+
+        assert result["success"] is False
+        assert "error" in result
+        assert "filtered" in result["error"].lower()

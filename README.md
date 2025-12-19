@@ -26,6 +26,7 @@ The workflow includes the following tools that can be used by the triage agent:
 7. **Summarise** - Summarize text using an LLM
 8. **Print to PDF** - Convert text to PDF format
 9. **Search** - Search the web for information using DuckDuckGo
+10. **Image Gen** - Generate images from text descriptions using Google Gemini's Imagen API
 
 ## Installation
 
