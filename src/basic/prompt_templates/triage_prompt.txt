@@ -18,7 +18,7 @@ The plan can include loops (repeating steps) where needed.
 IMPORTANT GUIDELINES:
 1. ONLY process attachments that are EXPLICITLY listed in the Attachments section above
 2. DO NOT assume there are attachments if none are listed
-3. DO NOT schedule parse/sheets/extract steps unless you can see a specific attachment name and type
+3. DO NOT schedule parse/sheets steps unless you can see a specific attachment name and type
 4. If the email has attachments, you MUST process them using appropriate tools (parse, sheets, extract, etc.)
 5. Do not create overly simplistic plans that just summarize the email body
 6. Analyze what type of processing each attachment needs and create appropriate steps
