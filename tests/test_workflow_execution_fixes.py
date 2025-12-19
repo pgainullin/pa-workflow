@@ -334,8 +334,8 @@ async def test_collect_attachments_image_gen_long_prompt():
 
     assert len(attachments) == 1
     assert attachments[0].file_id == "test-image-uuid-789"
-    # Should be truncated to 50 characters max
-    assert len(attachments[0].name) <= 54  # 50 + ".png"
+    # Should be truncated to 50 characters max (plus 4 for ".png")
+    assert len(attachments[0].name) <= 50 + len(".png")
     assert attachments[0].name.endswith(".png")
     assert attachments[0].type == "image/png"
 
