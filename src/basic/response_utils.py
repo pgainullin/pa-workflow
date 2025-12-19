@@ -45,8 +45,8 @@ def sanitize_filename_from_prompt(prompt: str, max_length: int = 50) -> str:
     if not prompt:
         return "generated_image"
     
-    # Convert to lowercase and remove special characters (keeping alphanumeric, spaces, and hyphens)
-    filename = re.sub(r'[^\w\s-]', '', prompt.lower())
+    # Convert to lowercase and remove special characters (keeping ASCII alphanumeric, spaces, and hyphens)
+    filename = re.sub(r'[^a-zA-Z0-9\s-]', '', prompt.lower())
     # Replace spaces and hyphens with underscores
     filename = re.sub(r'[-\s]+', '_', filename)
     
