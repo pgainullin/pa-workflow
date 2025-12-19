@@ -350,7 +350,7 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                     prompt = result.get("prompt", "")
                     if prompt:
                         base_filename = sanitize_filename_from_prompt(prompt)
-                        filename = f"{base_filename}.png"
+                        filename = f"{base_filename}_step_{step_num}.png"
                     else:
                         filename = f"generated_image_step_{step_num}.png"
                     mime_type = "image/png"
