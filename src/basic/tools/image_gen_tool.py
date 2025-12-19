@@ -1,7 +1,8 @@
-"""Tool for generating images using Google Gemini's Imagen API."""
+"""Tool for generating images using Google Gemini's generate_content API."""
 
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import os
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ImageGenTool(Tool):
-    """Tool for generating images using Google Gemini's Imagen API."""
+    """Tool for generating images using Google Gemini's generate_content API."""
 
     def __init__(self):
         """Initialize the ImageGenTool.
@@ -35,7 +36,7 @@ class ImageGenTool(Tool):
     @property
     def description(self) -> str:
         return (
-            "Generate images based on a text description using Google Gemini's Imagen API. "
+            "Generate images based on a text description using Google Gemini's generate_content API. "
             "Input: prompt (text description of the image to generate), "
             "number_of_images (optional, default: 1, max: 4). "
             "Output: file_id (single image) or file_ids array with count (multiple images)"
@@ -53,6 +54,45 @@ class ImageGenTool(Tool):
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format="PNG")
         return img_byte_arr.getvalue()
+
+    async def _generate_single_image(self, prompt: str, request_num: int, total: int):
+        """Generate a single image asynchronously.
+
+        Args:
+            prompt: Text description of the image to generate
+            request_num: Current request number (1-indexed for logging)
+            total: Total number of images being generated
+
+        Returns:
+            PIL Image object if successful, None otherwise
+        """
+        try:
+            # Run the synchronous generate_content call in a thread pool
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model="gemini-2.5-flash-image",
+                contents=[prompt],
+            )
+
+            # Extract image from response parts
+            for part in response.parts:
+                if part.inline_data is not None:
+                    image = part.as_image()
+                    return image
+
+            logger.warning(
+                f"No image found in response for request {request_num}/{total}"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                "Error generating image for request %d/%d: %s",
+                request_num,
+                total,
+                str(e),
+            )
+            return None
 
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Generate an image based on a text prompt.
@@ -73,15 +113,13 @@ class ImageGenTool(Tool):
                       multiple images are generated.
                     - count (int): Number of images that were generated and uploaded.
                     - prompt (str): The prompt used for generation.
-                    - rai_reason (str | None): Reason provided by the RAI/safety system if
-                      the prompt or output was modified, filtered, or blocked (if applicable).
+                    - warning (str, optional): Warning message if fewer images were generated
+                      than requested.
 
                 On error:
                     - success (bool): False.
                     - error (str): Description of the error that occurred.
                     - prompt (str, optional): The prompt that was attempted, if available.
-                    - rai_reason (str | None, optional): Reason provided by the RAI/safety
-                      system if the request was blocked or modified (if applicable).
         """
         prompt = kwargs.get("prompt")
         number_of_images = kwargs.get("number_of_images", 1)
@@ -103,24 +141,27 @@ class ImageGenTool(Tool):
         try:
             logger.info(f"Generating {number_of_images} image(s) with prompt: {prompt}")
 
-            # Generate images using Gemini's Imagen API
-            response = self.client.models.generate_images(
-                model="imagen-3.0-generate-002",
-                prompt=prompt,
-                config=genai.types.GenerateImagesConfig(
-                    number_of_images=number_of_images,
-                    include_rai_reason=True,
-                ),
-            )
+            # Generate images concurrently using asyncio.gather
+            # Create tasks for all image generation requests
+            tasks = [
+                self._generate_single_image(prompt, i + 1, number_of_images)
+                for i in range(number_of_images)
+            ]
 
-            if not response.generated_images:
+            # Run all tasks concurrently and collect results
+            results = await asyncio.gather(*tasks)
+
+            # Filter out None values (failed generations)
+            generated_images = [img for img in results if img is not None]
+
+            if not generated_images:
                 return {
                     "success": False,
                     "error": "No images were generated. The prompt may have been filtered.",
                 }
 
             # Check if we got the expected number of images
-            actual_count = len(response.generated_images)
+            actual_count = len(generated_images)
             if actual_count < number_of_images:
                 logger.warning(
                     f"Requested {number_of_images} images but only received {actual_count}"
@@ -128,7 +169,7 @@ class ImageGenTool(Tool):
 
             # Process single image case
             if number_of_images == 1:
-                image_data = response.generated_images[0].image
+                image_data = generated_images[0]
                 img_bytes = self._image_to_bytes(image_data)
 
                 # Upload to LlamaCloud
@@ -141,15 +182,6 @@ class ImageGenTool(Tool):
                     "file_id": file_id,
                     "prompt": prompt,
                 }
-
-                # Add RAI (Responsible AI) information if available
-                if (
-                    hasattr(response.generated_images[0], "rai_filtered_reason")
-                    and response.generated_images[0].rai_filtered_reason
-                ):
-                    result["rai_reason"] = response.generated_images[
-                        0
-                    ].rai_filtered_reason
 
                 # Add warning if fewer images were received than requested
                 if actual_count < number_of_images:
@@ -164,8 +196,8 @@ class ImageGenTool(Tool):
 
             # Process multiple images case
             file_ids = []
-            for i, generated_image in enumerate(response.generated_images, start=1):
-                img_bytes = self._image_to_bytes(generated_image.image)
+            for i, image_data in enumerate(generated_images, start=1):
+                img_bytes = self._image_to_bytes(image_data)
 
                 file_id = await upload_file_to_llamacloud(
                     img_bytes, filename=f"generated_image_{i}.png"
@@ -178,13 +210,6 @@ class ImageGenTool(Tool):
                 "count": len(file_ids),
                 "prompt": prompt,
             }
-
-            # Add RAI information from the first image if available
-            if (
-                hasattr(response.generated_images[0], "rai_filtered_reason")
-                and response.generated_images[0].rai_filtered_reason
-            ):
-                result["rai_reason"] = response.generated_images[0].rai_filtered_reason
 
             # Add warning if fewer images were received than requested
             if actual_count < number_of_images:
