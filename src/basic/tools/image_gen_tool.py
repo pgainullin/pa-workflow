@@ -107,23 +107,34 @@ class ImageGenTool(Tool):
             # Generate images using Gemini's generate_content API
             # The API generates one image per call, so we call it multiple times for multiple images
             for i in range(number_of_images):
-                response = self.client.models.generate_content(
-                    model="gemini-2.5-flash-image",
-                    contents=[prompt],
-                )
+                try:
+                    response = self.client.models.generate_content(
+                        model="gemini-2.5-flash-image",
+                        contents=[prompt],
+                    )
 
-                # Extract image from response parts
-                image_found = False
-                for part in response.parts:
-                    if part.inline_data is not None:
-                        image = part.as_image()
-                        generated_images.append(image)
-                        image_found = True
-                        break
-                
-                if not image_found:
-                    logger.warning(f"No image found in response for request {i+1}/{number_of_images}")
+                    # Extract image from response parts
+                    image_found = False
+                    for part in response.parts:
+                        if part.inline_data is not None:
+                            image = part.as_image()
+                            generated_images.append(image)
+                            image_found = True
+                            break
 
+                    if not image_found:
+                        logger.warning(
+                            f"No image found in response for request {i+1}/{number_of_images}"
+                        )
+                except Exception as e:
+                    logger.error(
+                        "Error generating image for request %d/%d: %s",
+                        i + 1,
+                        number_of_images,
+                        str(e),
+                    )
+                    # Continue with the next request to allow partial success
+                    continue
             if not generated_images:
                 return {
                     "success": False,
