@@ -139,6 +139,9 @@ class EmailWorkflow(Workflow):
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     def __init__(self, **kwargs):
+        # Set default timeout to 360s (6 minutes) if not provided
+        # This provides ample time for multiple tool executions and retries in LlamaCloud
+        kwargs.setdefault("timeout", 360)
         super().__init__(**kwargs)
         # Set up observability (Langfuse tracing) after environment is loaded
         # This ensures credentials from .env files are available when running in LlamaCloud
@@ -710,6 +713,6 @@ class EmailWorkflow(Workflow):
             return stop_event
 
 
-# Timeout increased to 120s to accommodate multiple Parse tool retries
+# Timeout increased to 360s to accommodate multiple Parse tool retries
 # (5 attempts, exponential backoff: 1s + 2s + 4s + 8s = ~15s max per file, plus execution time)
-email_workflow = EmailWorkflow(timeout=120)
+email_workflow = EmailWorkflow(timeout=360)

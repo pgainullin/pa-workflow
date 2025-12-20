@@ -19,6 +19,8 @@ class Hello(Event):
 
 class BasicWorkflow(Workflow):
     def __init__(self, **kwargs):
+        # Set default timeout to 360s (6 minutes) if not provided
+        kwargs.setdefault("timeout", 360)
         super().__init__(**kwargs)
         # Set up observability (Langfuse tracing) after environment is loaded
         # This ensures credentials from .env files are available when running in LlamaCloud
@@ -36,7 +38,7 @@ class BasicWorkflow(Workflow):
         return result
 
 
-workflow = BasicWorkflow(timeout=None)
+workflow = BasicWorkflow(timeout=360)
 
 
 if __name__ == "__main__":

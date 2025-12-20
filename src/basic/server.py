@@ -12,6 +12,13 @@ import asyncio
 import atexit
 import logging
 import signal
+import sys
+
+# Fix for Windows UnicodeEncodeError in logs
+# Force UTF-8 encoding for stdout and stderr
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 
 from workflows.server import WorkflowServer
 
@@ -57,7 +64,8 @@ async def main():
         loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
 
     try:
-        await server.serve(host="127.0.0.1", port=8080)
+        port = int(os.getenv("PORT", 8080))
+        await server.serve(host="127.0.0.1", port=port)
     finally:
         # Ensure flush on exit
         flush_langfuse()
