@@ -209,25 +209,12 @@ def _setup_logging_handler(langfuse_client) -> None:
     )
     langfuse_log_handler.setFormatter(formatter)
 
-    # Add handler to workflow-specific loggers
-    # These are the main loggers used in the workflows
-    workflow_loggers = [
-        "basic.email_workflow",
-        "basic.workflow",
-        "basic.tools",
-        "basic.utils",
-        "basic.response_utils",
-        "basic.plan_utils",
-    ]
-
-    for logger_name in workflow_loggers:
-        workflow_logger = logging.getLogger(logger_name)
-        # Check if handler is already added to avoid duplicates
-        if not any(
-            isinstance(h, LangfuseLoggingHandler) for h in workflow_logger.handlers
-        ):
-            workflow_logger.addHandler(langfuse_log_handler)
-            # Do not disable propagation; allow logs to propagate to the root logger
+    # Add handler to the root logger to capture all logs (including libraries)
+    # This ensures we don't miss logs from 'workflows', 'llama_index', or other modules
+    root_logger = logging.getLogger()
+    if not any(isinstance(h, LangfuseLoggingHandler) for h in root_logger.handlers):
+        root_logger.addHandler(langfuse_log_handler)
+        logger.debug("Langfuse logging handler attached to root logger")
 
 
 def flush_langfuse() -> None:
