@@ -344,9 +344,17 @@ def setup_observability(enabled: bool | None = None) -> None:
     """
     global _langfuse_client, _langfuse_handler
     # Check environment variables
+    # Support both LANGFUSE_BASE_URL (used by some integration guides) and LANGFUSE_HOST (standard SDK)
+    host = os.getenv("LANGFUSE_BASE_URL") or os.getenv("LANGFUSE_HOST") or "https://us.cloud.langfuse.com"
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
     public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
-    host = os.getenv("LANGFUSE_BASE_URL", "https://us.cloud.langfuse.com")
+
+    # Debug logging to stderr to verify configuration in LlamaCloud logs
+    # This bypasses any potential logging handler issues
+    import sys
+    masked_sk = f"{secret_key[:4]}...{secret_key[-4:]}" if secret_key else "None"
+    masked_pk = f"{public_key[:4]}...{public_key[-4:]}" if public_key else "None"
+    sys.stderr.write(f"[Observability] Setup: Host={host}, PK={masked_pk}, SK={masked_sk}\n")
 
     # Validate host URL format
     try:
@@ -374,6 +382,7 @@ def setup_observability(enabled: bool | None = None) -> None:
 
     if not enabled:
         logger.info("Langfuse observability is disabled")
+        sys.stderr.write("[Observability] Disabled by configuration.\n")
         return
 
     if not secret_key or not public_key:
@@ -382,6 +391,7 @@ def setup_observability(enabled: bool | None = None) -> None:
             "LANGFUSE_PUBLIC_KEY are not set. Traces will not be sent to Langfuse. "
             "Set these environment variables to enable observability."
         )
+        sys.stderr.write("[Observability] Failed: Missing keys.\n")
         return
 
     try:
@@ -391,6 +401,18 @@ def setup_observability(enabled: bool | None = None) -> None:
         # We import directly from langfuse.llama_index for better clarity.
         from langfuse import Langfuse
         from langfuse.llama_index import LlamaIndexCallbackHandler
+        from langfuse.decorators import langfuse_context
+
+        # EXPLICITLY configure the global Langfuse state.
+        # This is critical for the @observe decorator to work correctly in all environments,
+        # ensuring it uses the same credentials/host as we resolved above.
+        langfuse_context.configure(
+            secret_key=secret_key,
+            public_key=public_key,
+            host=host,
+            enabled=True
+        )
+        sys.stderr.write("[Observability] Global Langfuse configured.\n")
 
         # Create the Langfuse client for logging
         langfuse_client = Langfuse(
