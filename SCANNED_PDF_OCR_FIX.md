@@ -38,7 +38,7 @@ llama_parser = LlamaParse(
     language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
     high_res_ocr=True,  # Enable high-resolution OCR for scanned documents
     parse_mode="parse_page_with_agent",  # Use agent-based parsing for better accuracy
-    model="openai-gpt-4-1-mini",  # Model for agent-based parsing
+    model="gemini-3.0-flash-preview",  # Model for agent-based parsing
     adaptive_long_table=True,  # Better handling of long tables
     outlined_table_extraction=True,  # Extract outlined tables
     output_tables_as_HTML=True,  # Output tables in HTML format
@@ -57,7 +57,7 @@ llama_parser = LlamaParse(
    - **Impact**: More intelligent document structure understanding
    - **Benefit**: Better handling of complex layouts, mixed content, and multi-language documents
 
-3. **`model="openai-gpt-4-1-mini"`**
+3. **`model="gemini-3.0-flash-preview"`**
    - **Purpose**: Specifies the LLM model to use for agent-based parsing
    - **Impact**: Critical for optimal performance with agent-based parsing mode
    - **Benefit**: Provides better accuracy for complex documents, especially for non-Latin scripts like Chinese, Japanese, Korean
@@ -114,7 +114,7 @@ This configuration aligns with the recommended setup in **AGENTS.md** (Agentic M
 # Agentic Mode (Default) - from AGENTS.md
 llama_parser = LlamaParse(
     parse_mode="parse_page_with_agent",
-    model="openai-gpt-4-1-mini",  # Optional - has defaults
+    model="gemini-3.0-flash-preview",  # Updated to use Gemini
     high_res_ocr=True,
     adaptive_long_table=True,
     outlined_table_extraction=True,
