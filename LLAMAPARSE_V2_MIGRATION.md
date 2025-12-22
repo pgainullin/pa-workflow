@@ -4,11 +4,21 @@
 
 Migrated LlamaParse configuration from v1 to v2 API to resolve parsing regression issues and align with the latest LlamaCloud API standards.
 
+## Version Requirements
+
+**Critical**: The v2 API tier-based configuration requires `llama-parse>=0.6.88`.
+
+- **Before**: `llama-parse>=0.6.54` (v1 API)
+- **After**: `llama-parse>=0.6.88` (v2 API with tier support)
+
+Version 0.6.54 does NOT support the v2 API tier parameter. Upgrading to 0.6.88 or later is required for v2 features.
+
 ## Changes Made
 
 ### Files Modified
 1. `src/basic/tools/parse_tool.py` - Updated LlamaParse initialization
 2. `src/basic/tools/sheets_tool.py` - Updated LlamaParse initialization
+3. `pyproject.toml` - Updated llama-parse version requirement to >=0.6.88
 
 ### Configuration Changes
 
