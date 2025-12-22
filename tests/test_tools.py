@@ -406,6 +406,89 @@ async def test_parse_tool_graceful_handling_of_missing_file():
 
 
 @pytest.mark.asyncio
+async def test_parse_tool_handles_text_files():
+    """Test that ParseTool handles text files (markdown, txt) without calling LlamaParse."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse (should NOT be called for text files)
+    mock_parser = MagicMock()
+    tool = ParseTool(mock_parser)
+
+    # Test with markdown file (like email_chain.md)
+    markdown_content = "# Previous Email Conversation\n\nThis is an email chain with quoted text."
+    encoded_content = base64.b64encode(markdown_content.encode("utf-8")).decode("utf-8")
+
+    result = await tool.execute(
+        file_content=encoded_content,
+        filename="email_chain.md"
+    )
+
+    # Should succeed and return the text content directly
+    assert result["success"] is True
+    assert "parsed_text" in result
+    assert result["parsed_text"] == markdown_content
+    # Parser should NOT be called for text files
+    assert mock_parser.load_data.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_handles_various_text_file_types():
+    """Test that ParseTool handles various text file extensions."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse (should NOT be called for text files)
+    mock_parser = MagicMock()
+    tool = ParseTool(mock_parser)
+
+    # Test with different text file extensions
+    text_extensions = [".txt", ".md", ".markdown", ".csv", ".json", ".xml", ".html", ".log"]
+    
+    for ext in text_extensions:
+        content = f"Test content for {ext} file"
+        encoded_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+
+        result = await tool.execute(
+            file_content=encoded_content,
+            filename=f"test{ext}"
+        )
+
+        assert result["success"] is True, f"Failed for {ext}"
+        assert result["parsed_text"] == content, f"Content mismatch for {ext}"
+    
+    # Verify parser was never called
+    assert mock_parser.load_data.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_binary_files_use_llamaparse():
+    """Test that ParseTool still uses LlamaParse for binary documents."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.get_content = MagicMock(return_value="Parsed PDF content")
+    mock_parser.load_data = MagicMock(return_value=[mock_doc])
+
+    tool = ParseTool(mock_parser)
+
+    # Test with PDF file (should use LlamaParse)
+    pdf_content = b"PDF binary content"
+    encoded_content = base64.b64encode(pdf_content).decode("utf-8")
+
+    result = await tool.execute(
+        file_content=encoded_content,
+        filename="document.pdf"
+    )
+
+    # Should succeed and parse using LlamaParse
+    assert result["success"] is True
+    assert result["parsed_text"] == "Parsed PDF content"
+    # Parser SHOULD be called for binary documents
+    assert mock_parser.load_data.call_count == 1
+
+
+@pytest.mark.asyncio
 async def test_tool_registry():
     """Test the tool registry."""
     from basic.tools import ToolRegistry, SummariseTool
