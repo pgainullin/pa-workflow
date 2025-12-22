@@ -117,9 +117,9 @@ class TestCreateFallbackPlan:
         assert plan[0]["description"] == "Parse attachment: document.pdf"
 
     def test_fallback_plan_content_truncation(self):
-        """Test that email content is truncated to 5000 characters."""
-        # Create content longer than 5000 characters
-        long_content = "A" * 6000
+        """Test that email content is truncated to 10000 characters."""
+        # Create content longer than 10000 characters
+        long_content = "A" * 12000
         email_data = EmailData(
             from_email="test@example.com",
             subject="Test Subject",
@@ -128,11 +128,11 @@ class TestCreateFallbackPlan:
 
         plan = _create_fallback_plan(email_data)
 
-        # Content should be truncated to 5000 characters
+        # Content should be truncated to 10000 characters (new limit)
         assert len(plan) == 1
         assert plan[0]["tool"] == "summarise"
-        assert len(plan[0]["params"]["text"]) == 5000
-        assert plan[0]["params"]["text"] == "A" * 5000
+        assert len(plan[0]["params"]["text"]) == 10000
+        assert plan[0]["params"]["text"] == "A" * 10000
 
     def test_fallback_plan_uses_html_when_text_missing(self):
         """Test that fallback plan uses HTML content when text is missing."""
@@ -160,6 +160,39 @@ class TestCreateFallbackPlan:
         assert len(plan) == 1
         assert plan[0]["tool"] == "summarise"
         assert plan[0]["params"]["text"] == "(empty)"
+
+    def test_fallback_plan_splits_email_chain(self):
+        """Test that fallback plan uses email splitting to separate top email from quoted chain."""
+        email_body = """This is my request.
+
+Please help with this task.
+
+On Jan 1, 2024, someone@example.com wrote:
+> This is the previous email
+> with quoted content
+> that continues for many lines""" + ("A" * 3000)  # Make it long enough
+        
+        email_data = EmailData(
+            from_email="test@example.com",
+            subject="Test",
+            text=email_body,
+        )
+
+        plan = _create_fallback_plan(email_data)
+
+        # Should have a summarise step
+        assert len(plan) == 1
+        assert plan[0]["tool"] == "summarise"
+        
+        # The text should be the top email, not the full body
+        summarise_text = plan[0]["params"]["text"]
+        assert "This is my request" in summarise_text
+        assert "Please help with this task" in summarise_text
+        
+        # The quoted content should be largely absent or minimal
+        # (it should be in the chain that was split off)
+        # The summarise_text should be shorter than the original body
+        assert len(summarise_text) < len(email_body)
 
 
 class TestParsePlanFallback:
@@ -225,8 +258,8 @@ class TestParsePlanFallback:
 
     def test_parse_plan_fallback_truncates_content(self):
         """Test that fallback plan correctly truncates long email content."""
-        # Create content longer than 5000 characters
-        long_content = "B" * 6000
+        # Create content longer than 10000 characters
+        long_content = "B" * 12000
         email_data = EmailData(
             from_email="test@example.com",
             subject="Test",
@@ -237,11 +270,11 @@ class TestParsePlanFallback:
         response = "Invalid JSON"
         plan = parse_plan(response, email_data)
 
-        # Content should be truncated in fallback plan
+        # Content should be truncated in fallback plan to 10000 characters
         assert len(plan) == 1
         assert plan[0]["tool"] == "summarise"
-        assert len(plan[0]["params"]["text"]) == 5000
-        assert plan[0]["params"]["text"] == "B" * 5000
+        assert len(plan[0]["params"]["text"]) == 10000
+        assert plan[0]["params"]["text"] == "B" * 10000
 
     def test_parse_plan_valid_json_does_not_use_fallback(self):
         """Test that valid JSON response does NOT trigger fallback plan."""
