@@ -97,7 +97,10 @@ class EmailWorkflow(Workflow):
     to send a response email.
     """
 
-    llama_parser = LlamaParse(result_type="markdown")
+    llama_parser = LlamaParse(
+        result_type="markdown",
+        language="en,ch_sim,ch_tra",  # Support English and Chinese (Simplified & Traditional)
+    )
     llm = GoogleGenAI(model=GEMINI_TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))

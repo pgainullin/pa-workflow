@@ -61,7 +61,10 @@ class SheetsTool(Tool):
         try:
             # Get or create LlamaParse instance
             if self.llama_parser is None:
-                self.llama_parser = LlamaParse(result_type="markdown")
+                self.llama_parser = LlamaParse(
+                    result_type="markdown",
+                    language="en,ch_sim,ch_tra",  # Support English and Chinese (Simplified & Traditional)
+                )
 
             # Get file content
             if file_id:
