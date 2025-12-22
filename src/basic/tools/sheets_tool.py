@@ -66,7 +66,9 @@ class SheetsTool(Tool):
                     language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
                     high_res_ocr=True,  # Enable high-resolution OCR for scanned documents
                     parse_mode="parse_page_with_agent",  # Use agent-based parsing for better accuracy
-                    model="gemini-2.5-flash",  # Model for agent-based parsing
+                    # NOTE: model parameter temporarily removed due to parsing regression
+                    # See issue: Parse step broken - PDFs that previously worked now fail
+                    # model="gemini-2.5-flash",  # Model for agent-based parsing
                     adaptive_long_table=True,  # Better handling of long tables
                     outlined_table_extraction=True,  # Extract outlined tables
                     output_tables_as_HTML=True,  # Output tables in HTML format
