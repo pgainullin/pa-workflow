@@ -38,6 +38,7 @@ llama_parser = LlamaParse(
     language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
     high_res_ocr=True,  # Enable high-resolution OCR for scanned documents
     parse_mode="parse_page_with_agent",  # Use agent-based parsing for better accuracy
+    model="openai-gpt-4-1-mini",  # Model for agent-based parsing
     adaptive_long_table=True,  # Better handling of long tables
     outlined_table_extraction=True,  # Extract outlined tables
     output_tables_as_HTML=True,  # Output tables in HTML format
@@ -56,17 +57,22 @@ llama_parser = LlamaParse(
    - **Impact**: More intelligent document structure understanding
    - **Benefit**: Better handling of complex layouts, mixed content, and multi-language documents
 
-3. **`adaptive_long_table=True`**
+3. **`model="openai-gpt-4-1-mini"`**
+   - **Purpose**: Specifies the LLM model to use for agent-based parsing
+   - **Impact**: Critical for optimal performance with agent-based parsing mode
+   - **Benefit**: Provides better accuracy for complex documents, especially for non-Latin scripts like Chinese, Japanese, Korean
+
+4. **`adaptive_long_table=True`**
    - **Purpose**: Enables adaptive processing for tables that span multiple pages
    - **Impact**: Improves table detection and extraction
    - **Benefit**: Better structured data extraction from scanned documents with tables
 
-4. **`outlined_table_extraction=True`**
+5. **`outlined_table_extraction=True`**
    - **Purpose**: Enables extraction of tables with visible borders
    - **Impact**: Improves table boundary detection
    - **Benefit**: More accurate table structure recognition in scanned documents
 
-5. **`output_tables_as_HTML=True`**
+6. **`output_tables_as_HTML=True`**
    - **Purpose**: Outputs extracted tables in HTML format
    - **Impact**: Preserves table structure in the parsed output
    - **Benefit**: Better downstream processing and presentation of tabular data
@@ -81,11 +87,11 @@ llama_parser = LlamaParse(
 
 3. **`src/basic/tools/parse_tool.py`**
    - Added lazy LlamaParse initialization with OCR configuration
-   - Lines 134-144
+   - Lines 140-149
 
 4. **`src/basic/tools/sheets_tool.py`**
    - Updated LlamaParse initialization with OCR configuration
-   - Lines 67-71
+   - Lines 64-73
 ## Why This Fixes the Issue
 
 ### For Scanned PDFs
@@ -120,7 +126,7 @@ llama_parser = LlamaParse(
 )
 ```
 
-**Note**: We omitted `model`, `project_id`, and `organization_id` parameters as they are:
+**Note**: We included the `model` parameter to ensure optimal performance with agent-based parsing. We omitted `project_id` and `organization_id` parameters as they are:
 - Optional (LlamaParse has defaults)
 - Not required in the email workflow context
 - Would require additional configuration setup
