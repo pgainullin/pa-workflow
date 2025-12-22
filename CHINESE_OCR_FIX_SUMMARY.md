@@ -36,7 +36,7 @@ Without this parameter, LlamaParse may use a **default model that is not optimiz
 
 ## Solution Implemented
 
-Added the `model="openai-gpt-4-1-mini"` parameter to both:
+Added the `model="gemini-2.5-flash"` parameter to both:
 
 ### 1. src/basic/tools/parse_tool.py (line 145)
 ```python
