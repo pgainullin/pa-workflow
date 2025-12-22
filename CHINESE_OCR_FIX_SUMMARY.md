@@ -29,7 +29,7 @@ It was **missing** a critical parameter:
 
 According to the AGENTS.md documentation, the recommended "Agentic Mode" configuration includes:
 ```python
-model="gemini-3.0-flash-preview"  # Model for agent-based parsing
+model="gemini-2.5-flash"  # Model for agent-based parsing
 ```
 
 Without this parameter, LlamaParse may use a **default model that is not optimized** for complex character recognition, especially for non-Latin scripts like Chinese.
@@ -45,7 +45,7 @@ self.llama_parser = LlamaParse(
     language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",
     high_res_ocr=True,
     parse_mode="parse_page_with_agent",
-    model="gemini-3.0-flash-preview",  # ← Added this line
+    model="gemini-2.5-flash",  # ← Added this line
     adaptive_long_table=True,
     outlined_table_extraction=True,
     output_tables_as_HTML=True,
@@ -59,7 +59,7 @@ self.llama_parser = LlamaParse(
     language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",
     high_res_ocr=True,
     parse_mode="parse_page_with_agent",
-    model="gemini-3.0-flash-preview",  # ← Added this line
+    model="gemini-2.5-flash",  # ← Added this line
     adaptive_long_table=True,
     outlined_table_extraction=True,
     output_tables_as_HTML=True,
@@ -76,7 +76,7 @@ When using `parse_mode="parse_page_with_agent"`, LlamaParse employs an **AI agen
 3. Handles complex layouts and mixed content
 4. Provides better OCR for difficult scripts
 
-The `model` parameter specifies **which LLM** powers this agent. The `gemini-3.0-flash-preview` model is:
+The `model` parameter specifies **which LLM** powers this agent. The `gemini-2.5-flash` model is:
 - **Optimized for document parsing tasks**
 - **Better at handling multilingual content** (including CJK languages)
 - **More accurate at recognizing complex character sets** like Chinese
@@ -91,7 +91,7 @@ When the `model` parameter is missing, LlamaParse likely:
 ### With the Model Parameter
 
 The agent now:
-- Uses a proven, optimized LLM (Gemini 3.0 Flash Preview)
+- Uses a proven, optimized LLM (Gemini 2.5 Flash)
 - Applies advanced reasoning to text extraction
 - Provides better OCR accuracy for Chinese characters
 - Handles scanned document artifacts more intelligently
@@ -133,7 +133,7 @@ This fix aligns the implementation with the **recommended best practices** docum
 # Agentic Mode (Default) - from AGENTS.md
 llama_parser = LlamaParse(
     parse_mode="parse_page_with_agent",
-    model="gemini-3.0-flash-preview",  # ← Now included!
+    model="gemini-2.5-flash",  # ← Now included!
     high_res_ocr=True,
     adaptive_long_table=True,
     outlined_table_extraction=True,
