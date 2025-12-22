@@ -221,11 +221,48 @@ class EmailWorkflow(Workflow):
                 f"attachments={len(email_data.attachments)}"
             )
 
-            # Build triage prompt
+            # Handle long emails by splitting out quoted email chains
+            email_chain_file = None
+            raw_body = email_data.text or email_data.html or "(empty)"
+            
+            # Import split_email_chain from utils
+            from .utils import split_email_chain
+            
+            top_email, quoted_chain = split_email_chain(raw_body)
+            
+            # If there's a significant quoted chain (more than 500 chars), store it as an attachment
+            if quoted_chain and len(quoted_chain) > 500:
+                logger.info(
+                    f"[TRIAGE] Detected email chain of {len(quoted_chain)} chars, "
+                    f"storing as attachment"
+                )
+                
+                # Create email chain attachment
+                email_chain_content = f"# Previous Email Conversation\n\n{quoted_chain}"
+                email_chain_attachment = Attachment(
+                    id="email-chain",
+                    name="email_chain.md",
+                    type="text/markdown",
+                    content=base64.b64encode(email_chain_content.encode("utf-8")).decode("utf-8"),
+                )
+                
+                # Add to email_data attachments for this triage step
+                # Note: We create a new EmailData instance to avoid modifying the original
+                from copy import copy
+                email_data = copy(email_data)
+                email_data.attachments = list(email_data.attachments) + [email_chain_attachment]
+                email_chain_file = "email_chain.md"
+                
+                logger.info(
+                    f"[TRIAGE] Added email chain as attachment: {email_chain_file}"
+                )
+
+            # Build triage prompt with email chain info
             triage_prompt = build_triage_prompt(
                 email_data,
                 self.tool_registry.get_tool_descriptions(),
                 RESPONSE_BEST_PRACTICES,
+                email_chain_file=email_chain_file,
             )
 
             # Get plan from LLM

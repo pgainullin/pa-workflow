@@ -15,6 +15,9 @@ def _create_fallback_plan(email_data: EmailData) -> list[dict]:
 
     if email_data.attachments:
         for i, att in enumerate(email_data.attachments):
+            # Skip the email chain attachment in the fallback plan
+            if att.name == "email_chain.md":
+                continue
             fallback_plan.append(
                 {
                     "tool": "parse",
@@ -23,8 +26,15 @@ def _create_fallback_plan(email_data: EmailData) -> list[dict]:
                 }
             )
 
-    email_content = email_data.text or email_data.html or "(empty)"
-    email_content = email_content[:5000]
+    # Get email content, applying split if needed
+    from .utils import split_email_chain
+    
+    raw_content = email_data.text or email_data.html or "(empty)"
+    top_email, _ = split_email_chain(raw_content)
+    
+    # Use top email, with more generous limit (10000 chars instead of 5000)
+    email_content = top_email[:10000] if top_email else "(empty)"
+    
     fallback_plan.append(
         {
             "tool": "summarise",
