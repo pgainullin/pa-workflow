@@ -222,6 +222,11 @@ class EmailWorkflow(Workflow):
             )
 
             # Handle long emails by splitting out quoted email chains
+            # This addresses the issue of truncating long email bodies by:
+            # 1. Separating the current email from quoted conversation history
+            # 2. Storing the email chain as a file attachment if it's significant (>500 chars)
+            # Note: Optional pre-summarization of email chain could be added here in the future
+            # if needed, by calling the SummariseTool before triage
             email_chain_file = None
             raw_body = email_data.text or email_data.html or "(empty)"
             
@@ -246,11 +251,16 @@ class EmailWorkflow(Workflow):
                     content=base64.b64encode(email_chain_content.encode("utf-8")).decode("utf-8"),
                 )
                 
-                # Add to email_data attachments for this triage step
-                # Note: We create a new EmailData instance to avoid modifying the original
-                from copy import copy
-                email_data = copy(email_data)
-                email_data.attachments = list(email_data.attachments) + [email_chain_attachment]
+                # Create a new EmailData instance with the email chain attachment
+                # This avoids modifying the original email_data object
+                email_data = EmailData(
+                    from_email=email_data.from_email,
+                    to_email=email_data.to_email,
+                    subject=email_data.subject,
+                    text=email_data.text,
+                    html=email_data.html,
+                    attachments=list(email_data.attachments) + [email_chain_attachment],
+                )
                 email_chain_file = "email_chain.md"
                 
                 logger.info(
