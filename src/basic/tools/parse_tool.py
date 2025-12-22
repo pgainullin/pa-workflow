@@ -11,6 +11,8 @@ import tempfile
 import uuid
 from typing import Any
 
+from llama_parse import LlamaParse
+
 from .base import Tool
 from ..utils import download_file_from_llamacloud, api_retry
 
@@ -20,7 +22,13 @@ logger = logging.getLogger(__name__)
 class ParseTool(Tool):
     """Tool for parsing documents using LlamaCloud Parse."""
 
-    def __init__(self, llama_parser):
+    def __init__(self, llama_parser=None):
+        """Initialize the ParseTool.
+
+        Args:
+            llama_parser: Optional LlamaParse instance. If not provided,
+                         one will be created using environment variables.
+        """
         self.llama_parser = llama_parser
 
     @property
@@ -123,6 +131,18 @@ class ParseTool(Tool):
         )  # Also check for filename from _resolve_params
 
         try:
+            # Get or create LlamaParse instance
+            if self.llama_parser is None:
+                self.llama_parser = LlamaParse(
+                    result_type="markdown",
+                    language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
+                    high_res_ocr=True,  # Enable high-resolution OCR for scanned documents
+                    parse_mode="parse_page_with_agent",  # Use agent-based parsing for better accuracy
+                    adaptive_long_table=True,  # Better handling of long tables
+                    outlined_table_extraction=True,  # Extract outlined tables
+                    output_tables_as_HTML=True,  # Output tables in HTML format
+                )
+
             # Get file content
             if file_id:
                 # Validate file_id looks like a UUID

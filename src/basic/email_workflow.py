@@ -12,7 +12,6 @@ import os
 import google.genai as genai
 import httpx
 from llama_index.llms.google_genai import GoogleGenAI
-from llama_parse import LlamaParse
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
@@ -137,10 +136,8 @@ class EmailWorkflow(Workflow):
     and results are sent back via callback.
     """
 
-    llama_parser = LlamaParse(
-        result_type="markdown",
-        language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
-    )
+    # Class attribute for test compatibility - tools manage their own parser instances
+    llama_parser = None
     llm = GoogleGenAI(model=GEMINI_TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -159,6 +156,8 @@ class EmailWorkflow(Workflow):
 
     def _register_tools(self):
         """Register all available tools."""
+        # Pass llama_parser to tools if set (e.g., for testing with mocks)
+        # Otherwise tools will create their own instances
         self.tool_registry.register(ParseTool(self.llama_parser))
         self.tool_registry.register(ExtractTool())
         self.tool_registry.register(SheetsTool(self.llama_parser))
