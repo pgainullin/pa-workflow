@@ -258,3 +258,55 @@ async def test_user_response_with_no_successful_results():
     # Should indicate failure
     assert response == "I've processed your email, but encountered issues with all steps. Please see the attached execution log for details."
     assert "execution log" in response.lower()
+
+
+@pytest.mark.asyncio
+async def test_execution_log_includes_parse_diagnostics():
+    """Test that execution log includes diagnostic information for parse failures."""
+    from basic.response_utils import create_execution_log
+
+    email_data = EmailData(
+        from_email="user@example.com",
+        subject="Test Parse Failure",
+        text="Test",
+    )
+
+    # Simulate parse failure with diagnostic information
+    results = [
+        {
+            "step": 1,
+            "tool": "parse",
+            "description": "Parse PDF document",
+            "success": True,  # Returns success but with warnings for graceful degradation
+            "parsed_text": "",  # Empty content
+            "parse_failed": True,  # Flag indicating parse failure
+            "parse_warning": "Document parsing returned no text content after multiple retries. "
+                           "The document may be empty, corrupted, in an unsupported format, "
+                           "or the parsing service may be experiencing issues.",
+            "filename": "document.pdf",
+            "file_extension": ".pdf",
+            "retry_exhausted": True,
+            "diagnostic_info": {
+                "error_type": "empty_content_after_retries",
+                "max_retries": 5,
+                "file_size_bytes": 12345,
+            }
+        },
+    ]
+
+    log = create_execution_log(results, email_data)
+
+    # Check that log includes diagnostic information
+    assert "## Step 1: parse" in log
+    assert "**Status:** ✓ Success" in log  # Still shows success for graceful degradation
+    assert "⚠️ Parse Warning" in log
+    assert "Document parsing returned no text content" in log
+    assert "Diagnostic Details" in log
+    assert "File: document.pdf" in log
+    assert "Extension: .pdf" in log
+    assert "Error Type: empty_content_after_retries" in log
+    assert "Max Retries: 5" in log
+    assert "File Size: 12345 bytes" in log
+    assert "All retry attempts exhausted" in log
+    assert "Recommendation:" in log
+

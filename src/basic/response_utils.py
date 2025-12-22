@@ -273,6 +273,24 @@ def create_execution_log(results: list[dict], email_data: EmailData) -> str:
                     if len(text) > 1000:
                         text = text[:1000] + "...\n(truncated for brevity)"
                     output += f"**Parsed Text:**\n```\n{text}\n```\n\n"
+                
+                # Show parse warnings if parse failed but returned success for graceful degradation
+                if "parse_failed" in result and result["parse_failed"]:
+                    output += f"**⚠️ Parse Warning:**\n```\n{result.get('parse_warning', 'Parse operation completed with warnings')}\n```\n\n"
+                    
+                    # Add diagnostic information if available
+                    if "diagnostic_info" in result:
+                        diag = result["diagnostic_info"]
+                        output += f"**Diagnostic Details:**\n"
+                        output += f"- File: {result.get('filename', 'unknown')}\n"
+                        output += f"- Extension: {result.get('file_extension', 'unknown')}\n"
+                        output += f"- Error Type: {diag.get('error_type', 'unknown')}\n"
+                        output += f"- Max Retries: {diag.get('max_retries', 'N/A')}\n"
+                        output += f"- File Size: {diag.get('file_size_bytes', 0)} bytes\n"
+                        if result.get("retry_exhausted"):
+                            output += f"- Status: All retry attempts exhausted\n"
+                        output += "\n**Recommendation:** If this is a valid document, please try again later or contact support if the issue persists.\n\n"
+                
                 if "translated_text" in result:
                     output += f"**Translation:**\n```\n{result['translated_text']}\n```\n\n"
                 if "category" in result:

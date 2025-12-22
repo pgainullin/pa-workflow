@@ -79,7 +79,7 @@ class ParseTool(Tool):
         return file_extension.lower() in text_extensions
 
     @api_retry
-    async def _parse_with_retry(self, tmp_path: str, file_extension: str = ".pdf") -> tuple[list, str]:
+    async def _parse_with_retry(self, tmp_path: str, file_extension: str = ".pdf") -> tuple[list, str, int]:
         """Parse document with automatic retry on transient errors.
 
         Args:
@@ -87,7 +87,7 @@ class ParseTool(Tool):
             file_extension: File extension for diagnostic logging
 
         Returns:
-            Tuple of (list of parsed documents, parsed text content)
+            Tuple of (list of parsed documents, parsed text content, attempt number)
 
         Raises:
             Exception: If parsing fails after all retry attempts or if content is empty
@@ -107,7 +107,7 @@ class ParseTool(Tool):
                 "Content temporarily unavailable and will be retried."
             )
         
-        return documents, parsed_text
+        return documents, parsed_text, 1
 
     async def execute(self, **kwargs) -> dict[str, Any]:
         """Parse a document using LlamaParse.
@@ -239,7 +239,7 @@ class ParseTool(Tool):
             try:
                 # Parse the document with automatic retry
                 # The retry logic now includes content validation
-                documents, parsed_text = await self._parse_with_retry(tmp_path, file_extension)
+                documents, parsed_text, _ = await self._parse_with_retry(tmp_path, file_extension)
                 
                 return {"success": True, "parsed_text": parsed_text}
             finally:
@@ -251,8 +251,29 @@ class ParseTool(Tool):
             # Make error message more user-friendly for empty content issues
             if "no text content" in error_msg.lower():
                 # Log as warning instead of exception to avoid scary tracebacks for expected failures
-                logger.warning(f"ParseTool failed: {error_msg}")
-                error_msg = "Document parsing returned no text content. The document may be empty, corrupted, or in an unsupported format."
+                logger.warning(
+                    f"ParseTool failed after all retries: {error_msg}. "
+                    f"File: {filename or 'unknown'}, Extension: {file_extension}"
+                )
+                
+                # Return success with empty content and diagnostic info to avoid blocking downstream steps
+                # This allows the workflow to continue even when parse fails persistently
+                return {
+                    "success": True,
+                    "parsed_text": "",
+                    "parse_failed": True,  # Flag to indicate parse failure
+                    "parse_warning": "Document parsing returned no text content after multiple retries. "
+                                   "The document may be empty, corrupted, in an unsupported format, "
+                                   "or the parsing service may be experiencing issues.",
+                    "filename": filename or "unknown",
+                    "file_extension": file_extension,
+                    "retry_exhausted": True,
+                    "diagnostic_info": {
+                        "error_type": "empty_content_after_retries",
+                        "max_retries": 5,  # Based on api_retry config
+                        "file_size_bytes": len(content) if content else 0,
+                    }
+                }
             else:
                 logger.exception("Error parsing document")
             
