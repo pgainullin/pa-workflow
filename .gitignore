@@ -13,3 +13,4 @@ __pycache__/
 test_table_pdf.py
 demo_table_fix.py
 *.pdf
+.test_pdfs
