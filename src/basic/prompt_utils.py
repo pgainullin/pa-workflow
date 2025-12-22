@@ -62,8 +62,11 @@ def build_triage_prompt(
     if quoted_chain and email_chain_file:
         body += f"\n\n[Note: Previous email conversation history has been saved to {email_chain_file} attachment]"
     elif quoted_chain and not email_chain_file:
-        # If there's a quoted chain but no file was created (shouldn't normally happen)
-        body += f"\n\n[Note: This email contains {len(quoted_chain)} characters of quoted conversation history]"
+        # If there's a quoted chain but no file was created (typically when the chain is short and kept inline)
+        body += (
+            f"\n\n[Note: This email contains {len(quoted_chain)} characters of quoted "
+            "conversation history included inline in the email body]"
+        )
 
     attachment_info = ""
     if email_data.attachments:
