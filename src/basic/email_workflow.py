@@ -12,7 +12,6 @@ import os
 import google.genai as genai
 import httpx
 from llama_index.llms.google_genai import GoogleGenAI
-from llama_parse import LlamaParse
 from workflows import Context, Workflow, step
 from workflows.events import Event, StartEvent, StopEvent
 
@@ -137,15 +136,6 @@ class EmailWorkflow(Workflow):
     and results are sent back via callback.
     """
 
-    llama_parser = LlamaParse(
-        result_type="markdown",
-        language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
-        high_res_ocr=True,  # Enable high-resolution OCR for scanned documents
-        parse_mode="parse_page_with_agent",  # Use agent-based parsing for better accuracy
-        adaptive_long_table=True,  # Better handling of long tables
-        outlined_table_extraction=True,  # Extract outlined tables
-        output_tables_as_HTML=True,  # Output tables in HTML format
-    )
     llm = GoogleGenAI(model=GEMINI_TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -164,9 +154,9 @@ class EmailWorkflow(Workflow):
 
     def _register_tools(self):
         """Register all available tools."""
-        self.tool_registry.register(ParseTool(self.llama_parser))
+        self.tool_registry.register(ParseTool())
         self.tool_registry.register(ExtractTool())
-        self.tool_registry.register(SheetsTool(self.llama_parser))
+        self.tool_registry.register(SheetsTool())
         self.tool_registry.register(SplitTool())
         self.tool_registry.register(ClassifyTool(self.llm))
         self.tool_registry.register(TranslateTool())
