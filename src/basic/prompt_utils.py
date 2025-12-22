@@ -3,6 +3,7 @@ import re
 from importlib import resources
 
 from .models import EmailData
+from .utils import split_email_chain
 
 
 _TEMPLATE_CACHE: dict[str, str] = {}
@@ -25,6 +26,8 @@ def build_triage_prompt(
     email_data: EmailData,
     tool_descriptions: str,
     response_best_practices: str,
+    email_chain_file: str | None = None,
+    preprocessed_body: str | None = None,
 ) -> str:
     """Build the triage prompt for the LLM.
 
@@ -32,19 +35,43 @@ def build_triage_prompt(
         email_data: Email data to triage
         tool_descriptions: Description of available tools
         response_best_practices: Guidance for crafting responses
+        email_chain_file: Optional filename of the email chain attachment
+        preprocessed_body: Optional pre-processed body (HTML already stripped) to avoid re-processing
 
     Returns:
         Triage prompt string
     """
     max_subject_length = 500
-    max_body_length = 5000
+    max_top_email_length = 10000  # Increased from 5000 to handle longer emails
 
     subject = (email_data.subject or "")[:max_subject_length]
 
-    body = email_data.text or email_data.html or "(empty)"
-    if email_data.html and not email_data.text:
-        body = html.unescape(re.sub(r"<[^>]+>", "", body))
-    body = body[:max_body_length]
+    # Get the raw body - use preprocessed if provided to avoid re-processing
+    if preprocessed_body is not None:
+        raw_body = preprocessed_body
+    else:
+        raw_body = email_data.text or email_data.html or "(empty)"
+        if email_data.html and not email_data.text:
+            raw_body = html.unescape(re.sub(r"<[^>]+>", "", raw_body))
+    
+    # Split the email to separate top email from quoted chain
+    top_email, quoted_chain = split_email_chain(raw_body)
+    
+    # Use the top email for the body (with length limit)
+    if len(top_email) > max_top_email_length:
+        body = top_email[:max_top_email_length] + "\n\n[Email truncated - content exceeds length limit]"
+    else:
+        body = top_email if top_email else "(empty)"
+    
+    # Add note about email chain if present
+    if quoted_chain and email_chain_file:
+        body += f"\n\n[Note: Previous email conversation history has been saved to {email_chain_file} attachment]"
+    elif quoted_chain and not email_chain_file:
+        # If there's a quoted chain but no file was created (typically when the chain is short and kept inline)
+        body += (
+            f"\n\n[Note: This email contains {len(quoted_chain)} characters of quoted "
+            "conversation history included inline in the email body]"
+        )
 
     attachment_info = ""
     if email_data.attachments:

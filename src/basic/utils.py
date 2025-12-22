@@ -374,6 +374,113 @@ async def upload_file_to_llamacloud(
         raise ValueError(f"Failed to upload file {filename} to LlamaCloud: {e}") from e
 
 
+def split_email_chain(email_body: str) -> tuple[str, str]:
+    """Split email body into top email and quoted email chain.
+    
+    This function detects common email reply patterns and separates the
+    current email from the quoted conversation history below.
+    
+    Common patterns detected:
+    - Lines starting with > (quote markers)
+    - "On [date] [person] wrote:" patterns
+    - "From: [person]" headers
+    - "----- Original Message -----" separators
+    - "________________________________" separators (Outlook)
+    
+    Args:
+        email_body: The full email body text
+        
+    Returns:
+        tuple: (top_email, quoted_chain)
+            - top_email: The current email content
+            - quoted_chain: The quoted email history (empty string if none found)
+    
+    Example:
+        >>> body = "Here is my reply\\n\\nOn Jan 1, John wrote:\\n> Previous email"
+        >>> top, chain = split_email_chain(body)
+        >>> top
+        'Here is my reply'
+        >>> chain
+        'On Jan 1, John wrote:\\n> Previous email'
+    """
+    if not email_body or not email_body.strip():
+        return "", ""
+    
+    import re
+    
+    lines = email_body.split('\n')
+    split_index = len(lines)  # Default: no split, keep all in top email
+    
+    # Pattern 1: Lines starting with > (most common quote marker)
+    # Look for first occurrence of consecutive quoted lines
+    consecutive_quotes = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith('>'):
+            consecutive_quotes += 1
+            # If we find 2+ consecutive quoted lines, that's likely the start of the chain
+            if consecutive_quotes >= 2:
+                split_index = min(split_index, i - 1)
+                break
+        else:
+            consecutive_quotes = 0
+    
+    # Pattern 2: "On [date]... wrote:" patterns
+    # Examples: "On Jan 1, 2024, John wrote:", "On Mon, Jan 1, 2024 at 5:00 PM, John <john@example.com> wrote:"
+    wrote_pattern = re.compile(
+        r'^On\s+.+?\s+wrote:?\s*$',
+        re.IGNORECASE | re.MULTILINE
+    )
+    for i, line in enumerate(lines):
+        if wrote_pattern.match(line.strip()):
+            split_index = min(split_index, i)
+            break
+    
+    # Pattern 3: "From:" headers (email forwarding)
+    # Look for lines that start with "From:"; the email may be on this line or the next
+    from_pattern = re.compile(
+        r'^From:\s*(.*)$',
+        re.IGNORECASE
+    )
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        match = from_pattern.match(stripped)
+        if not match:
+            continue
+        # Check if the "From:" line itself contains an email-like address
+        from_line_has_email = '@' in match.group(1)
+        next_line_has_email = False
+        # If not, check the next line (common in forwarded-email formats)
+        if not from_line_has_email and i + 1 < len(lines):
+            next_line_has_email = '@' in lines[i + 1]
+        if from_line_has_email or next_line_has_email:
+            split_index = min(split_index, i)
+            break
+    
+    # Pattern 4: Common separators
+    # Only match long separator lines to avoid false positives with markdown
+    separator_patterns = [
+        r'^-+\s*Original Message\s*-+$',  # ----- Original Message -----
+        r'^_{20,}$',  # ___________________________________ (Outlook)
+        r'^={20,}$',  # ==================== (long lines only, avoid markdown)
+        r'^-{30,}$',  # ------------------------------ (long lines only, avoid markdown)
+    ]
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        for pattern in separator_patterns:
+            if re.match(pattern, line_stripped, re.IGNORECASE):
+                split_index = min(split_index, i)
+                break
+    
+    # Split the email
+    if split_index < len(lines):
+        top_email = '\n'.join(lines[:split_index]).strip()
+        quoted_chain = '\n'.join(lines[split_index:]).strip()
+        return top_email, quoted_chain
+    else:
+        # No split found, return all as top email
+        return email_body.strip(), ""
+
+
 async def create_llamacloud_attachment(
     file_content: bytes,
     filename: str,
