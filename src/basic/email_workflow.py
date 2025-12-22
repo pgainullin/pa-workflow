@@ -72,6 +72,10 @@ GEMINI_TEXT_MODEL = "gemini-3-pro-preview"  # Latest Gemini 3 for text processin
 # Gemini 2.5 Flash is optimized for cost-effective simple requests
 GEMINI_CHEAP_TEXT_MODEL = "gemini-2.5-flash"  # Cheaper option for simple text tasks
 
+# Email chain handling configuration
+# Minimum length of quoted email chain (in characters) to store as separate attachment
+EMAIL_CHAIN_ATTACHMENT_THRESHOLD = 500
+
 
 # Best practices for digital assistant responses
 RESPONSE_BEST_PRACTICES = """
@@ -224,28 +228,38 @@ class EmailWorkflow(Workflow):
             # Handle long emails by splitting out quoted email chains
             # This addresses the issue of truncating long email bodies by:
             # 1. Separating the current email from quoted conversation history
-            # 2. Storing the email chain as a file attachment if it's significant (>500 chars)
+            # 2. Storing the email chain as a file attachment if it's significant
             # Note: Optional pre-summarization of email chain could be added here in the future
             # if needed, by calling the SummariseTool before triage
             email_chain_file = None
+            
+            # Get raw body and strip HTML if needed (consistent with prompt_utils.py)
+            import html as html_lib
+            import re
             raw_body = email_data.text or email_data.html or "(empty)"
+            if email_data.html and not email_data.text:
+                raw_body = html_lib.unescape(re.sub(r"<[^>]+>", "", raw_body))
             
             # Import split_email_chain from utils
             from .utils import split_email_chain
             
             top_email, quoted_chain = split_email_chain(raw_body)
             
-            # If there's a significant quoted chain (more than 500 chars), store it as an attachment
-            if quoted_chain and len(quoted_chain) > 500:
+            # If there's a significant quoted chain, store it as an attachment
+            if quoted_chain and len(quoted_chain) > EMAIL_CHAIN_ATTACHMENT_THRESHOLD:
                 logger.info(
                     f"[TRIAGE] Detected email chain of {len(quoted_chain)} chars, "
                     f"storing as attachment"
                 )
                 
-                # Create email chain attachment
+                # Create email chain attachment with unique ID to avoid collisions
+                import time
+                from hashlib import md5
+                unique_id = f"email-chain-{md5(email_data.from_email.encode()).hexdigest()[:8]}-{int(time.time())}"
+                
                 email_chain_content = f"# Previous Email Conversation\n\n{quoted_chain}"
                 email_chain_attachment = Attachment(
-                    id="email-chain",
+                    id=unique_id,
                     name="email_chain.md",
                     type="text/markdown",
                     content=base64.b64encode(email_chain_content.encode("utf-8")).decode("utf-8"),
@@ -264,15 +278,17 @@ class EmailWorkflow(Workflow):
                 email_chain_file = "email_chain.md"
                 
                 logger.info(
-                    f"[TRIAGE] Added email chain as attachment: {email_chain_file}"
+                    f"[TRIAGE] Added email chain as attachment: {email_chain_file} (id: {unique_id})"
                 )
 
             # Build triage prompt with email chain info
+            # Pass the already-processed raw_body to avoid re-splitting and ensure consistency
             triage_prompt = build_triage_prompt(
                 email_data,
                 self.tool_registry.get_tool_descriptions(),
                 RESPONSE_BEST_PRACTICES,
                 email_chain_file=email_chain_file,
+                preprocessed_body=raw_body,  # Pass the HTML-stripped body
             )
 
             # Get plan from LLM

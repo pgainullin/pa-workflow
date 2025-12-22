@@ -27,6 +27,7 @@ def build_triage_prompt(
     tool_descriptions: str,
     response_best_practices: str,
     email_chain_file: str | None = None,
+    preprocessed_body: str | None = None,
 ) -> str:
     """Build the triage prompt for the LLM.
 
@@ -35,6 +36,7 @@ def build_triage_prompt(
         tool_descriptions: Description of available tools
         response_best_practices: Guidance for crafting responses
         email_chain_file: Optional filename of the email chain attachment
+        preprocessed_body: Optional pre-processed body (HTML already stripped) to avoid re-processing
 
     Returns:
         Triage prompt string
@@ -44,10 +46,13 @@ def build_triage_prompt(
 
     subject = (email_data.subject or "")[:max_subject_length]
 
-    # Get the raw body
-    raw_body = email_data.text or email_data.html or "(empty)"
-    if email_data.html and not email_data.text:
-        raw_body = html.unescape(re.sub(r"<[^>]+>", "", raw_body))
+    # Get the raw body - use preprocessed if provided to avoid re-processing
+    if preprocessed_body is not None:
+        raw_body = preprocessed_body
+    else:
+        raw_body = email_data.text or email_data.html or "(empty)"
+        if email_data.html and not email_data.text:
+            raw_body = html.unescape(re.sub(r"<[^>]+>", "", raw_body))
     
     # Split the email to separate top email from quoted chain
     top_email, quoted_chain = split_email_chain(raw_body)

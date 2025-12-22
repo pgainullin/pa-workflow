@@ -457,11 +457,12 @@ def split_email_chain(email_body: str) -> tuple[str, str]:
             break
     
     # Pattern 4: Common separators
+    # Only match long separator lines to avoid false positives with markdown
     separator_patterns = [
         r'^-+\s*Original Message\s*-+$',  # ----- Original Message -----
         r'^_{20,}$',  # ___________________________________ (Outlook)
-        r'^=+$',  # ==========================================
-        r'^-{20,}$',  # ------------------------------------------
+        r'^={20,}$',  # ==================== (long lines only, avoid markdown)
+        r'^-{30,}$',  # ------------------------------ (long lines only, avoid markdown)
     ]
     for i, line in enumerate(lines):
         line_stripped = line.strip()
