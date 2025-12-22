@@ -264,6 +264,7 @@ async def test_user_response_with_no_successful_results():
 async def test_execution_log_includes_parse_diagnostics():
     """Test that execution log includes diagnostic information for parse failures."""
     from basic.response_utils import create_execution_log
+    from basic.utils import MAX_RETRY_ATTEMPTS
 
     email_data = EmailData(
         from_email="user@example.com",
@@ -288,7 +289,7 @@ async def test_execution_log_includes_parse_diagnostics():
             "retry_exhausted": True,
             "diagnostic_info": {
                 "error_type": "empty_content_after_retries",
-                "max_retries": 5,
+                "max_retries": MAX_RETRY_ATTEMPTS,
                 "file_size_bytes": 12345,
             }
         },
@@ -305,7 +306,7 @@ async def test_execution_log_includes_parse_diagnostics():
     assert "File: document.pdf" in log
     assert "Extension: .pdf" in log
     assert "Error Type: empty_content_after_retries" in log
-    assert "Max Retries: 5" in log
+    assert f"Max Retries: {MAX_RETRY_ATTEMPTS}" in log
     assert "File Size: 12345 bytes" in log
     assert "All retry attempts exhausted" in log
     assert "Recommendation:" in log

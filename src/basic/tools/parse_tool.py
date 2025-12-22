@@ -14,7 +14,7 @@ from typing import Any
 from llama_parse import LlamaParse
 
 from .base import Tool
-from ..utils import download_file_from_llamacloud, api_retry
+from ..utils import download_file_from_llamacloud, api_retry, MAX_RETRY_ATTEMPTS
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +129,10 @@ class ParseTool(Tool):
         filename = kwargs.get("filename") or kwargs.get(
             "file_id_filename"
         )  # Also check for filename from _resolve_params
+
+        # Initialize variables that may be referenced in exception handler
+        content = None
+        file_extension = ".pdf"  # Default extension
 
         try:
             # Get or create LlamaParse instance
@@ -270,7 +274,7 @@ class ParseTool(Tool):
                     "retry_exhausted": True,
                     "diagnostic_info": {
                         "error_type": "empty_content_after_retries",
-                        "max_retries": 5,  # Based on api_retry config
+                        "max_retries": MAX_RETRY_ATTEMPTS,
                         "file_size_bytes": len(content) if content else 0,
                     }
                 }

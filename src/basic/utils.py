@@ -96,10 +96,13 @@ def is_retryable_error(exception: Exception) -> bool:
     return False
 
 
+# Retry configuration constants
+MAX_RETRY_ATTEMPTS = 5  # Max 5 attempts total (1 initial + 4 retries)
+
 # Create a reusable retry decorator for API calls
 api_retry = retry(
     retry=retry_if_exception(is_retryable_error),
-    stop=stop_after_attempt(5),  # Max 5 attempts total (1 initial + 4 retries)
+    stop=stop_after_attempt(MAX_RETRY_ATTEMPTS),
     wait=wait_exponential(
         multiplier=1, min=1, max=45
     ),  # Exponential backoff: 1s, 2s, 4s, 8s
