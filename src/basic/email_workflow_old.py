@@ -100,6 +100,11 @@ class EmailWorkflow(Workflow):
     llama_parser = LlamaParse(
         result_type="markdown",
         language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
+        high_res_ocr=True,  # Enable high-resolution OCR for scanned documents
+        parse_mode="parse_page_with_agent",  # Use agent-based parsing for better accuracy
+        adaptive_long_table=True,  # Better handling of long tables
+        outlined_table_extraction=True,  # Extract outlined tables
+        output_tables_as_HTML=True,  # Output tables in HTML format
     )
     llm = GoogleGenAI(model=GEMINI_TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
