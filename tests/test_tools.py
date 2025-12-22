@@ -440,8 +440,8 @@ async def test_parse_tool_handles_various_text_file_types():
     mock_parser = MagicMock()
     tool = ParseTool(mock_parser)
 
-    # Test with different text file extensions
-    text_extensions = [".txt", ".md", ".markdown", ".csv", ".json", ".xml", ".html", ".log"]
+    # Test with different text file extensions (CSV excluded - handled by SheetsTool)
+    text_extensions = [".txt", ".md", ".markdown", ".json", ".xml", ".html", ".log"]
     
     for ext in text_extensions:
         content = f"Test content for {ext} file"
@@ -457,6 +457,91 @@ async def test_parse_tool_handles_various_text_file_types():
     
     # Verify parser was never called
     assert mock_parser.load_data.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_encoding_fallback():
+    """Test that ParseTool falls back to alternative encodings when UTF-8 fails."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse (should NOT be called for text files)
+    mock_parser = MagicMock()
+    tool = ParseTool(mock_parser)
+
+    # Create content with Latin-1 specific characters that aren't valid UTF-8
+    # Using characters like © (copyright), ® (registered), etc.
+    latin1_text = "Test with Latin-1: © ® ™ €"
+    # Encode as Latin-1
+    latin1_bytes = latin1_text.encode("latin-1")
+    encoded_content = base64.b64encode(latin1_bytes).decode("utf-8")
+
+    result = await tool.execute(
+        file_content=encoded_content,
+        filename="test.txt"
+    )
+
+    # Should succeed with Latin-1 encoding
+    assert result["success"] is True
+    assert result["parsed_text"] == latin1_text
+    # Parser should NOT be called
+    assert mock_parser.load_data.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_all_encodings_fail():
+    """Test that ParseTool returns error when all text encodings fail."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    tool = ParseTool(mock_parser)
+
+    # Create invalid byte sequence that can't be decoded by any common encoding
+    # Using a sequence that's invalid in UTF-8, Latin-1, CP1252, and ISO-8859-1
+    invalid_bytes = b"\xff\xfe\x00\x00\x00"
+    encoded_content = base64.b64encode(invalid_bytes).decode("utf-8")
+
+    result = await tool.execute(
+        file_content=encoded_content,
+        filename="test.txt"
+    )
+
+    # Should fail with appropriate error message
+    assert result["success"] is False
+    assert "error" in result
+    assert "Failed to decode text file" in result["error"]
+    assert "unsupported encoding" in result["error"]
+    # Parser should NOT be called
+    assert mock_parser.load_data.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_tool_csv_uses_llamaparse():
+    """Test that CSV files use LlamaParse for structured data extraction."""
+    from basic.tools import ParseTool
+
+    # Mock LlamaParse
+    mock_parser = MagicMock()
+    mock_doc = MagicMock()
+    mock_doc.get_content = MagicMock(return_value="Parsed CSV content")
+    mock_parser.load_data = MagicMock(return_value=[mock_doc])
+
+    tool = ParseTool(mock_parser)
+
+    # Test with CSV file (should use LlamaParse for structured parsing)
+    csv_content = b"name,age\nJohn,30\nJane,25"
+    encoded_content = base64.b64encode(csv_content).decode("utf-8")
+
+    result = await tool.execute(
+        file_content=encoded_content,
+        filename="data.csv"
+    )
+
+    # Should succeed and parse using LlamaParse
+    assert result["success"] is True
+    assert result["parsed_text"] == "Parsed CSV content"
+    # Parser SHOULD be called for CSV files
+    assert mock_parser.load_data.call_count == 1
 
 
 @pytest.mark.asyncio

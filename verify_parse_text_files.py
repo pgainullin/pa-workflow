@@ -15,9 +15,10 @@ sys.path.insert(0, 'src')
 def test_parse_tool_text_file_detection():
     """Test that Parse tool correctly detects text files."""
     # We'll test the _is_text_file method logic
+    # Note: CSV excluded - handled by SheetsTool for structured parsing
     text_extensions = {
         ".txt", ".md", ".markdown", ".text", ".log",
-        ".csv", ".tsv", ".json", ".xml", ".html", ".htm",
+        ".tsv", ".json", ".xml", ".html", ".htm",
         ".yaml", ".yml", ".ini", ".cfg", ".conf",
     }
     
@@ -28,7 +29,7 @@ def test_parse_tool_text_file_detection():
         ("email_chain.md", True, "Markdown email chain"),
         ("document.pdf", False, "PDF document"),
         ("spreadsheet.xlsx", False, "Excel spreadsheet"),
-        ("data.csv", True, "CSV data"),
+        ("data.csv", False, "CSV data (handled by SheetsTool)"),
         ("config.json", True, "JSON config"),
         ("README.txt", True, "Text file"),
         ("report.docx", False, "Word document"),

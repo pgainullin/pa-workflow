@@ -25,11 +25,15 @@ Modified the Parse tool to detect and handle text-based files differently:
 
 **Added text file detection method:**
 ```python
-def _is_text_file(self, filename: str | None, file_extension: str) -> bool:
+def _is_text_file(self, file_extension: str) -> bool:
     """Check if a file is a text-based file that doesn't need LlamaParse."""
+    # Common text file extensions that don't need LlamaParse.
+    # Note: .csv is intentionally excluded so that CSV files can be handled
+    # by structured parsers (e.g., SheetsTool / LlamaParse) rather than
+    # being treated as plain text.
     text_extensions = {
         ".txt", ".md", ".markdown", ".text", ".log",
-        ".csv", ".tsv", ".json", ".xml", ".html", ".htm",
+        ".tsv", ".json", ".xml", ".html", ".htm",
         ".yaml", ".yml", ".ini", ".cfg", ".conf",
     }
     return file_extension.lower() in text_extensions
@@ -38,7 +42,7 @@ def _is_text_file(self, filename: str | None, file_extension: str) -> bool:
 **Modified execute method to handle text files:**
 ```python
 # Check if this is a text file that doesn't need LlamaParse
-if self._is_text_file(filename, file_extension):
+if self._is_text_file(file_extension):
     logger.info(
         f"ParseTool: Detected text file ({file_extension}), "
         f"returning content directly without LlamaParse"
@@ -56,7 +60,14 @@ if self._is_text_file(filename, file_extension):
                 return {"success": True, "parsed_text": parsed_text}
             except UnicodeDecodeError:
                 continue
-        # If all encodings fail, fall through to LlamaParse as last resort
+        # If all encodings fail, return error
+        error_msg = (
+            f"Failed to decode text file ({file_extension}) with UTF-8, "
+            "latin-1, cp1252, or iso-8859-1 encodings. "
+            "The file may be corrupted or in an unsupported encoding."
+        )
+        logger.error(error_msg)
+        return {"success": False, "error": error_msg}
 ```
 
 ## Benefits
@@ -65,14 +76,15 @@ if self._is_text_file(filename, file_extension):
 2. **Better Performance**: Text files are decoded directly without API calls to LlamaParse
 3. **Encoding Flexibility**: Supports multiple text encodings (UTF-8, Latin-1, CP1252, ISO-8859-1)
 4. **Backward Compatible**: Binary documents (PDF, DOCX, etc.) still use LlamaParse as before
-5. **Graceful Degradation**: Falls back to LlamaParse if text decoding fails
+5. **Clear Error Handling**: Returns explicit errors when text decoding fails instead of silently falling through
+6. **Structured Data Support**: CSV files are handled by LlamaParse for structured table extraction
 
 ## Supported Text File Types
 
 The following file extensions are now handled as text files:
 - **Markdown**: `.md`, `.markdown`
 - **Plain Text**: `.txt`, `.text`, `.log`
-- **Data Formats**: `.csv`, `.tsv`, `.json`, `.xml`
+- **Data Formats**: `.tsv`, `.json`, `.xml` (Note: `.csv` uses LlamaParse for structured parsing)
 - **Web Files**: `.html`, `.htm`
 - **Configuration**: `.yaml`, `.yml`, `.ini`, `.cfg`, `.conf`
 
@@ -85,12 +97,24 @@ The following file extensions are now handled as text files:
    - Confirms LlamaParse is NOT called for text files
 
 2. **`test_parse_tool_handles_various_text_file_types`**
-   - Tests multiple text file extensions
+   - Tests multiple text file extensions (excluding CSV)
    - Ensures consistent behavior across different text formats
 
 3. **`test_parse_tool_binary_files_use_llamaparse`**
    - Confirms binary files still use LlamaParse
    - Ensures backward compatibility
+
+4. **`test_parse_tool_encoding_fallback`**
+   - Tests fallback to Latin-1 encoding when UTF-8 fails
+   - Verifies alternative encodings work correctly
+
+5. **`test_parse_tool_all_encodings_fail`**
+   - Tests error handling when all encodings fail
+   - Ensures clear error messages are returned
+
+6. **`test_parse_tool_csv_uses_llamaparse`**
+   - Verifies CSV files use LlamaParse for structured data extraction
+   - Confirms CSV is not treated as plain text
 
 ### Verification Script
 
