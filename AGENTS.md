@@ -760,7 +760,7 @@ from llama_cloud_services import LlamaParse
 #   outlined_table_extraction=True,
 #   output_tables_as_HTML=True,
 #   result_type="markdown",
-#   language="en,ch_sim,ch_tra",  # Support English and Chinese (Simplified & Traditional)
+#   language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
 #   project_id=project_id,
 #   organization_id=organization_id,
 # )
@@ -775,7 +775,7 @@ llama_parser = LlamaParse(
     outlined_table_extraction=True,
     output_tables_as_HTML=True,
     result_type="markdown",
-    language="en,ch_sim,ch_tra",  # Support English and Chinese (Simplified & Traditional)
+    language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
     project_id=project_id,
     organization_id=organization_id,
 )
@@ -790,7 +790,7 @@ llama_parser = LlamaParse(
 #   outlined_table_extraction=True,
 #   output_tables_as_HTML=True,
 #   result_type="markdown",
-#   language="en,ch_sim,ch_tra",  # Support English and Chinese (Simplified & Traditional)
+#   language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
 #   project_id=project_id,
 #   organization_id=organization_id,
 # )
