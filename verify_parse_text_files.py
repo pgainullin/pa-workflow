@@ -7,7 +7,6 @@ This script demonstrates that the Parse tool now correctly handles text files
 
 import base64
 import sys
-from unittest.mock import MagicMock
 
 # Mock the imports needed
 sys.path.insert(0, 'src')
