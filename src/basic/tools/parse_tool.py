@@ -50,6 +50,26 @@ class ParseTool(Tool):
         except (ValueError, AttributeError):
             return False
 
+    def _is_text_file(self, file_extension: str) -> bool:
+        """Check if a file is a text-based file that doesn't need LlamaParse.
+
+        Args:
+            file_extension: File extension to check
+
+        Returns:
+            True if the file is a text-based file
+        """
+        # Common text file extensions that don't need LlamaParse.
+        # Note: .csv is included as a fallback - while SheetsTool provides better
+        # structured parsing, ParseTool can handle CSV as plain text when triage
+        # incorrectly assigns a Parse step instead of a Sheets step.
+        text_extensions = {
+            ".txt", ".md", ".markdown", ".text", ".log",
+            ".csv", ".tsv", ".json", ".xml", ".html", ".htm",
+            ".yaml", ".yml", ".ini", ".cfg", ".conf",
+        }
+        return file_extension.lower() in text_extensions
+
     @api_retry
     async def _parse_with_retry(self, tmp_path: str, file_extension: str = ".pdf") -> tuple[list, str]:
         """Parse document with automatic retry on transient errors.
@@ -154,7 +174,6 @@ class ParseTool(Tool):
                     "message": "File content is empty - step skipped",
                 }
 
-            # Create temporary file for LlamaParse
             # Determine file extension from filename if provided
             file_extension = ".pdf"  # Default to .pdf
             if filename:
@@ -162,6 +181,35 @@ class ParseTool(Tool):
                 if ext:
                     file_extension = ext
 
+            # Check if this is a text file that doesn't need LlamaParse
+            if self._is_text_file(file_extension):
+                logger.info(
+                    f"ParseTool: Detected text file ({file_extension}), "
+                    f"returning content directly without LlamaParse"
+                )
+                try:
+                    # Decode the content as text
+                    parsed_text = content.decode("utf-8")
+                    return {"success": True, "parsed_text": parsed_text}
+                except UnicodeDecodeError:
+                    # If UTF-8 fails, try other common encodings
+                    for encoding in ["latin-1", "cp1252", "iso-8859-1"]:
+                        try:
+                            parsed_text = content.decode(encoding)
+                            logger.info(f"Decoded text file using {encoding} encoding")
+                            return {"success": True, "parsed_text": parsed_text}
+                        except UnicodeDecodeError:
+                            continue
+                    # If all encodings fail, return error instead of falling through
+                    error_msg = (
+                        f"Failed to decode text file ({file_extension}) with UTF-8, "
+                        "latin-1, cp1252, or iso-8859-1 encodings. "
+                        "The file may be corrupted or in an unsupported encoding."
+                    )
+                    logger.error(error_msg)
+                    return {"success": False, "error": error_msg}
+
+            # For binary documents, use LlamaParse
             with tempfile.NamedTemporaryFile(
                 delete=False, suffix=file_extension
             ) as tmp:
