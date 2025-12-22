@@ -436,13 +436,23 @@ def split_email_chain(email_body: str) -> tuple[str, str]:
             break
     
     # Pattern 3: "From:" headers (email forwarding)
-    # Look for lines that start with "From:" followed by email-like content
+    # Look for lines that start with "From:"; the email may be on this line or the next
     from_pattern = re.compile(
-        r'^From:\s+.+@.+$',
+        r'^From:\s*(.*)$',
         re.IGNORECASE
     )
     for i, line in enumerate(lines):
-        if from_pattern.match(line.strip()):
+        stripped = line.strip()
+        match = from_pattern.match(stripped)
+        if not match:
+            continue
+        # Check if the "From:" line itself contains an email-like address
+        from_line_has_email = '@' in match.group(1)
+        next_line_has_email = False
+        # If not, check the next line (common in forwarded-email formats)
+        if not from_line_has_email and i + 1 < len(lines):
+            next_line_has_email = '@' in lines[i + 1]
+        if from_line_has_email or next_line_has_email:
             split_index = min(split_index, i)
             break
     
