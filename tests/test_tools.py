@@ -440,8 +440,8 @@ async def test_parse_tool_handles_various_text_file_types():
     mock_parser = MagicMock()
     tool = ParseTool(mock_parser)
 
-    # Test with different text file extensions (CSV excluded - handled by SheetsTool)
-    text_extensions = [".txt", ".md", ".markdown", ".json", ".xml", ".html", ".log"]
+    # Test with different text file extensions (including CSV for robustness)
+    text_extensions = [".txt", ".md", ".markdown", ".csv", ".json", ".xml", ".html", ".log"]
     
     for ext in text_extensions:
         content = f"Test content for {ext} file"
@@ -513,35 +513,6 @@ async def test_parse_tool_all_encodings_fail():
     assert "unsupported encoding" in result["error"]
     # Parser should NOT be called
     assert mock_parser.load_data.call_count == 0
-
-
-@pytest.mark.asyncio
-async def test_parse_tool_csv_uses_llamaparse():
-    """Test that CSV files use LlamaParse for structured data extraction."""
-    from basic.tools import ParseTool
-
-    # Mock LlamaParse
-    mock_parser = MagicMock()
-    mock_doc = MagicMock()
-    mock_doc.get_content = MagicMock(return_value="Parsed CSV content")
-    mock_parser.load_data = MagicMock(return_value=[mock_doc])
-
-    tool = ParseTool(mock_parser)
-
-    # Test with CSV file (should use LlamaParse for structured parsing)
-    csv_content = b"name,age\nJohn,30\nJane,25"
-    encoded_content = base64.b64encode(csv_content).decode("utf-8")
-
-    result = await tool.execute(
-        file_content=encoded_content,
-        filename="data.csv"
-    )
-
-    # Should succeed and parse using LlamaParse
-    assert result["success"] is True
-    assert result["parsed_text"] == "Parsed CSV content"
-    # Parser SHOULD be called for CSV files
-    assert mock_parser.load_data.call_count == 1
 
 
 @pytest.mark.asyncio

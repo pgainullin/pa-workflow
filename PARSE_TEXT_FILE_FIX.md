@@ -28,12 +28,12 @@ Modified the Parse tool to detect and handle text-based files differently:
 def _is_text_file(self, file_extension: str) -> bool:
     """Check if a file is a text-based file that doesn't need LlamaParse."""
     # Common text file extensions that don't need LlamaParse.
-    # Note: .csv is intentionally excluded so that CSV files can be handled
-    # by structured parsers (e.g., SheetsTool / LlamaParse) rather than
-    # being treated as plain text.
+    # Note: .csv is included as a fallback - while SheetsTool provides better
+    # structured parsing, ParseTool can handle CSV as plain text when triage
+    # incorrectly assigns a Parse step instead of a Sheets step.
     text_extensions = {
         ".txt", ".md", ".markdown", ".text", ".log",
-        ".tsv", ".json", ".xml", ".html", ".htm",
+        ".csv", ".tsv", ".json", ".xml", ".html", ".htm",
         ".yaml", ".yml", ".ini", ".cfg", ".conf",
     }
     return file_extension.lower() in text_extensions
@@ -77,14 +77,14 @@ if self._is_text_file(file_extension):
 3. **Encoding Flexibility**: Supports multiple text encodings (UTF-8, Latin-1, CP1252, ISO-8859-1)
 4. **Backward Compatible**: Binary documents (PDF, DOCX, etc.) still use LlamaParse as before
 5. **Clear Error Handling**: Returns explicit errors when text decoding fails instead of silently falling through
-6. **Structured Data Support**: CSV files are handled by LlamaParse for structured table extraction
+6. **Robust Triage Handling**: CSV files can be handled as text fallback when triage incorrectly assigns Parse instead of Sheets
 
 ## Supported Text File Types
 
 The following file extensions are now handled as text files:
 - **Markdown**: `.md`, `.markdown`
 - **Plain Text**: `.txt`, `.text`, `.log`
-- **Data Formats**: `.tsv`, `.json`, `.xml` (Note: `.csv` uses LlamaParse for structured parsing)
+- **Data Formats**: `.csv`, `.tsv`, `.json`, `.xml` (Note: CSV handled as text fallback, SheetsTool preferred for structured parsing)
 - **Web Files**: `.html`, `.htm`
 - **Configuration**: `.yaml`, `.yml`, `.ini`, `.cfg`, `.conf`
 
@@ -97,7 +97,7 @@ The following file extensions are now handled as text files:
    - Confirms LlamaParse is NOT called for text files
 
 2. **`test_parse_tool_handles_various_text_file_types`**
-   - Tests multiple text file extensions (excluding CSV)
+   - Tests multiple text file extensions (including CSV)
    - Ensures consistent behavior across different text formats
 
 3. **`test_parse_tool_binary_files_use_llamaparse`**
@@ -111,10 +111,6 @@ The following file extensions are now handled as text files:
 5. **`test_parse_tool_all_encodings_fail`**
    - Tests error handling when all encodings fail
    - Ensures clear error messages are returned
-
-6. **`test_parse_tool_csv_uses_llamaparse`**
-   - Verifies CSV files use LlamaParse for structured data extraction
-   - Confirms CSV is not treated as plain text
 
 ### Verification Script
 

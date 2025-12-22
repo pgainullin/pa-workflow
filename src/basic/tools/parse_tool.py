@@ -60,12 +60,12 @@ class ParseTool(Tool):
             True if the file is a text-based file
         """
         # Common text file extensions that don't need LlamaParse.
-        # Note: .csv is intentionally excluded so that CSV files can be handled
-        # by structured parsers (e.g., SheetsTool / LlamaParse) rather than
-        # being treated as plain text.
+        # Note: .csv is included as a fallback - while SheetsTool provides better
+        # structured parsing, ParseTool can handle CSV as plain text when triage
+        # incorrectly assigns a Parse step instead of a Sheets step.
         text_extensions = {
             ".txt", ".md", ".markdown", ".text", ".log",
-            ".tsv", ".json", ".xml", ".html", ".htm",
+            ".csv", ".tsv", ".json", ".xml", ".html", ".htm",
             ".yaml", ".yml", ".ini", ".cfg", ".conf",
         }
         return file_extension.lower() in text_extensions
