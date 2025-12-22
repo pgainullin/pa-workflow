@@ -795,6 +795,23 @@ llama_parser = LlamaParse(
 #   organization_id=organization_id,
 # )
 
+# # Agentic Mode with Gemini (Recommended for CJK Languages)
+# # Using Gemini 2.5 Flash provides excellent OCR accuracy for Chinese, Japanese,
+# # Korean and other complex scripts in scanned documents
+# llama_parser = LlamaParse(
+#   # See how to get your API key at https://docs.cloud.llamaindex.ai/api_key
+#   parse_mode="parse_page_with_agent",
+#   model="gemini-2.5-flash",  # Optimized for multi-language OCR, especially CJK
+#   high_res_ocr=True,
+#   adaptive_long_table=True,
+#   outlined_table_extraction=True,
+#   output_tables_as_HTML=True,
+#   result_type="markdown",
+#   language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
+#   project_id=project_id,
+#   organization_id=organization_id,
+# )
+
 
 # =============================================================================
 # INITIALIZE LLAMAEXTRACT
