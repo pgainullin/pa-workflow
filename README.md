@@ -8,7 +8,7 @@ Email processing workflow with LlamaCloud integration and AI-powered triage for 
 - **Tool-Based Processing**: Modular tools for parsing, extraction, translation, summarization, and more
 - **Batch Processing**: Intelligent handling of long text with automatic chunking and reassembly
 - **LlamaCloud Integration**: Pull and store attachments using LlamaCloud file storage
-- **Document Processing**: Parse PDFs, spreadsheets, and other documents using LlamaParse
+- **Document Processing**: Parse PDFs, spreadsheets, and other documents using LlamaParse with multi-language OCR support (English, Chinese, Japanese, Korean, Arabic, Hindi, Thai, Vietnamese)
 - **AI Capabilities**: Summarization, classification, and translation using Google Gemini
 - **Callback System**: Send processed results back via webhook callbacks
 - **Automatic Retry**: Handles API overload and rate limits with exponential backoff
@@ -17,9 +17,9 @@ Email processing workflow with LlamaCloud integration and AI-powered triage for 
 
 The workflow includes the following tools that can be used by the triage agent:
 
-1. **Parse** - Parse documents (PDF, Word, PowerPoint) using LlamaParse
+1. **Parse** - Parse documents (PDF, Word, PowerPoint) using LlamaParse with OCR support for multiple languages including English, Chinese, Japanese, Korean, Arabic, Hindi, Thai, and Vietnamese
 2. **Extract** - Extract structured data using LlamaCloud Extract
-3. **Sheets** - Process spreadsheet files (Excel, CSV) using LlamaParse
+3. **Sheets** - Process spreadsheet files (Excel, CSV) using LlamaParse with multi-language OCR support
 4. **Split** - Split documents into logical sections using LlamaIndex SentenceSplitter
 5. **Classify** - Classify text into categories using LlamaIndex structured outputs
 6. **Translate** - Translate text using Google Translate

@@ -161,7 +161,7 @@ from workflows import Workflow, Context, step
 
 `Event`is the base class for designing the events that will drive your workflow. There are five types of events:
 
-- `StartEvent` : it’s the input event that kicks off the workflow
+- `StartEvent` : itï¿½s the input event that kicks off the workflow
 - `Event` : base class from which all intermediate workflow events should inherit
 - `StopEvent` : last event of the workflow, should contain the output. The workflow will stop as soon as the event is returned from a step
 - `InputRequiredEvent`: this event is emitted when an external input is required
@@ -380,7 +380,7 @@ restored_ctx = Context.from_dict(w, ctx_dict)
 result = await w.run(..., ctx=ctx)
 ```
 
-Context serialization relies on your workflow events and workflow state store containing serializable data. If you store arbitrary objects, or don’t leverage pydantic functionalities to control serialization of state/events, you may encounter errors.
+Context serialization relies on your workflow events and workflow state store containing serializable data. If you store arbitrary objects, or donï¿½t leverage pydantic functionalities to control serialization of state/events, you may encounter errors.
 
 <!-- sep---sep -->
 
@@ -427,7 +427,7 @@ class WorkflowWithResource(Workflow):
 
 ### 2.4 The Workflow
 
-There have been already several examples that implemented the `Workflow` class, but let’s understand it better:
+There have been already several examples that implemented the `Workflow` class, but letï¿½s understand it better:
 
 - When you want to create a workflow, that has to be a subclass of the `Workflow` class
 - Each of the functions of the workflow representing a step must be decorated with the `@step` decorator
@@ -435,7 +435,7 @@ There have been already several examples that implemented the `Workflow` class, 
 - Workflows can have linear, parallel/concurrent or cyclic execution patterns
 - Every workflow instance has a timeout (by default 45 seconds): remember to set it at a higher value when needed by passing `timeout=Nseconds` when initializing your workflow (as in `wf = MyWorkflow(timeout=300)`)
 
-Let’s see a complete example of a workflow:
+Letï¿½s see a complete example of a workflow:
 
 ```python
 from workflows import Workflow, step
@@ -760,6 +760,7 @@ from llama_cloud_services import LlamaParse
 #   outlined_table_extraction=True,
 #   output_tables_as_HTML=True,
 #   result_type="markdown",
+#   language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
 #   project_id=project_id,
 #   organization_id=organization_id,
 # )
@@ -774,6 +775,7 @@ llama_parser = LlamaParse(
     outlined_table_extraction=True,
     output_tables_as_HTML=True,
     result_type="markdown",
+    language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
     project_id=project_id,
     organization_id=organization_id,
 )
@@ -788,6 +790,7 @@ llama_parser = LlamaParse(
 #   outlined_table_extraction=True,
 #   output_tables_as_HTML=True,
 #   result_type="markdown",
+#   language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
 #   project_id=project_id,
 #   organization_id=organization_id,
 # )
