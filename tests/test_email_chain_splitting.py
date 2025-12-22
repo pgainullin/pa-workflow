@@ -1,6 +1,5 @@
 """Tests for email chain splitting functionality."""
 
-import pytest
 from basic.utils import split_email_chain
 
 
