@@ -74,17 +74,18 @@ llama_parser = LlamaParse(
 ## Files Modified
 
 1. **`src/basic/email_workflow.py`**
-   - Main email workflow LlamaParse initialization
-   - Lines 140-148
+   - Removed direct LlamaParse instantiation from the email workflow class
 
 2. **`src/basic/email_workflow_old.py`**
-   - Legacy email workflow LlamaParse initialization
-   - Lines 100-108
+   - Deleted legacy email workflow file (no longer used)
 
-3. **`src/basic/tools/sheets_tool.py`**
-   - SheetsTool LlamaParse initialization (lazy loading)
-   - Lines 64-72
+3. **`src/basic/tools/parse_tool.py`**
+   - Added lazy LlamaParse initialization with OCR configuration
+   - Lines 134-144
 
+4. **`src/basic/tools/sheets_tool.py`**
+   - Updated LlamaParse initialization with OCR configuration
+   - Lines 67-71
 ## Why This Fixes the Issue
 
 ### For Scanned PDFs
