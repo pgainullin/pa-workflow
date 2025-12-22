@@ -136,6 +136,8 @@ class EmailWorkflow(Workflow):
     and results are sent back via callback.
     """
 
+    # Class attribute for test compatibility - tools manage their own parser instances
+    llama_parser = None
     llm = GoogleGenAI(model=GEMINI_TEXT_MODEL, api_key=os.getenv("GEMINI_API_KEY"))
     # Create genai client for multi-modal support (images, videos, etc.)
     genai_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
@@ -154,9 +156,11 @@ class EmailWorkflow(Workflow):
 
     def _register_tools(self):
         """Register all available tools."""
-        self.tool_registry.register(ParseTool())
+        # Pass llama_parser to tools if set (e.g., for testing with mocks)
+        # Otherwise tools will create their own instances
+        self.tool_registry.register(ParseTool(self.llama_parser))
         self.tool_registry.register(ExtractTool())
-        self.tool_registry.register(SheetsTool())
+        self.tool_registry.register(SheetsTool(self.llama_parser))
         self.tool_registry.register(SplitTool())
         self.tool_registry.register(ClassifyTool(self.llm))
         self.tool_registry.register(TranslateTool())
