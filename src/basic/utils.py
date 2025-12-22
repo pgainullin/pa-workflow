@@ -427,7 +427,7 @@ def split_email_chain(email_body: str) -> tuple[str, str]:
     # Pattern 2: "On [date]... wrote:" patterns
     # Examples: "On Jan 1, 2024, John wrote:", "On Mon, Jan 1, 2024 at 5:00 PM, John <john@example.com> wrote:"
     wrote_pattern = re.compile(
-        r'^On\s+.+?\s+wrote:\s*$',
+        r'^On\s+.+?\s+wrote:?\s*$',
         re.IGNORECASE | re.MULTILINE
     )
     for i, line in enumerate(lines):
