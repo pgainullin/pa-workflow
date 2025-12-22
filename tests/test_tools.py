@@ -349,8 +349,9 @@ async def test_parse_tool_retries_on_empty_content():
 
 @pytest.mark.asyncio
 async def test_parse_tool_fails_after_max_retries_on_empty_content():
-    """Test that ParseTool fails gracefully after max retries with empty content."""
+    """Test that ParseTool handles persistent empty content gracefully after max retries."""
     from basic.tools import ParseTool
+    from basic.utils import MAX_RETRY_ATTEMPTS
 
     # Mock LlamaParse
     mock_parser = MagicMock()
@@ -368,18 +369,24 @@ async def test_parse_tool_fails_after_max_retries_on_empty_content():
     with patch("basic.tools.parse_tool.download_file_from_llamacloud") as mock_download:
         mock_download.return_value = b"PDF content"
 
-        # Test execution - should fail after max retries
+        # Test execution - should succeed gracefully after max retries with diagnostic info
         result = await tool.execute(file_id="550e8400-e29b-41d4-a716-446655440000")
 
-        assert result["success"] is False
-        assert "error" in result
-        # Should have user-friendly error message
-        assert (
-            "empty" in result["error"].lower()
-            or "no text content" in result["error"].lower()
-        )
-        # Verify it was called 5 times (initial + 4 retries as per api_retry config)
-        assert mock_parser.load_data.call_count == 5
+        # Should return success to avoid blocking downstream steps
+        assert result["success"] is True
+        # But with empty parsed text
+        assert result["parsed_text"] == ""
+        # And with diagnostic flags
+        assert result["parse_failed"] is True
+        assert result["retry_exhausted"] is True
+        assert "parse_warning" in result
+        assert "diagnostic_info" in result
+        # Should have user-friendly warning message
+        assert "no text content" in result["parse_warning"].lower()
+        # Verify max_retries in diagnostic_info matches configuration
+        assert result["diagnostic_info"]["max_retries"] == MAX_RETRY_ATTEMPTS
+        # Verify it was called MAX_RETRY_ATTEMPTS times
+        assert mock_parser.load_data.call_count == MAX_RETRY_ATTEMPTS
 
 
 @pytest.mark.asyncio

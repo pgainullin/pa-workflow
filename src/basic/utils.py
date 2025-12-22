@@ -32,6 +32,7 @@ def is_retryable_error(exception: Exception) -> bool:
     - HTTP 500 (Internal Server Error)
     - HTTP 503 (Service Unavailable / Overloaded)
     - Connection errors and timeouts
+    - Empty content from LlamaParse (intermittent issue)
 
     Args:
         exception: The exception to check
@@ -43,6 +44,11 @@ def is_retryable_error(exception: Exception) -> bool:
 
     # Convert exception to string for error message matching
     error_str = str(exception)
+
+    # Check for LlamaParse empty content issue (intermittent problem with valid PDFs)
+    # This matches the exception raised by ParseTool._parse_with_retry when content is empty
+    if "no text content" in error_str.lower() and "temporarily unavailable" in error_str.lower():
+        return True
 
     # Check for HTTP status codes with context to avoid false positives
     # Pattern 1: Matches HTTP status codes with error keywords
@@ -96,10 +102,13 @@ def is_retryable_error(exception: Exception) -> bool:
     return False
 
 
+# Retry configuration constants
+MAX_RETRY_ATTEMPTS = 5  # Max 5 attempts total (1 initial + 4 retries)
+
 # Create a reusable retry decorator for API calls
 api_retry = retry(
     retry=retry_if_exception(is_retryable_error),
-    stop=stop_after_attempt(5),  # Max 5 attempts total (1 initial + 4 retries)
+    stop=stop_after_attempt(MAX_RETRY_ATTEMPTS),
     wait=wait_exponential(
         multiplier=1, min=1, max=45
     ),  # Exponential backoff: 1s, 2s, 4s, 8s
