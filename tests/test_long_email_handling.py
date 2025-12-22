@@ -1,7 +1,6 @@
 """Tests for long email handling in the workflow."""
 
 import base64
-import pytest
 from basic.models import EmailData, Attachment
 from basic.prompt_utils import build_triage_prompt
 
