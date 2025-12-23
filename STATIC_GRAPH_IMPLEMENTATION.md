@@ -170,8 +170,13 @@ tests/test_static_graph_tool.py::test_static_graph_pie_missing_values PASSED
 tests/test_static_graph_tool.py::test_static_graph_pie_missing_labels PASSED
 tests/test_static_graph_tool.py::test_static_graph_histogram_missing_values PASSED
 tests/test_static_graph_tool.py::test_static_graph_custom_dimensions PASSED
+tests/test_static_graph_tool.py::test_static_graph_pie_mismatched_lengths PASSED
+tests/test_static_graph_tool.py::test_static_graph_negative_width PASSED
+tests/test_static_graph_tool.py::test_static_graph_zero_height PASSED
+tests/test_static_graph_tool.py::test_static_graph_non_numeric_width PASSED
+tests/test_static_graph_tool.py::test_static_graph_non_numeric_height PASSED
 
-================================================== 15 passed in 4.14s ==================================================
+================================================== 20 passed in 4.14s ==================================================
 ```
 
 ## Example Output
