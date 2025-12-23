@@ -163,6 +163,13 @@ class PrintToPDFTool(Tool):
                 # Handle empty cells
                 if not cell:
                     cell = " "
+                
+                # Truncate overly long cells to prevent ReportLab LayoutError (row > page height)
+                # A single row cannot span multiple pages in ReportLab's standard Table
+                if len(cell) > 3000:
+                    logger.warning(f"Truncating long table cell ({len(cell)} chars) to prevent PDF layout error")
+                    cell = cell[:3000] + "... (truncated)"
+                
                 # Create paragraph directly with UTF-8 text
                 paragraph_row.append(Paragraph(cell, cell_style))
             table_with_paragraphs.append(paragraph_row)
