@@ -132,7 +132,9 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
             if has_template:
                 # Check if the entire value is a single template reference
                 # Pattern 1: {{step_N.field}} (with optional whitespace)
-                single_double_brace_match = re.fullmatch(r"\{\{([^}]+)\}\}", value)
+                single_double_brace_match = re.fullmatch(
+                    r"\{\{\s*(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}", value
+                )
                 # Pattern 2: {step_N.field} (no whitespace)
                 single_single_brace_match = re.fullmatch(
                     r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}", value
