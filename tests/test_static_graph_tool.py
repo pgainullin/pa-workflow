@@ -299,3 +299,97 @@ async def test_static_graph_custom_dimensions():
 
         assert result["success"] is True
         assert result["file_id"] == "file-custom-dims"
+
+
+@pytest.mark.asyncio
+async def test_static_graph_pie_mismatched_lengths():
+    """Test error handling when pie chart values and labels have different lengths."""
+    from basic.tools import StaticGraphTool
+
+    tool = StaticGraphTool()
+
+    result = await tool.execute(
+        data={"values": [10, 20, 30], "labels": ["A", "B"]},  # Mismatched lengths
+        chart_type="pie",
+    )
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "same length" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_static_graph_negative_width():
+    """Test error handling for negative width value."""
+    from basic.tools import StaticGraphTool
+
+    tool = StaticGraphTool()
+
+    result = await tool.execute(
+        data={"x": [1, 2, 3], "y": [1, 2, 3]},
+        chart_type="line",
+        width=-5,
+        height=6,
+    )
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "positive" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_static_graph_zero_height():
+    """Test error handling for zero height value."""
+    from basic.tools import StaticGraphTool
+
+    tool = StaticGraphTool()
+
+    result = await tool.execute(
+        data={"x": [1, 2, 3], "y": [1, 2, 3]},
+        chart_type="line",
+        width=10,
+        height=0,
+    )
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "positive" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_static_graph_non_numeric_width():
+    """Test error handling for non-numeric width value."""
+    from basic.tools import StaticGraphTool
+
+    tool = StaticGraphTool()
+
+    result = await tool.execute(
+        data={"x": [1, 2, 3], "y": [1, 2, 3]},
+        chart_type="line",
+        width="invalid",
+        height=6,
+    )
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "valid numbers" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_static_graph_non_numeric_height():
+    """Test error handling for non-numeric height value."""
+    from basic.tools import StaticGraphTool
+
+    tool = StaticGraphTool()
+
+    result = await tool.execute(
+        data={"x": [1, 2, 3], "y": [1, 2, 3]},
+        chart_type="line",
+        width=10,
+        height=None,
+    )
+
+    assert result["success"] is False
+    assert "error" in result
+    assert "valid numbers" in result["error"]
+

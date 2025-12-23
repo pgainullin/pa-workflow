@@ -77,6 +77,21 @@ class StaticGraphTool(Tool):
         if not chart_type:
             return {"success": False, "error": "Missing required parameter: chart_type"}
         
+        # Validate width and height
+        try:
+            width = float(width)
+            height = float(height)
+            if width <= 0 or height <= 0:
+                return {
+                    "success": False,
+                    "error": "width and height must be positive numbers"
+                }
+        except (TypeError, ValueError):
+            return {
+                "success": False,
+                "error": "width and height must be valid numbers"
+            }
+        
         # Validate chart_type
         valid_types = ["line", "bar", "scatter", "pie", "histogram"]
         if chart_type not in valid_types:
@@ -96,81 +111,85 @@ class StaticGraphTool(Tool):
             # Create figure and axis
             fig, ax = plt.subplots(figsize=(width, height))
 
-            # Generate chart based on type
-            if chart_type == "pie":
-                # Pie chart requires 'values' and 'labels'
-                values = data.get("values")
-                labels = data.get("labels")
-                
-                if not values:
-                    return {"success": False, "error": "Pie chart requires 'values' in data"}
-                if not labels:
-                    return {"success": False, "error": "Pie chart requires 'labels' in data"}
-                
-                if len(values) != len(labels):
-                    return {
-                        "success": False,
-                        "error": "Pie chart 'values' and 'labels' must have the same length",
-                    }
-                
-                ax.pie(values, labels=labels, autopct='%1.1f%%')
-                if title:
-                    ax.set_title(title)
+            try:
+                # Generate chart based on type
+                if chart_type == "pie":
+                    # Pie chart requires 'values' and 'labels'
+                    values = data.get("values")
+                    labels = data.get("labels")
                     
-            elif chart_type == "histogram":
-                # Histogram requires 'values'
-                values = data.get("values")
-                
-                if not values:
-                    return {"success": False, "error": "Histogram requires 'values' in data"}
-                
-                ax.hist(values, bins='auto', edgecolor='black')
-                if title:
-                    ax.set_title(title)
-                if xlabel:
-                    ax.set_xlabel(xlabel)
-                if ylabel:
-                    ax.set_ylabel(ylabel)
+                    if not values:
+                        return {"success": False, "error": "Pie chart requires 'values' in data"}
+                    if not labels:
+                        return {"success": False, "error": "Pie chart requires 'labels' in data"}
                     
-            else:
-                # Line, bar, scatter charts require 'x' and 'y'
-                x = data.get("x")
-                y = data.get("y")
-                
-                if not x:
-                    return {"success": False, "error": f"{chart_type} chart requires 'x' in data"}
-                if not y:
-                    return {"success": False, "error": f"{chart_type} chart requires 'y' in data"}
-                
-                if len(x) != len(y):
-                    return {"success": False, "error": "x and y data must have the same length"}
-                
-                if chart_type == "line":
-                    ax.plot(x, y, marker='o')
-                elif chart_type == "bar":
-                    ax.bar(x, y)
-                elif chart_type == "scatter":
-                    ax.scatter(x, y)
-                
-                if title:
-                    ax.set_title(title)
-                if xlabel:
-                    ax.set_xlabel(xlabel)
-                if ylabel:
-                    ax.set_ylabel(ylabel)
-                
-                # Add grid for better readability
-                ax.grid(True, alpha=0.3)
+                    if len(values) != len(labels):
+                        return {
+                            "success": False,
+                            "error": "Pie chart 'values' and 'labels' must have the same length",
+                        }
+                    
+                    ax.pie(values, labels=labels, autopct='%1.1f%%')
+                    if title:
+                        ax.set_title(title)
+                        
+                elif chart_type == "histogram":
+                    # Histogram requires 'values'
+                    values = data.get("values")
+                    
+                    if not values:
+                        return {"success": False, "error": "Histogram requires 'values' in data"}
+                    
+                    ax.hist(values, bins='auto', edgecolor='black')
+                    if title:
+                        ax.set_title(title)
+                    if xlabel:
+                        ax.set_xlabel(xlabel)
+                    if ylabel:
+                        ax.set_ylabel(ylabel)
+                        
+                else:
+                    # Line, bar, scatter charts require 'x' and 'y'
+                    x = data.get("x")
+                    y = data.get("y")
+                    
+                    if not x:
+                        return {"success": False, "error": f"{chart_type} chart requires 'x' in data"}
+                    if not y:
+                        return {"success": False, "error": f"{chart_type} chart requires 'y' in data"}
+                    
+                    if len(x) != len(y):
+                        return {"success": False, "error": "x and y data must have the same length"}
+                    
+                    if chart_type == "line":
+                        ax.plot(x, y, marker='o')
+                    elif chart_type == "bar":
+                        ax.bar(x, y)
+                    elif chart_type == "scatter":
+                        ax.scatter(x, y)
+                    
+                    if title:
+                        ax.set_title(title)
+                    if xlabel:
+                        ax.set_xlabel(xlabel)
+                    if ylabel:
+                        ax.set_ylabel(ylabel)
+                    
+                    # Add grid for better readability
+                    ax.grid(True, alpha=0.3)
 
-            # Adjust layout to prevent label cutoff
-            plt.tight_layout()
+                # Adjust layout to prevent label cutoff
+                plt.tight_layout()
 
-            # Save to bytes buffer
-            buf = io.BytesIO()
-            plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-            plt.close(fig)  # Close to free memory
-            buf.seek(0)
-            image_bytes = buf.read()
+                # Save to bytes buffer
+                buf = io.BytesIO()
+                plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+                buf.seek(0)
+                image_bytes = buf.read()
+
+            finally:
+                # Always close figure to prevent memory leaks
+                plt.close(fig)
 
             # Upload to LlamaCloud
             filename = f"chart_{chart_type}.png"
