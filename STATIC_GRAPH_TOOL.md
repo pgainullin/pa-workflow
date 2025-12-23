@@ -64,6 +64,7 @@ data = {
 }
 ```
 
+Both `values` and `labels` must be provided and have the same length.
 #### Histogram
 
 ```python
