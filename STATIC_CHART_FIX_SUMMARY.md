@@ -2,12 +2,12 @@
 
 ## Issue Description
 
-When StaticChartGen tool received JSON data from Extract Tool via parameter references, it failed with the error:
+When tools received JSON data from Extract Tool via parameter references, the workflow failed with the error:
 ```
 'str' object has no attribute 'get'
 ```
 
-**Important**: The error occurred in the **StaticChartGen tool**, not the Extract tool. The Extract tool worked correctly and returned proper data, but the data was stringified during parameter resolution before reaching StaticChartGen.
+**Important**: The error was reported in the Extract Tool execution logs, but the root cause was in the `resolve_params` function. The Extract tool worked correctly and returned proper dict data, but that data was stringified during parameter resolution before being passed to downstream tools (like StaticChartGen).
 
 ## Root Cause Analysis
 
@@ -49,11 +49,13 @@ The issue occurred in the `resolve_params` function in `src/basic/plan_utils.py`
    }
    ```
 
-4. **StaticChartGen Tool** tried to use the data:
+4. **Downstream Tool** (e.g., StaticChartGen) tried to use the data:
    ```python
-   # In static_graph_tool.py:
+   # In static_graph_tool.py or other tools:
    x = data.get("x")  # ❌ AttributeError: 'str' object has no attribute 'get'
    ```
+   
+   Note: The error was reported in Extract Tool execution logs, likely because the error occurred during the workflow step that followed Extract Tool.
 
 ## Solution
 
@@ -131,9 +133,11 @@ tests/manual_verify_static_chart_fix.py - All checks PASSED
 ## Impact
 
 This fix enables:
-1. **Extract Tool → StaticChartGen Tool** workflows to work correctly
+1. **Extract Tool → downstream tools** (StaticChartGen, etc.) workflows to work correctly
 2. **Any tool-to-tool** data passing with complex types (dicts, lists, etc.)
 3. **Maintains backward compatibility** with existing text-embedding use cases
+
+Note: The error was reported in Extract Tool execution logs, as it occurred during parameter resolution for the step following Extract Tool.
 
 ## Example Usage
 
@@ -185,11 +189,12 @@ if single_double_brace_match:
 resolved = {"data": {"x": [...], "y": [...]}, "chart_type": "line"}  # DICT!
 ```
 
-**Step 4: StaticChartGen receives the data**
+**Step 4: Downstream tool receives the data**
 ```python
 # BEFORE FIX:
 data = resolved["data"]  # This is a STRING
 x = data.get("x")  # ❌ AttributeError: 'str' object has no attribute 'get'
+                   # Error reported in Extract Tool logs (as this occurs in post-extract step)
 
 # AFTER FIX:
 data = resolved["data"]  # This is a DICT
