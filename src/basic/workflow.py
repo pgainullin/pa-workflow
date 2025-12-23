@@ -3,10 +3,9 @@ from workflows.events import StartEvent, StopEvent, Event
 import asyncio
 
 from basic.observability import (
-    observe,
     flush_langfuse,
     setup_observability,
-)  # Import observe decorator, flush and setup for tracing
+)  # Import flush and setup for tracing
 
 
 class Start(StartEvent):
@@ -27,7 +26,6 @@ class BasicWorkflow(Workflow):
         setup_observability()
 
     @step
-    @observe(name="hello")
     async def hello(self, event: Start, context: Context) -> StopEvent:
         context.write_event_to_stream(
             Hello(message="🦙 Hello from the basic template.")
