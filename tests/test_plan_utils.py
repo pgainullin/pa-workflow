@@ -514,3 +514,88 @@ class TestResolveParams:
         assert isinstance(resolved["flag"], bool)
         assert resolved["flag"] is True
 
+    def test_resolve_none_reference_preserves_type(self):
+        """Test that None reference preserves None rather than converting to string."""
+        params = {"data": "{step_1.result}"}
+        context = {
+            "step_1": {"result": None}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve None type, not convert to "None" string
+        assert resolved["data"] is None
+        assert not isinstance(resolved["data"], str)
+
+    def test_resolve_empty_dict_preserves_type(self):
+        """Test that empty dict reference preserves the empty dict."""
+        params = {"data": "{step_1.empty_dict}"}
+        context = {
+            "step_1": {"empty_dict": {}}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve empty dict, not convert to string
+        assert isinstance(resolved["data"], dict)
+        assert resolved["data"] == {}
+        assert len(resolved["data"]) == 0
+
+    def test_resolve_empty_list_preserves_type(self):
+        """Test that empty list reference preserves the empty list."""
+        params = {"items": "{step_1.empty_list}"}
+        context = {
+            "step_1": {"empty_list": []}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve empty list, not convert to string
+        assert isinstance(resolved["items"], list)
+        assert resolved["items"] == []
+        assert len(resolved["items"]) == 0
+
+    def test_resolve_malformed_extra_braces(self):
+        """Test that malformed references with extra braces are handled safely."""
+        params = {"data": "{{{step_1.field}}}"}
+        context = {
+            "step_1": {"field": "value"}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # The pattern matches the inner reference and substitutes it
+        # Result: {{{ becomes {{, {step_1.field} gets substituted, }}} becomes }}
+        assert resolved["data"] == "{{value}}"
+
+    def test_resolve_malformed_semicolon_injection(self):
+        """Test that references with semicolons or injection attempts are handled safely."""
+        params = {"data": "{{step_1.field; malicious}}"}
+        context = {
+            "step_1": {"field": "value"}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should keep original value since field name contains invalid characters
+        assert resolved["data"] == "{{step_1.field; malicious}}"
+
+    def test_resolve_malformed_nested_fields(self):
+        """Test that nested field references are not supported and handled gracefully."""
+        params = {"data": "{step_1.nested.field}"}
+        context = {
+            "step_1": {"nested": {"field": "value"}}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should keep original value since nested fields are not supported
+        # The pattern doesn't match multi-level nesting
+        assert resolved["data"] == "{step_1.nested.field}"
+

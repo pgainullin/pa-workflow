@@ -54,10 +54,6 @@ def test_extract_to_static_graph_data_flow():
     resolved_params = resolve_params(static_graph_params, execution_context, email_data)
     
     # Verify that data is preserved as a dict, not converted to string
-    print("Resolved params:", resolved_params)
-    print("Type of data:", type(resolved_params["data"]))
-    print("Data value:", resolved_params["data"])
-    
     # This should work now (previously would fail with 'str' object has no attribute 'get')
     assert isinstance(resolved_params["data"], dict), \
         f"Expected dict but got {type(resolved_params['data'])}"
@@ -68,9 +64,6 @@ def test_extract_to_static_graph_data_flow():
     
     assert x_values == ["Q1", "Q2", "Q3", "Q4"], f"Expected ['Q1', 'Q2', 'Q3', 'Q4'] but got {x_values}"
     assert y_values == [100, 120, 115, 140], f"Expected [100, 120, 115, 140] but got {y_values}"
-    
-    print("✓ SUCCESS: Extract Tool data can now be passed to StaticChartGen Tool!")
-    print("✓ The dict.get() method works correctly")
 
 
 def test_pie_chart_data_flow():
@@ -112,8 +105,6 @@ def test_pie_chart_data_flow():
     
     assert values == [32, 28, 18, 12, 10]
     assert labels == ["Competitor A", "Our Company", "Competitor B", "Competitor C", "Others"]
-    
-    print("✓ SUCCESS: Pie chart data flow works correctly!")
 
 
 def test_histogram_data_flow():
@@ -150,8 +141,6 @@ def test_histogram_data_flow():
     # Verify we can access the data
     values = resolved_params["data"].get("values")
     assert values == [1, 2, 2, 3, 3, 3, 4, 4, 5]
-    
-    print("✓ SUCCESS: Histogram data flow works correctly!")
 
 
 if __name__ == "__main__":
