@@ -15,6 +15,7 @@ from .summarise_tool import SummariseTool
 from .print_to_pdf_tool import PrintToPDFTool
 from .search_tool import SearchTool
 from .image_gen_tool import ImageGenTool
+from .static_graph_tool import StaticGraphTool
 from .registry import ToolRegistry
 
 __all__ = [
@@ -29,5 +30,6 @@ __all__ = [
     "PrintToPDFTool",
     "SearchTool",
     "ImageGenTool",
+    "StaticGraphTool",
     "ToolRegistry",
 ]

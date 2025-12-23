@@ -15,12 +15,13 @@ dependencies = [
     "google-genai>=1.0.0",  # Google Gemini API for image generation
     "llama-index-workflows>=2.5.0,<3.0.0",
     "llama-parse>=0.6.88",  # v2 API support with tier-based configuration
-    "llama-cloud-services>=0.0.17",
+    "llama-cloud-services>=0.6.88",
     "httpx",  # Required for LlamaCloud presigned URL downloads and email callbacks
     "tenacity>=8.0.0",  # Required for retry logic with exponential backoff
     "deep-translator>=1.11.0",  # Google Translate API wrapper
     "reportlab>=4.0.0",  # PDF generation library
     "llama-index-callbacks-langfuse>=0.4.0",  # Langfuse observability integration
+    "matplotlib>=3.7.0",  # Chart/graph generation library
 ]
 
 [dependency-groups]
