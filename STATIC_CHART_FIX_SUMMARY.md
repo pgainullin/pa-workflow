@@ -2,10 +2,12 @@
 
 ## Issue Description
 
-When StaticChartGen tool was fed with JSON data from Extract Tool, it failed with the error:
+When StaticChartGen tool received JSON data from Extract Tool via parameter references, it failed with the error:
 ```
 'str' object has no attribute 'get'
 ```
+
+**Important**: The error occurred in the **StaticChartGen tool**, not the Extract tool. The Extract tool worked correctly and returned proper data, but the data was stringified during parameter resolution before reaching StaticChartGen.
 
 ## Root Cause Analysis
 
@@ -13,7 +15,7 @@ The issue occurred in the `resolve_params` function in `src/basic/plan_utils.py`
 
 ### Example of the Problem:
 
-1. **Extract Tool** returns:
+1. **Extract Tool** returns (working correctly):
    ```python
    {
        "success": True,
@@ -37,15 +39,20 @@ The issue occurred in the `resolve_params` function in `src/basic/plan_utils.py`
 
 3. **Before Fix** - `resolve_params` converted the dict to a string:
    ```python
+   # In plan_utils.py (OLD CODE):
+   return str(context[step_key][field])  # ❌ Always converts to string
+   
+   # Result passed to StaticChartGen:
    resolved_params = {
        "data": "{'x': ['Q1', 'Q2', 'Q3', 'Q4'], 'y': [100, 120, 115, 140]}",  # STRING!
        "chart_type": "line"
    }
    ```
 
-4. **StaticChartGen Tool** tried to use:
+4. **StaticChartGen Tool** tried to use the data:
    ```python
-   x = data.get("x")  # AttributeError: 'str' object has no attribute 'get'
+   # In static_graph_tool.py:
+   x = data.get("x")  # ❌ AttributeError: 'str' object has no attribute 'get'
    ```
 
 ## Solution
@@ -60,11 +67,22 @@ Modified `resolve_params` to detect when a parameter value is **ONLY** a single 
 
 2. **Type Preservation**: When a single reference is detected, return the actual value from the context instead of converting to string:
    ```python
-   # Before: return str(context[step_key][field])
-   # After: return context[step_key][field]  # Preserves dict, list, int, float, bool, etc.
+   # BEFORE (plan_utils.py line 141 and 160):
+   return str(context[step_key][field])  # ❌ Always stringifies
+   
+   # AFTER (plan_utils.py - new code at lines 145-149):
+   if single_double_brace_match:
+       # ... validation ...
+       # Return the actual value, preserving its type
+       resolved[key] = context[step_key][field]  # ✅ Preserves dict/list/int/etc
+       continue
    ```
 
-3. **Backward Compatibility**: When references are embedded in text (e.g., `"Count: {step_1.count} items"`), string conversion still happens as expected.
+3. **Backward Compatibility**: When references are embedded in text (e.g., `"Count: {step_1.count} items"`), string conversion still happens as expected:
+   ```python
+   # Still converts to string for embedded references:
+   "Count: {step_1.count} items" → "Count: 42 items"  # ✅ String conversion when needed
+   ```
 
 ## Files Modified
 
@@ -119,29 +137,63 @@ This fix enables:
 
 ## Example Usage
 
-After the fix, this workflow now works correctly:
+### The Complete Flow
+
+**Step 1: Extract Tool returns data (works correctly)**
+```python
+# Extract tool successfully returns:
+{
+    "success": True,
+    "extracted_data": {
+        "x": ["Q1", "Q2", "Q3", "Q4"],
+        "y": [100, 120, 115, 140]
+    }
+}
+```
+
+**Step 2: Workflow parameters reference the data**
+```python
+# Triage plan specifies:
+params = {"data": "{step_1.extracted_data}", "chart_type": "line"}
+context = {"step_1": {"extracted_data": {"x": [...], "y": [...]}}}
+```
+
+**Step 3: Parameter resolution (THIS IS WHERE THE BUG WAS)**
 
 ```python
-# Step 1: Extract structured data
-{
-    "tool": "extract",
-    "params": {
-        "text": "...",
-        "schema": {...}
-    }
-}
-# Returns: {"success": True, "extracted_data": {"x": [...], "y": [...]}}
+# BEFORE FIX - plan_utils.py (line ~141):
+def double_brace_replacer(match):
+    # ...
+    return str(context[step_key][field])  # ❌ Always stringifies!
 
-# Step 2: Generate chart from extracted data
-{
-    "tool": "static_graph",
-    "params": {
-        "data": "{step_1.extracted_data}",  # Dict is preserved!
-        "chart_type": "line",
-        "title": "Sales Trend"
-    }
-}
-# Works! The dict can use .get() method
+# Result:
+resolved = {"data": "{'x': [...], 'y': [...]}", "chart_type": "line"}  # STRING!
+```
+
+```python
+# AFTER FIX - plan_utils.py (lines 142-150):
+if single_double_brace_match:
+    ref = single_double_brace_match.group(1).strip()
+    parts = ref.split(".")
+    if len(parts) == 2:
+        step_key, field = parts
+        if step_key in context and field in context[step_key]:
+            resolved[key] = context[step_key][field]  # ✅ Preserves type!
+            continue
+
+# Result:
+resolved = {"data": {"x": [...], "y": [...]}, "chart_type": "line"}  # DICT!
+```
+
+**Step 4: StaticChartGen receives the data**
+```python
+# BEFORE FIX:
+data = resolved["data"]  # This is a STRING
+x = data.get("x")  # ❌ AttributeError: 'str' object has no attribute 'get'
+
+# AFTER FIX:
+data = resolved["data"]  # This is a DICT
+x = data.get("x")  # ✅ Works! Returns ["Q1", "Q2", "Q3", "Q4"]
 ```
 
 ## Verification
