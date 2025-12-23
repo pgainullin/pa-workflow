@@ -86,7 +86,13 @@ def demonstrate_fix():
 def verify_fix_in_resolve_params():
     """Verify the fix works in the actual resolve_params function."""
     import sys
-    sys.path.insert(0, '/home/runner/work/pa-workflow/pa-workflow/src')
+    import os
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    src_path = os.path.join(project_root, "src")
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
     
     from basic.models import EmailData
     from basic.plan_utils import resolve_params
