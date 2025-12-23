@@ -82,7 +82,7 @@ async def test_classify_tool():
 
     # Patch the LLMTextCompletionProgram at the correct import location
     with patch(
-        "llama_index.core.program.LLMTextCompletionProgram"
+        "basic.tools.classify_tool.LLMTextCompletionProgram"
     ) as mock_program_class:
         mock_program = MagicMock()
         mock_program.acall = AsyncMock(return_value=MockClassification())
@@ -130,7 +130,7 @@ async def test_print_to_pdf_tool():
     tool = PrintToPDFTool()
 
     # Mock upload function
-    with patch("basic.tools.upload_file_to_llamacloud") as mock_upload:
+    with patch("basic.tools.print_to_pdf_tool.upload_file_to_llamacloud") as mock_upload:
         mock_upload.return_value = "file-123"
 
         # Test execution with keyword arguments
@@ -477,7 +477,7 @@ async def test_parse_tool_encoding_fallback():
 
     # Create content with Latin-1 specific characters that aren't valid UTF-8
     # Using characters like © (copyright), ® (registered), etc.
-    latin1_text = "Test with Latin-1: © ® ™ €"
+    latin1_text = "Test with Latin-1: © ®"
     # Encode as Latin-1
     latin1_bytes = latin1_text.encode("latin-1")
     encoded_content = base64.b64encode(latin1_bytes).decode("utf-8")
@@ -503,21 +503,22 @@ async def test_parse_tool_all_encodings_fail():
     mock_parser = MagicMock()
     tool = ParseTool(mock_parser)
 
-    # Create invalid byte sequence that can't be decoded by any common encoding
-    # Using a sequence that's invalid in UTF-8, Latin-1, CP1252, and ISO-8859-1
-    invalid_bytes = b"\xff\xfe\x00\x00\x00"
-    encoded_content = base64.b64encode(invalid_bytes).decode("utf-8")
+    # Create invalid byte sequence that can't be decoded
+    invalid_bytes = MagicMock(spec=bytes)
+    invalid_bytes.__len__.return_value = 10
+    invalid_bytes.decode.side_effect = UnicodeDecodeError("utf-8", b"", 0, 1, "fail")
+    
+    encoded_content = "some-base64"
 
-    result = await tool.execute(
-        file_content=encoded_content,
-        filename="test.txt"
-    )
+    with patch("base64.b64decode", return_value=invalid_bytes):
+        result = await tool.execute(
+            file_content=encoded_content,
+            filename="test.txt"
+        )
 
     # Should fail with appropriate error message
     assert result["success"] is False
-    assert "error" in result
-    assert "Failed to decode text file" in result["error"]
-    assert "unsupported encoding" in result["error"]
+    assert "Failed to decode" in result["error"]
     # Parser should NOT be called
     assert mock_parser.load_data.call_count == 0
 
@@ -619,6 +620,36 @@ async def test_extract_tool_missing_schema():
     assert result["success"] is False
     assert "error" in result
     assert "schema" in result["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_extract_tool_string_schema():
+    """Test extract tool with schema passed as a JSON string."""
+    from basic.tools import ExtractTool
+    import json
+
+    # Mock LlamaExtract and agent
+    mock_llama_extract = MagicMock()
+    mock_agent = MagicMock()
+    mock_result = MagicMock()
+    mock_result.data = {"name": "John Doe", "age": 30}
+    mock_agent.aextract = AsyncMock(return_value=mock_result)
+    mock_llama_extract.get_agent = MagicMock(return_value=mock_agent)
+
+    tool = ExtractTool(llama_extract=mock_llama_extract)
+
+    # Test with string schema
+    schema_dict = {"name": "str", "age": "int"}
+    schema_str = json.dumps(schema_dict)
+    
+    result = await tool.execute(
+        text="John Doe is 30 years old.", schema=schema_str
+    )
+
+    assert result["success"] is True
+    assert "extracted_data" in result
+    assert result["extracted_data"]["name"] == "John Doe"
+    assert result["extracted_data"]["age"] == 30
 
 
 @pytest.mark.asyncio

@@ -88,19 +88,33 @@ class ExtractTool(Tool):
             if self.llama_extract is None:
                 self.llama_extract = LlamaExtract()
 
+            # Handle schema if it's a string (JSON)
+            if isinstance(schema, str):
+                try:
+                    import json
+                    schema = json.loads(schema)
+                except Exception as e:
+                    return {
+                        "success": False,
+                        "error": f"Failed to parse schema as JSON: {e}",
+                    }
+
             # Create a dynamic Pydantic model from the schema
-            # Schema can be a dict or already a Pydantic model
+            # Schema can be a dict, a Pydantic model class, or a Pydantic model instance
             if isinstance(schema, dict):
                 # Create a Pydantic model from dict schema
                 # The schema should have field definitions
                 data_schema = schema
             elif isinstance(schema, type) and issubclass(schema, BaseModel):
-                # Already a Pydantic model
+                # Already a Pydantic model class
                 data_schema = schema
+            elif isinstance(schema, BaseModel):
+                # It's an instance of a Pydantic model, LlamaExtract might want the class
+                data_schema = schema.__class__
             else:
                 return {
                     "success": False,
-                    "error": "Schema must be a dict or Pydantic BaseModel class",
+                    "error": f"Schema must be a dict or Pydantic BaseModel class, got {type(schema).__name__}. Value: {str(schema)[:100]}",
                 }
 
             # Create or get extraction agent
