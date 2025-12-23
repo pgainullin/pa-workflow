@@ -130,6 +130,59 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
             )
 
             if has_template:
+                # Check if the entire value is a single template reference
+                # Pattern 1: {{step_N.field}} (with optional whitespace)
+                single_double_brace_match = re.fullmatch(r"\{\{([^}]+)\}\}", value)
+                # Pattern 2: {step_N.field} (no whitespace)
+                single_single_brace_match = re.fullmatch(
+                    r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}", value
+                )
+
+                # If the entire value is a single reference, return the actual value
+                if single_double_brace_match:
+                    ref = single_double_brace_match.group(1).strip()
+                    parts = ref.split(".")
+                    if len(parts) == 2:
+                        step_key, field = parts
+                        if step_key in context and field in context[step_key]:
+                            # Return the actual value, preserving its type
+                            resolved[key] = context[step_key][field]
+                            continue
+                        logger.warning(
+                            f"Template reference '{ref}' not found in execution context. "
+                            f"Available steps: {list(context.keys())}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
+                        )
+                    # If not found or invalid, keep the original value
+                    resolved[key] = value
+                    continue
+
+                if single_single_brace_match:
+                    ref = single_single_brace_match.group(1)
+                    parts = ref.split(".")
+                    if len(parts) == 2:
+                        step_key, field = parts
+                        if step_key in context and field in context[step_key]:
+                            # Return the actual value, preserving its type
+                            resolved[key] = context[step_key][field]
+                            continue
+                        logger.warning(
+                            f"Template reference '{ref}' not found in execution context. "
+                            f"Available steps: {list(context.keys())}"
+                        )
+                    else:
+                        logger.warning(
+                            f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
+                        )
+                    # If not found or invalid, keep the original value
+                    resolved[key] = value
+                    continue
+
+                # If the value contains multiple templates or embedded text,
+                # perform string substitution
                 # Handler for double-brace templates: {{step.field}}
                 # Strips whitespace since users might write {{ step_1.field }}
                 def double_brace_replacer(match):

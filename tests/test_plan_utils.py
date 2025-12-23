@@ -1,7 +1,7 @@
 """Tests for plan_utils module, specifically the _create_fallback_plan helper function."""
 
 from basic.models import Attachment, EmailData
-from basic.plan_utils import _create_fallback_plan, parse_plan
+from basic.plan_utils import _create_fallback_plan, parse_plan, resolve_params
 
 
 class TestCreateFallbackPlan:
@@ -298,3 +298,219 @@ class TestParsePlanFallback:
         assert len(plan) == 1
         assert plan[0]["tool"] == "custom_tool"
         assert plan[0]["params"]["arg"] == "value"
+
+
+class TestResolveParams:
+    """Tests for the resolve_params function."""
+
+    def test_resolve_simple_string(self):
+        """Test that simple strings are passed through unchanged."""
+        params = {"text": "hello world", "count": "123"}
+        context = {}
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        assert resolved["text"] == "hello world"
+        assert resolved["count"] == "123"
+
+    def test_resolve_dict_reference_single_brace(self):
+        """Test that dict reference with single braces preserves the dict type."""
+        params = {"data": "{step_1.extracted_data}"}
+        context = {
+            "step_1": {
+                "extracted_data": {"x": [1, 2, 3], "y": [4, 5, 6]}
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve dict type, not convert to string
+        assert isinstance(resolved["data"], dict)
+        assert resolved["data"] == {"x": [1, 2, 3], "y": [4, 5, 6]}
+        assert resolved["data"]["x"] == [1, 2, 3]
+        assert resolved["data"]["y"] == [4, 5, 6]
+
+    def test_resolve_dict_reference_double_brace(self):
+        """Test that dict reference with double braces preserves the dict type."""
+        params = {"data": "{{step_1.extracted_data}}"}
+        context = {
+            "step_1": {
+                "extracted_data": {"values": [10, 20, 30], "labels": ["A", "B", "C"]}
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve dict type, not convert to string
+        assert isinstance(resolved["data"], dict)
+        assert resolved["data"] == {"values": [10, 20, 30], "labels": ["A", "B", "C"]}
+        assert resolved["data"]["values"] == [10, 20, 30]
+        assert resolved["data"]["labels"] == ["A", "B", "C"]
+
+    def test_resolve_dict_reference_with_whitespace(self):
+        """Test that dict reference with whitespace in double braces works."""
+        params = {"data": "{{ step_1.extracted_data }}"}
+        context = {
+            "step_1": {
+                "extracted_data": {"x": [1, 2], "y": [3, 4]}
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve dict type despite whitespace
+        assert isinstance(resolved["data"], dict)
+        assert resolved["data"] == {"x": [1, 2], "y": [3, 4]}
+
+    def test_resolve_list_reference(self):
+        """Test that list reference preserves the list type."""
+        params = {"items": "{step_1.list_data}"}
+        context = {
+            "step_1": {
+                "list_data": [1, 2, 3, 4, 5]
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve list type, not convert to string
+        assert isinstance(resolved["items"], list)
+        assert resolved["items"] == [1, 2, 3, 4, 5]
+
+    def test_resolve_nested_dict_reference(self):
+        """Test that nested dict reference preserves the dict structure."""
+        params = {"result": "{step_1.nested_data}"}
+        context = {
+            "step_1": {
+                "nested_data": {
+                    "user": {"name": "John", "age": 30},
+                    "scores": [85, 92, 78]
+                }
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve nested structure
+        assert isinstance(resolved["result"], dict)
+        assert resolved["result"]["user"]["name"] == "John"
+        assert resolved["result"]["scores"] == [85, 92, 78]
+
+    def test_resolve_embedded_reference_converts_to_string(self):
+        """Test that embedded references in strings are converted to strings."""
+        params = {"message": "The count is {step_1.count} items"}
+        context = {
+            "step_1": {
+                "count": 42
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should convert to string when embedded in text
+        assert isinstance(resolved["message"], str)
+        assert resolved["message"] == "The count is 42 items"
+
+    def test_resolve_embedded_dict_reference_converts_to_string(self):
+        """Test that dict reference embedded in text is converted to string."""
+        params = {"message": "Data: {step_1.data} end"}
+        context = {
+            "step_1": {
+                "data": {"x": [1, 2], "y": [3, 4]}
+            }
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should convert dict to string when embedded
+        assert isinstance(resolved["message"], str)
+        assert "{'x': [1, 2], 'y': [3, 4]}" in resolved["message"]
+
+    def test_resolve_multiple_references_in_string(self):
+        """Test that multiple references in a string are all resolved."""
+        params = {"message": "Value1: {step_1.val1}, Value2: {step_2.val2}"}
+        context = {
+            "step_1": {"val1": "hello"},
+            "step_2": {"val2": "world"}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        assert resolved["message"] == "Value1: hello, Value2: world"
+
+    def test_resolve_nonexistent_reference_keeps_original(self):
+        """Test that nonexistent references are kept as-is."""
+        params = {"data": "{step_99.missing}"}
+        context = {
+            "step_1": {"value": "something"}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should keep original value when reference not found
+        assert resolved["data"] == "{step_99.missing}"
+
+    def test_resolve_non_string_params_unchanged(self):
+        """Test that non-string params are passed through unchanged."""
+        params = {"count": 123, "flag": True, "data": {"key": "value"}}
+        context = {}
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        assert resolved["count"] == 123
+        assert resolved["flag"] is True
+        assert resolved["data"] == {"key": "value"}
+
+    def test_resolve_int_reference_preserves_type(self):
+        """Test that int reference preserves the int type."""
+        params = {"width": "{step_1.width}"}
+        context = {
+            "step_1": {"width": 10}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve int type
+        assert isinstance(resolved["width"], int)
+        assert resolved["width"] == 10
+
+    def test_resolve_float_reference_preserves_type(self):
+        """Test that float reference preserves the float type."""
+        params = {"height": "{step_1.height}"}
+        context = {
+            "step_1": {"height": 6.5}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve float type
+        assert isinstance(resolved["height"], float)
+        assert resolved["height"] == 6.5
+
+    def test_resolve_bool_reference_preserves_type(self):
+        """Test that bool reference preserves the bool type."""
+        params = {"flag": "{step_1.success}"}
+        context = {
+            "step_1": {"success": True}
+        }
+        email_data = EmailData(from_email="test@example.com", subject="Test")
+        
+        resolved = resolve_params(params, context, email_data)
+        
+        # Should preserve bool type
+        assert isinstance(resolved["flag"], bool)
+        assert resolved["flag"] is True
+
