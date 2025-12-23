@@ -10,11 +10,21 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 from .base import Tool
 from ..utils import upload_file_to_llamacloud
 
 logger = logging.getLogger(__name__)
+
+# Register CJK font
+try:
+    pdfmetrics.registerFont(UnicodeCIDFont('STSong-Light'))
+    DEFAULT_FONT = 'STSong-Light'
+except Exception as e:
+    logger.warning(f"Could not register CJK font: {e}")
+    DEFAULT_FONT = 'Helvetica'
 
 
 class PrintToPDFTool(Tool):
@@ -26,7 +36,7 @@ class PrintToPDFTool(Tool):
     PDF_LINE_SPACING = 15  # Points between lines
     PDF_MAX_LINE_WIDTH = 468  # Max width in points (letter width - 2*margin)
     PDF_FONT_SIZE = 12  # Default font size
-    PDF_FONT_NAME = "Helvetica"  # Default font
+    PDF_FONT_NAME = DEFAULT_FONT  # Default font (STSong-Light if available)
 
     @property
     def name(self) -> str:
@@ -142,6 +152,7 @@ class PrintToPDFTool(Tool):
             parent=styles['Normal'],
             fontSize=9,
             leading=11,
+            fontName=self.PDF_FONT_NAME,
         )
         
         # Convert cells to Paragraphs for automatic wrapping
@@ -152,9 +163,8 @@ class PrintToPDFTool(Tool):
                 # Handle empty cells
                 if not cell:
                     cell = " "
-                # Encode safely for latin-1
-                safe_cell = cell.encode("latin-1", errors="replace").decode("latin-1")
-                paragraph_row.append(Paragraph(safe_cell, cell_style))
+                # Create paragraph directly with UTF-8 text
+                paragraph_row.append(Paragraph(cell, cell_style))
             table_with_paragraphs.append(paragraph_row)
         
         # Create table
@@ -167,7 +177,7 @@ class PrintToPDFTool(Tool):
                 ('BACKGROUND', (0, 0), (-1, 0), colors.darkgrey),  # Header row background
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),  # Header row text (white on dark grey for contrast)
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),  # Header row font
+                ('FONTNAME', (0, 0), (-1, 0), self.PDF_FONT_NAME),  # Header row font
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
                 ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
@@ -268,7 +278,9 @@ class PrintToPDFTool(Tool):
             story = []
             styles = getSampleStyleSheet()
             normal_style = styles['Normal']
+            normal_style.fontName = self.PDF_FONT_NAME
             heading_style = styles['Heading1']
+            heading_style.fontName = self.PDF_FONT_NAME
             
             # Split text into lines
             input_lines = text.split("\n")
@@ -300,11 +312,9 @@ class PrintToPDFTool(Tool):
                     header_text = line.lstrip("#").strip()
                     
                     if header_text:
-                        # Encode safely for latin-1
-                        safe_text = header_text.encode("latin-1", errors="replace").decode("latin-1")
                         # Use appropriate heading style
                         if header_level == 1:
-                            story.append(Paragraph(safe_text, heading_style))
+                            story.append(Paragraph(header_text, heading_style))
                         else:
                             # For other header levels, use bold text with appropriate size
                             # Map header levels to font sizes: H2=14, H3=12, H4=11, H5=10, H6+=10
@@ -315,18 +325,16 @@ class PrintToPDFTool(Tool):
                             bold_style = ParagraphStyle(
                                 f'BoldHeading{header_level}',
                                 parent=normal_style,
-                                fontName='Helvetica-Bold',
+                                fontName=self.PDF_FONT_NAME,
                                 fontSize=font_size,
                                 spaceAfter=6,
                             )
-                            story.append(Paragraph(safe_text, bold_style))
+                            story.append(Paragraph(header_text, bold_style))
                         story.append(Spacer(1, 6))
                 else:
                     # Regular text line
                     if line.strip():
-                        # Encode safely for latin-1
-                        safe_line = line.encode("latin-1", errors="replace").decode("latin-1")
-                        story.append(Paragraph(safe_line, normal_style))
+                        story.append(Paragraph(line, normal_style))
                     else:
                         # Empty line - add space
                         story.append(Spacer(1, 6))
