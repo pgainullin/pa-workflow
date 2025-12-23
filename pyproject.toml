@@ -20,6 +20,7 @@ dependencies = [
     "deep-translator>=1.11.0",  # Google Translate API wrapper
     "reportlab>=4.0.0",  # PDF generation library
     "llama-index-callbacks-langfuse>=0.4.0",  # Langfuse observability integration
+    "matplotlib>=3.7.0",  # Chart/graph generation library
 ]
 
 [dependency-groups]

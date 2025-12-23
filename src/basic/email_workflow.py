@@ -41,6 +41,7 @@ from .tools import (
     PrintToPDFTool,
     SearchTool,
     ImageGenTool,
+    StaticGraphTool,
     ToolRegistry,
 )
 from .utils import (
@@ -168,6 +169,7 @@ class EmailWorkflow(Workflow):
         self.tool_registry.register(PrintToPDFTool())
         self.tool_registry.register(SearchTool())
         self.tool_registry.register(ImageGenTool())
+        self.tool_registry.register(StaticGraphTool())
 
     @llm_api_retry
     async def _llm_complete_with_retry(self, prompt: str) -> str:
