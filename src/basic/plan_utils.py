@@ -144,14 +144,21 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                     parts = ref.split(".")
                     if len(parts) == 2:
                         step_key, field = parts
-                        if step_key in context and field in context[step_key]:
-                            # Return the actual value, preserving its type
-                            resolved[key] = context[step_key][field]
-                            continue
-                        logger.warning(
-                            f"Template reference '{ref}' not found in execution context. "
-                            f"Available steps: {list(context.keys())}"
-                        )
+                        # Validate that step_key follows the expected 'step_N' pattern
+                        if re.fullmatch(r"step_\d+", step_key):
+                            if step_key in context and field in context[step_key]:
+                                # Return the actual value, preserving its type
+                                resolved[key] = context[step_key][field]
+                                continue
+                            logger.warning(
+                                f"Template reference '{ref}' not found in execution context. "
+                                f"Available steps: {list(context.keys())}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Invalid step key '{step_key}' in template reference '{ref}'. "
+                                f"Expected 'step_N.field' where N is a number."
+                            )
                     else:
                         logger.warning(
                             f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
