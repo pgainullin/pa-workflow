@@ -137,7 +137,7 @@ class ParseTool(Tool):
         try:
             # Get or create LlamaParse instance
             if self.llama_parser is None:
-                # Using LlamaParse v2 API
+                # Using LlamaParse with v1 API for compatibility with llama-index 0.14.10
                 self.llama_parser = LlamaParse(
                     result_type="markdown",
                     parse_mode="parse_page_with_agent",
