@@ -6,7 +6,7 @@ to generate charts from data and send them as attachments.
 
 import asyncio
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # Set environment variables
 os.environ.setdefault("GEMINI_API_KEY", "demo-key")
