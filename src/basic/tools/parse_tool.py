@@ -142,7 +142,8 @@ class ParseTool(Tool):
                     result_type="markdown",
                     parse_mode="parse_page_with_agent",
                 )
-                self.llama_parser.language = ["en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi,ru"]
+                # workaround: https://github.com/run-llama/llama_cloud_services/issues/312#issuecomment-3094469334
+                self.llama_parser.language = ["en","ch_sim","ch_tra","ja","ko","ar","hi","th","vi","ru"]
 
             # Get file content
             if file_id:
