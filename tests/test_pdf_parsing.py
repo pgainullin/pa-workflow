@@ -2,7 +2,6 @@ import os
 import base64
 import pytest
 from pathlib import Path
-from llama_parse import LlamaParse
 from basic.tools.parse_tool import ParseTool
 
 # Define path to test PDFs
@@ -61,9 +60,8 @@ async def test_pdf_parsing_real(filename):
     
     encoded_content = base64.b64encode(file_content).decode("utf-8")
 
-    # Initialize tool with real parser
-    parser = LlamaParse(result_type="markdown")
-    parse_tool = ParseTool(parser)
+    # Initialize tool with lazy initialization (simulating workflow)
+    parse_tool = ParseTool()
 
     # Execute tool
     # We pass the filename so the tool knows the extension

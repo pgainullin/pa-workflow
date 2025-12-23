@@ -137,16 +137,12 @@ class ParseTool(Tool):
         try:
             # Get or create LlamaParse instance
             if self.llama_parser is None:
-                # Using LlamaParse v2 API with tier-based configuration
-                # Note: high_res_ocr, adaptive_long_table, and outlined_table_extraction
-                # are always enabled in v2 and no longer need to be specified
+                # Using LlamaParse v2 API
                 self.llama_parser = LlamaParse(
                     result_type="markdown",
-                    language="en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi",  # Multi-language OCR support
-                    tier="agentic",  # v2 tier: fast, cost_effective, agentic, or agentic_plus
-                    # Agentic tier provides best quality for complex documents with tables/images
-                    # Previously used parse_mode="parse_page_with_agent" which is now replaced by tier system
+                    parse_mode="parse_page_with_agent",
                 )
+                self.llama_parser.language = ["en,ch_sim,ch_tra,ja,ko,ar,hi,th,vi,ru"]
 
             # Get file content
             if file_id:
