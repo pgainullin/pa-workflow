@@ -107,6 +107,12 @@ class StaticGraphTool(Tool):
                 if not labels:
                     return {"success": False, "error": "Pie chart requires 'labels' in data"}
                 
+                if len(values) != len(labels):
+                    return {
+                        "success": False,
+                        "error": "Pie chart 'values' and 'labels' must have the same length",
+                    }
+                
                 ax.pie(values, labels=labels, autopct='%1.1f%%')
                 if title:
                     ax.set_title(title)
