@@ -56,7 +56,7 @@ Successfully implemented a new `StaticGraphTool` for the PA Workflow system that
 
 ### 5. Testing
 
-Created comprehensive test suite (`tests/test_static_graph_tool.py`) with 15 tests:
+Created comprehensive test suite (`tests/test_static_graph_tool.py`) with 20 tests:
 
 - ✅ Line chart generation
 - ✅ Bar chart generation
@@ -73,8 +73,13 @@ Created comprehensive test suite (`tests/test_static_graph_tool.py`) with 15 tes
 - ✅ Error handling: pie missing labels
 - ✅ Error handling: histogram missing values
 - ✅ Custom dimensions
+- ✅ Error handling: pie chart mismatched lengths
+- ✅ Error handling: negative width
+- ✅ Error handling: zero height
+- ✅ Error handling: non-numeric width
+- ✅ Error handling: non-numeric height
 
-**All 15 tests passing** ✅
+**All 20 tests passing** ✅
 
 ### 6. Examples and Demos
 

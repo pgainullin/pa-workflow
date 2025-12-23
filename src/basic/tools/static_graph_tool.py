@@ -111,6 +111,7 @@ class StaticGraphTool(Tool):
             # Create figure and axis
             fig, ax = plt.subplots(figsize=(width, height))
 
+            error: dict[str, Any] | None = None
             try:
                 # Generate chart based on type
                 if chart_type == "pie":
@@ -119,34 +120,35 @@ class StaticGraphTool(Tool):
                     labels = data.get("labels")
                     
                     if not values:
-                        return {"success": False, "error": "Pie chart requires 'values' in data"}
-                    if not labels:
-                        return {"success": False, "error": "Pie chart requires 'labels' in data"}
-                    
-                    if len(values) != len(labels):
-                        return {
+                        error = {"success": False, "error": "Pie chart requires 'values' in data"}
+                    elif not labels:
+                        error = {"success": False, "error": "Pie chart requires 'labels' in data"}
+                    elif len(values) != len(labels):
+                        error = {
                             "success": False,
                             "error": "Pie chart 'values' and 'labels' must have the same length",
                         }
                     
-                    ax.pie(values, labels=labels, autopct='%1.1f%%')
-                    if title:
-                        ax.set_title(title)
+                    if error is None:
+                        ax.pie(values, labels=labels, autopct='%1.1f%%')
+                        if title:
+                            ax.set_title(title)
                         
                 elif chart_type == "histogram":
                     # Histogram requires 'values'
                     values = data.get("values")
                     
                     if not values:
-                        return {"success": False, "error": "Histogram requires 'values' in data"}
+                        error = {"success": False, "error": "Histogram requires 'values' in data"}
                     
-                    ax.hist(values, bins='auto', edgecolor='black')
-                    if title:
-                        ax.set_title(title)
-                    if xlabel:
-                        ax.set_xlabel(xlabel)
-                    if ylabel:
-                        ax.set_ylabel(ylabel)
+                    if error is None:
+                        ax.hist(values, bins='auto', edgecolor='black')
+                        if title:
+                            ax.set_title(title)
+                        if xlabel:
+                            ax.set_xlabel(xlabel)
+                        if ylabel:
+                            ax.set_ylabel(ylabel)
                         
                 else:
                     # Line, bar, scatter charts require 'x' and 'y'
@@ -154,42 +156,46 @@ class StaticGraphTool(Tool):
                     y = data.get("y")
                     
                     if not x:
-                        return {"success": False, "error": f"{chart_type} chart requires 'x' in data"}
-                    if not y:
-                        return {"success": False, "error": f"{chart_type} chart requires 'y' in data"}
+                        error = {"success": False, "error": f"{chart_type} chart requires 'x' in data"}
+                    elif not y:
+                        error = {"success": False, "error": f"{chart_type} chart requires 'y' in data"}
+                    elif len(x) != len(y):
+                        error = {"success": False, "error": "x and y data must have the same length"}
                     
-                    if len(x) != len(y):
-                        return {"success": False, "error": "x and y data must have the same length"}
-                    
-                    if chart_type == "line":
-                        ax.plot(x, y, marker='o')
-                    elif chart_type == "bar":
-                        ax.bar(x, y)
-                    elif chart_type == "scatter":
-                        ax.scatter(x, y)
-                    
-                    if title:
-                        ax.set_title(title)
-                    if xlabel:
-                        ax.set_xlabel(xlabel)
-                    if ylabel:
-                        ax.set_ylabel(ylabel)
-                    
-                    # Add grid for better readability
-                    ax.grid(True, alpha=0.3)
+                    if error is None:
+                        if chart_type == "line":
+                            ax.plot(x, y, marker='o')
+                        elif chart_type == "bar":
+                            ax.bar(x, y)
+                        elif chart_type == "scatter":
+                            ax.scatter(x, y)
+                        
+                        if title:
+                            ax.set_title(title)
+                        if xlabel:
+                            ax.set_xlabel(xlabel)
+                        if ylabel:
+                            ax.set_ylabel(ylabel)
+                        
+                        # Add grid for better readability
+                        ax.grid(True, alpha=0.3)
 
-                # Adjust layout to prevent label cutoff
-                plt.tight_layout()
+                if error is None:
+                    # Adjust layout to prevent label cutoff
+                    plt.tight_layout()
 
-                # Save to bytes buffer
-                buf = io.BytesIO()
-                plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-                buf.seek(0)
-                image_bytes = buf.read()
+                    # Save to bytes buffer
+                    buf = io.BytesIO()
+                    plt.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+                    buf.seek(0)
+                    image_bytes = buf.read()
 
             finally:
                 # Always close figure to prevent memory leaks
                 plt.close(fig)
+
+            if error is not None:
+                return error
 
             # Upload to LlamaCloud
             filename = f"chart_{chart_type}.png"
