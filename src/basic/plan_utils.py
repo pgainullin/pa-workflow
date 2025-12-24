@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from typing import Any
 
 from .models import EmailData
 
@@ -121,6 +122,42 @@ def _is_attachment_reference(value: str, email_data: EmailData) -> bool:
 
 def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
     """Resolve parameter references from execution context."""
+    
+    def _resolve_single_reference(ref: str, original_value: str) -> tuple[bool, Any]:
+        """
+        Helper to resolve a single template reference.
+        
+        Args:
+            ref: The reference string (e.g., "step_1.field")
+            original_value: The original parameter value
+            
+        Returns:
+            Tuple of (success: bool, resolved_value: Any)
+        """
+        parts = ref.split(".")
+        if len(parts) == 2:
+            step_key, field = parts
+            # Validate that step_key follows the expected 'step_N' pattern
+            if re.fullmatch(r"step_\d+", step_key):
+                if step_key in context and field in context[step_key]:
+                    # Return the actual value, preserving its type
+                    return True, context[step_key][field]
+                logger.warning(
+                    f"Template reference '{ref}' not found in execution context. "
+                    f"Available steps: {list(context.keys())}"
+                )
+            else:
+                logger.warning(
+                    f"Invalid step key '{step_key}' in template reference '{ref}'. "
+                    f"Expected 'step_N.field' where N is a number."
+                )
+        else:
+            logger.warning(
+                f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
+            )
+        # If not found or invalid, keep the original value
+        return False, original_value
+    
     resolved: dict = {}
 
     for key, value in params.items():
@@ -130,6 +167,31 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
             )
 
             if has_template:
+                # Check if the entire value is a single template reference
+                # Pattern 1: {{step_N.field}} (with optional whitespace)
+                single_double_brace_match = re.fullmatch(
+                    r"\{\{\s*(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}", value
+                )
+                # Pattern 2: {step_N.field} (no whitespace)
+                single_single_brace_match = re.fullmatch(
+                    r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}", value
+                )
+
+                # If the entire value is a single reference, return the actual value
+                if single_double_brace_match:
+                    ref = single_double_brace_match.group(1).strip()
+                    success, resolved_value = _resolve_single_reference(ref, value)
+                    resolved[key] = resolved_value
+                    continue
+
+                if single_single_brace_match:
+                    ref = single_single_brace_match.group(1)
+                    success, resolved_value = _resolve_single_reference(ref, value)
+                    resolved[key] = resolved_value
+                    continue
+
+                # If the value contains multiple templates or embedded text,
+                # perform string substitution
                 # Handler for double-brace templates: {{step.field}}
                 # Strips whitespace since users might write {{ step_1.field }}
                 def double_brace_replacer(match):
