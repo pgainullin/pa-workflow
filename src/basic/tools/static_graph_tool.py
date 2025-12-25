@@ -74,6 +74,32 @@ class StaticGraphTool(Tool):
         if not data:
             return {"success": False, "error": "Missing required parameter: data"}
         
+        # Check for batch_results and extract first valid dataset
+        if "batch_results" in data and isinstance(data["batch_results"], list):
+            logger.info("Found batch_results in data, searching for valid dataset")
+            for result in data["batch_results"]:
+                if not isinstance(result, dict):
+                    continue
+                
+                # Check validity based on chart_type
+                is_valid = False
+                if chart_type == "pie":
+                    if result.get("values") and result.get("labels"):
+                        is_valid = True
+                elif chart_type == "histogram":
+                    if result.get("values"):
+                        is_valid = True
+                else: # line, bar, scatter (default check)
+                    # We check for x and y. Note: valid_types check happens later,
+                    # but we want to be permissive here to find potential candidates.
+                    if result.get("x") and result.get("y"):
+                        is_valid = True
+                
+                if is_valid:
+                    data = result
+                    logger.info("Found valid dataset in batch_results")
+                    break
+        
         if not chart_type:
             return {"success": False, "error": "Missing required parameter: chart_type"}
         
