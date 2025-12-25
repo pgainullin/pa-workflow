@@ -28,7 +28,7 @@ async def test_translate_tool_accepts_language_codes():
     tool = TranslateTool()
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         # Create a mock instance
         mock_translator_instance = MagicMock()
         mock_translator_instance.translate = MagicMock(return_value="Bonjour le monde")
@@ -58,7 +58,7 @@ async def test_translate_tool_accepts_language_names():
     tool = TranslateTool()
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         # Create a mock instance
         mock_translator_instance = MagicMock()
         mock_translator_instance.translate = MagicMock(return_value="Hola mundo")
@@ -88,7 +88,7 @@ async def test_translate_tool_rejects_invalid_language():
     tool = TranslateTool()
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         # Create a mock instance
         mock_translator_instance = MagicMock()
         mock_translator_instance.get_supported_languages = MagicMock(
@@ -126,11 +126,11 @@ async def test_parse_tool_detects_empty_results():
 
     result = await tool.execute(file_id="test-file.pdf", file_content=test_content)
 
-    assert result["success"] is False
-    assert "parsing returned no text content" in result["error"].lower()
-    assert (
-        "empty, corrupted, or in an unsupported format" in result["error"].lower()
-    )
+    assert result["success"] is True
+    assert result.get("parse_failed") is True
+    assert result["parsed_text"] == ""
+    assert "parse_warning" in result
+    assert "no text content" in result["parse_warning"].lower()
 
 
 @pytest.mark.asyncio

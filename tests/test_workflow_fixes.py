@@ -26,7 +26,7 @@ async def test_translate_tool_get_supported_languages_fix():
     tool = TranslateTool()
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         # Create a mock instance
         mock_translator_instance = MagicMock()
         mock_translator_instance.translate = MagicMock(return_value="Bonjour le monde")
@@ -119,14 +119,15 @@ async def test_attachment_resolution_by_filename():
         )
 
         # Test resolving by filename
+        from basic.plan_utils import resolve_params
         params = {"file_id": "SHAGALA_Copper.pdf"}
-        resolved = workflow._resolve_params(params, {}, email_data)
+        resolved = resolve_params(params, {}, email_data)
 
         assert resolved["file_id"] == "550e8400-e29b-41d4-a716-446655440000"
 
         # Test resolving by att-X format
         params = {"file_id": "att-1"}
-        resolved = workflow._resolve_params(params, {}, email_data)
+        resolved = resolve_params(params, {}, email_data)
 
         assert resolved["file_id"] == "550e8400-e29b-41d4-a716-446655440000"
 
@@ -155,13 +156,14 @@ async def test_template_resolution_single_and_double_braces():
         }
 
         # Test double-brace template resolution
+        from basic.plan_utils import resolve_params
         params = {"text": "{{step_1.parsed_text}}"}
-        resolved = workflow._resolve_params(params, context, email_data)
+        resolved = resolve_params(params, context, email_data)
         assert resolved["text"] == "This is parsed text"
 
         # Test single-brace template resolution
         params = {"text": "{step_1.parsed_text}"}
-        resolved = workflow._resolve_params(params, context, email_data)
+        resolved = resolve_params(params, context, email_data)
         assert resolved["text"] == "This is parsed text"
 
 
@@ -184,13 +186,14 @@ async def test_dependency_checking_single_and_double_braces():
         }
 
         # Test dependency checking with double braces
+        from basic.plan_utils import check_step_dependencies
         params = {"text": "{{step_2.translated_text}}"}
-        has_failed_dep = workflow._check_step_dependencies(params, context, 3)
+        has_failed_dep = check_step_dependencies(params, context, 3)
         assert has_failed_dep is True
 
         # Test dependency checking with single braces
         params = {"text": "{step_2.translated_text}"}
-        has_failed_dep = workflow._check_step_dependencies(params, context, 3)
+        has_failed_dep = check_step_dependencies(params, context, 3)
         assert has_failed_dep is True
 
 
@@ -223,8 +226,9 @@ async def test_result_formatting_with_file_id():
             }
         ]
 
-        formatted = workflow._create_execution_log(results, email_data)
+        from basic.response_utils import create_execution_log
+        formatted = create_execution_log(results, email_data)
 
         # Check that file_id is included in the output
-        assert "file_id" in formatted.lower() or "file ID" in formatted
+        assert "Generated File ID" in formatted
         assert "550e8400-e29b-41d4-a716-446655440000" in formatted

@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 from typing import Any
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer
+from reportlab.platypus import Table, TableStyle, Paragraph, SimpleDocTemplate, Spacer, Image
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 
 from .base import Tool
-from ..utils import upload_file_to_llamacloud
+from ..utils import upload_file_to_llamacloud, download_file_from_llamacloud
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +313,43 @@ class PrintToPDFTool(Tool):
                     i = next_idx
                     continue
                 
+                # Check for markdown images: ![alt text](file_id)
+                img_match = re.match(r"^!\[(.*?)\]\((.*?)\)$", line.strip())
+                if img_match:
+                    alt_text = img_match.group(1)
+                    file_id = img_match.group(2)
+                    
+                    try:
+                        # Download image from LlamaCloud
+                        logger.info(f"Downloading image for PDF: {file_id}")
+                        image_bytes = await download_file_from_llamacloud(file_id)
+                        img_io = io.BytesIO(image_bytes)
+                        
+                        # Create Image flowable
+                        img = Image(img_io)
+                        
+                        # Constrain image width to page width
+                        avail_width = width - (2 * self.PDF_MARGIN_POINTS)
+                        img_width = img.drawWidth
+                        img_height = img.drawHeight
+                        
+                        if img_width > avail_width:
+                            ratio = avail_width / img_width
+                            img.drawWidth = avail_width
+                            img.drawHeight = img_height * ratio
+                            
+                        story.append(img)
+                        story.append(Spacer(1, 12))
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to embed image {file_id} in PDF: {e}")
+                        # Fallback to text representation
+                        story.append(Paragraph(f"[Image: {alt_text} - Failed to load]", normal_style))
+                        story.append(Spacer(1, 6))
+                    
+                    i += 1
+                    continue
+
                 # Check for markdown headers
                 if line.strip().startswith("#"):
                     # Count the # symbols to determine heading level

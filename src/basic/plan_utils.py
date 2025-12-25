@@ -123,148 +123,180 @@ def _is_attachment_reference(value: str, email_data: EmailData) -> bool:
 def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
     """Resolve parameter references from execution context."""
     
+    def _resolve_value(value: Any) -> Any:
+        """Recursively resolve value."""
+        if isinstance(value, dict):
+            return {k: _resolve_value(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            return [_resolve_value(item) for item in value]
+        elif isinstance(value, str):
+            return _resolve_string(value)
+        return value
+
     def _resolve_single_reference(ref: str, original_value: str) -> tuple[bool, Any]:
         """
         Helper to resolve a single template reference.
         
         Args:
-            ref: The reference string (e.g., "step_1.field")
+            ref: The reference string (e.g., "step_1.field" or "step_1.nested.field")
             original_value: The original parameter value
             
         Returns:
             Tuple of (success: bool, resolved_value: Any)
         """
         parts = ref.split(".")
-        if len(parts) == 2:
-            step_key, field = parts
+        if len(parts) >= 2:
+            step_key = parts[0]
             # Validate that step_key follows the expected 'step_N' pattern
             if re.fullmatch(r"step_\d+", step_key):
-                if step_key in context and field in context[step_key]:
-                    # Return the actual value, preserving its type
-                    return True, context[step_key][field]
-                logger.warning(
-                    f"Template reference '{ref}' not found in execution context. "
-                    f"Available steps: {list(context.keys())}"
-                )
+                if step_key in context:
+                    current_val = context[step_key]
+                    # Traverse the rest of the path
+                    path_valid = True
+                    for part in parts[1:]:
+                        if isinstance(current_val, dict) and part in current_val:
+                            current_val = current_val[part]
+                        else:
+                            path_valid = False
+                            break
+                    
+                    if path_valid:
+                        return True, current_val
+                        
+                    logger.warning(
+                        f"Template path '{ref}' not found in execution context. "
+                    )
+                else:
+                    logger.warning(
+                        f"Step '{step_key}' not found in execution context. "
+                        f"Available steps: {list(context.keys())}"
+                    )
             else:
                 logger.warning(
                     f"Invalid step key '{step_key}' in template reference '{ref}'. "
-                    f"Expected 'step_N.field' where N is a number."
+                    f"Expected 'step_N' pattern."
                 )
         else:
             logger.warning(
-                f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
+                f"Invalid template reference format: '{ref}'. Expected at least 'step_N.field'."
             )
         # If not found or invalid, keep the original value
         return False, original_value
-    
+
+    def _resolve_string(value: str) -> Any:
+        has_template = ("{{" in value and "}}" in value) or (
+            re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_.]*\}", value) is not None
+        )
+
+        if has_template:
+            # Check if the entire value is a single template reference
+            # Pattern 1: {{step_N.field...}} (with optional whitespace)
+            single_double_brace_match = re.fullmatch(
+                r"\{\{\s*(step_\d+\.[a-zA-Z0-9_.]+)\s*\}\}", value
+            )
+            # Pattern 2: {step_N.field...} (no whitespace)
+            single_single_brace_match = re.fullmatch(
+                r"\{(step_\d+\.[a-zA-Z0-9_.]+)\}", value
+            )
+
+            # If the entire value is a single reference, return the actual value
+            if single_double_brace_match:
+                ref = single_double_brace_match.group(1).strip()
+                success, resolved_value = _resolve_single_reference(ref, value)
+                return resolved_value
+
+            if single_single_brace_match:
+                ref = single_single_brace_match.group(1)
+                success, resolved_value = _resolve_single_reference(ref, value)
+                return resolved_value
+
+            # If the value contains multiple templates or embedded text,
+            # perform string substitution
+            # Handler for double-brace templates: {{step.field}}
+            def double_brace_replacer(match):
+                ref = match.group(1).strip()
+                success, val = _resolve_single_reference(ref, match.group(0))
+                if success:
+                    return str(val)
+                return match.group(0)
+
+            # Handler for single-brace templates: {step_N.field}
+            def single_brace_replacer(match):
+                ref = match.group(1)
+                success, val = _resolve_single_reference(ref, match.group(0))
+                if success:
+                    return str(val)
+                return match.group(0)
+
+            resolved_value = re.sub(
+                r"\{\{([^}]+)\}\}", double_brace_replacer, value
+            )
+            # Update regex to allow dots in field path
+            resolved_value = re.sub(
+                r"\{(step_\d+\.[a-zA-Z0-9_.]+)\}",
+                single_brace_replacer,
+                resolved_value,
+            )
+            return resolved_value
+            
+        elif value.startswith("att-") or _is_attachment_reference(
+            value, email_data
+        ):
+            att_index = value
+            attachment_found = False
+            for att in email_data.attachments:
+                if (
+                    att.id == att_index
+                    or att.name == att_index
+                    or att.file_id == att_index
+                ):
+                    resolved_file_id = att.file_id or None
+                    # Special case: return dict if we have both file_id and content
+                    # This is hard to handle in a generic way, so we rely on caller to look for side effects?
+                    # No, we just return the file_id here. 
+                    # Note: original code added resolved[f"{key}_content"] = ... which we can't do easily in recursion
+                    # We'll just return the file_id for now.
+                    return resolved_file_id
+            
+            logger.warning(
+                f"Attachment '{att_index}' not found. "
+                f"Available attachments: {[(att.id, att.name) for att in email_data.attachments]}"
+            )
+            return None
+            
+        return value
+
+    # We can't use simple dict comprehension because we need to handle side effects for attachments
+    # (setting _content and _filename suffixes).
+    # So we'll iterate and update.
     resolved: dict = {}
 
     for key, value in params.items():
-        if isinstance(value, str):
-            has_template = ("{{" in value and "}}" in value) or (
-                re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*\}", value) is not None
-            )
-
-            if has_template:
-                # Check if the entire value is a single template reference
-                # Pattern 1: {{step_N.field}} (with optional whitespace)
-                single_double_brace_match = re.fullmatch(
-                    r"\{\{\s*(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}", value
-                )
-                # Pattern 2: {step_N.field} (no whitespace)
-                single_single_brace_match = re.fullmatch(
-                    r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}", value
-                )
-
-                # If the entire value is a single reference, return the actual value
-                if single_double_brace_match:
-                    ref = single_double_brace_match.group(1).strip()
-                    success, resolved_value = _resolve_single_reference(ref, value)
-                    resolved[key] = resolved_value
-                    continue
-
-                if single_single_brace_match:
-                    ref = single_single_brace_match.group(1)
-                    success, resolved_value = _resolve_single_reference(ref, value)
-                    resolved[key] = resolved_value
-                    continue
-
-                # If the value contains multiple templates or embedded text,
-                # perform string substitution
-                # Handler for double-brace templates: {{step.field}}
-                # Strips whitespace since users might write {{ step_1.field }}
-                def double_brace_replacer(match):
-                    ref = match.group(1).strip()
-                    parts = ref.split(".")
-                    if len(parts) == 2:
-                        step_key, field = parts
-                        if step_key in context and field in context[step_key]:
-                            return str(context[step_key][field])
-                        logger.warning(
-                            f"Template reference '{ref}' not found in execution context. "
-                            f"Available steps: {list(context.keys())}"
-                        )
-                        return match.group(0)
-                    logger.warning(
-                        f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
-                    )
-                    return match.group(0)
-
-                # Handler for single-brace templates: {step_N.field}
-                # No stripping needed - regex already ensures no spaces
-                def single_brace_replacer(match):
-                    ref = match.group(1)  # No .strip() - regex ensures no spaces
-                    parts = ref.split(".")
-                    if len(parts) == 2:
-                        step_key, field = parts
-                        if step_key in context and field in context[step_key]:
-                            return str(context[step_key][field])
-                        logger.warning(
-                            f"Template reference '{ref}' not found in execution context. "
-                            f"Available steps: {list(context.keys())}"
-                        )
-                        return match.group(0)
-                    logger.warning(
-                        f"Invalid template reference format: '{ref}'. Expected 'step_N.field'."
-                    )
-                    return match.group(0)
-
-                resolved_value = re.sub(
-                    r"\{\{([^}]+)\}\}", double_brace_replacer, value
-                )
-                resolved_value = re.sub(
-                    r"\{(step_\d+\.[a-zA-Z_][a-zA-Z0-9_]*)\}",
-                    single_brace_replacer,
-                    resolved_value,
-                )
-                resolved[key] = resolved_value
-            elif value.startswith("att-") or _is_attachment_reference(
-                value, email_data
-            ):
-                att_index = value
-                attachment_found = False
-                for att in email_data.attachments:
-                    if (
-                        att.id == att_index
-                        or att.name == att_index
-                        or att.file_id == att_index
-                    ):
-                        resolved[key] = att.file_id or None
-                        if not resolved[key] and att.content:
-                            resolved[f"{key}_content"] = att.content
-                        if not resolved[key]:
-                            resolved[f"{key}_filename"] = att.name
-                        attachment_found = True
-                        break
-                if not attachment_found:
-                    logger.warning(
-                        f"Attachment '{att_index}' not found. "
-                        f"Available attachments: {[(att.id, att.name) for att in email_data.attachments]}"
-                    )
-                    resolved[key] = None
-            else:
-                resolved[key] = value
+        # Handle attachment side-effects (legacy support)
+        # If top-level value is a string referencing an attachment, we might need to set extra keys
+        if isinstance(value, str) and (value.startswith("att-") or _is_attachment_reference(value, email_data)):
+             att_index = value
+             attachment_found = False
+             for att in email_data.attachments:
+                if (
+                    att.id == att_index
+                    or att.name == att_index
+                    or att.file_id == att_index
+                ):
+                    resolved[key] = att.file_id or None
+                    if not resolved[key] and att.content:
+                        resolved[f"{key}_content"] = att.content
+                    if not resolved[key]:
+                        resolved[f"{key}_filename"] = att.name
+                    attachment_found = True
+                    break
+             if not attachment_found:
+                 logger.warning(
+                    f"Attachment '{att_index}' not found. "
+                 )
+                 resolved[key] = None
         else:
-            resolved[key] = value
+            # Recursive resolution for everything else
+            resolved[key] = _resolve_value(value)
+
     return resolved

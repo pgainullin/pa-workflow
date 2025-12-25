@@ -393,6 +393,10 @@ def collect_attachments(results: list[dict] | None) -> list[Attachment]:
                     prompt = result.get("prompt", "")
                     filename = generate_image_filename(prompt, step_num)
                     mime_type = "image/png"
+                elif tool == "static_graph":
+                    chart_type = result.get("chart_type", "chart")
+                    filename = f"{chart_type}_step_{step_num}.png"
+                    mime_type = "image/png"
                 else:
                     filename = f"generated_file_step_{step_num}.dat"
                     mime_type = "application/octet-stream"

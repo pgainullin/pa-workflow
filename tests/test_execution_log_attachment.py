@@ -55,12 +55,25 @@ async def test_execution_log_created_as_attachment():
     workflow._send_callback_email = AsyncMock()
 
     # Execute send_results step
-    event = PlanExecutionEvent(
-        results=results, email_data=email_data, callback=callback
+    from workflows.events import Event
+    
+    # We need VerificationEvent for send_results
+    class VerificationEvent(Event):
+        verified_response: str
+        results: list[dict]
+        email_data: EmailData
+        callback: CallbackConfig
+
+    event = VerificationEvent(
+        verified_response="Your email has been processed and summarized.",
+        results=results, 
+        email_data=email_data, 
+        callback=callback
     )
     
-    from workflows import Context
-    ctx = Context(workflow)
+    # from workflows import Context
+    ctx = MagicMock()
+    ctx.write_event_to_stream = MagicMock()
     
     await workflow.send_results(event, ctx)
 
@@ -135,12 +148,25 @@ async def test_user_response_is_natural_language():
     workflow._send_callback_email = AsyncMock()
 
     # Execute send_results step
-    event = PlanExecutionEvent(
-        results=results, email_data=email_data, callback=callback
+    from workflows.events import Event
+    
+    # We need VerificationEvent for send_results
+    class VerificationEvent(Event):
+        verified_response: str
+        results: list[dict]
+        email_data: EmailData
+        callback: CallbackConfig
+
+    event = VerificationEvent(
+        verified_response="I've parsed and summarized your document. The summary is: This is the summary of the document.",
+        results=results,
+        email_data=email_data,
+        callback=callback
     )
     
-    from workflows import Context
-    ctx = Context(workflow)
+    # from workflows import Context
+    ctx = MagicMock()
+    ctx.write_event_to_stream = MagicMock()
     
     await workflow.send_results(event, ctx)
 
@@ -185,8 +211,8 @@ async def test_execution_log_format():
         },
     ]
 
-    log = workflow._create_execution_log(results, email_data)
-
+    from basic.response_utils import create_execution_log
+    log = create_execution_log(results, email_data)
     # Check markdown structure
     assert "# Workflow Execution Log" in log
     assert "## Step 1: summarise" in log

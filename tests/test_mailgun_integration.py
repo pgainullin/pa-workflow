@@ -51,6 +51,9 @@ def workflow_server():
     # Start server process
     env = os.environ.copy()
     env["PORT"] = str(WORKFLOW_PORT)
+    # Add src to PYTHONPATH
+    env["PYTHONPATH"] = os.path.join(os.getcwd(), "src")
+
     # Ensure we use the same python interpreter
     cmd = [sys.executable, "-m", "src.basic.server"]
     

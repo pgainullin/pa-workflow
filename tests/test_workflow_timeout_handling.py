@@ -124,12 +124,10 @@ async def test_execute_plan_handles_none_plan():
     workflow = EmailWorkflow(timeout=120)
 
     # Create event with None plan (simulating a bug or edge case)
-    # Note: Pydantic validation should prevent this, but we test defensively
     ctx = MagicMock(spec=Context)
     
-    # We need to bypass Pydantic validation to test this edge case
-    triage_event = TriageEvent.__new__(TriageEvent)
-    triage_event.plan = None  # Force None plan
+    triage_event = MagicMock()
+    triage_event.plan = None
     triage_event.email_data = email_data
     triage_event.callback = callback
     
@@ -165,24 +163,24 @@ async def test_send_results_handles_timeout():
 
     workflow = EmailWorkflow(timeout=120)
 
-    # Mock _generate_user_response to timeout
-    workflow._generate_user_response = AsyncMock(
-        side_effect=asyncio.TimeoutError("Response generation timeout")
-    )
+    # Mock _send_callback_email to timeout
+    with patch.object(workflow, "_send_callback_email", side_effect=asyncio.TimeoutError("Callback timeout")):
+        # Run send_results step - should not raise exception
+        ctx = MagicMock(spec=Context)
+        ctx.write_event_to_stream = MagicMock()
 
-    # Run send_results step - should not raise exception
-    ctx = MagicMock(spec=Context)
-    ctx.write_event_to_stream = MagicMock()
-    
-    plan_execution_event = PlanExecutionEvent(
-        results=results, email_data=email_data, callback=callback
-    )
-    result = await workflow.send_results(plan_execution_event, ctx)
-
+        from basic.email_workflow import VerificationEvent
+        plan_execution_event = VerificationEvent(
+            verified_response="Test response",
+            results=results, 
+            email_data=email_data, 
+            callback=callback
+        )
+        result = await workflow.send_results(plan_execution_event, ctx)
     # Should return StopEvent with timeout error
     assert isinstance(result, StopEvent)
     assert result.result.success is False
-    assert "timeout" in result.result.message.lower()
+    assert "timed out" in result.result.message.lower() or "timeout" in result.result.message.lower()
 
 
 @pytest.mark.asyncio
@@ -228,7 +226,7 @@ async def test_generate_user_response_handles_invalid_results():
 
 
 def test_create_execution_log_handles_none_results():
-    """Test that _create_execution_log handles None results gracefully."""
+    """Test that create_execution_log handles None results gracefully."""
     email_data = EmailData(
         from_email="user@example.com",
         to_email="workflow@example.com",
@@ -239,8 +237,8 @@ def test_create_execution_log_handles_none_results():
     workflow = EmailWorkflow(timeout=120)
 
     # Test with None results
-    log = workflow._create_execution_log(None, email_data)
-    
+    from basic.response_utils import create_execution_log
+    log = create_execution_log(None, email_data)
     assert isinstance(log, str)
     assert len(log) > 0
     # Should return a fallback log with error message
@@ -302,8 +300,11 @@ async def test_workflow_completes_with_all_steps_timing_out():
         exec_result = await workflow.execute_plan(triage_result, ctx)
         assert isinstance(exec_result, PlanExecutionEvent)
 
+        # Step 2.5: Verify response
+        verify_result = await workflow.verify_response(exec_result, ctx)
+        
         # Step 3: Send results
-        final_result = await workflow.send_results(exec_result, ctx)
+        final_result = await workflow.send_results(verify_result, ctx)
         assert isinstance(final_result, StopEvent)
 
         # The workflow should complete successfully

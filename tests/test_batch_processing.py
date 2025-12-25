@@ -85,7 +85,7 @@ async def test_translate_tool_batching():
     tool = TranslateTool()
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         mock_translator = MagicMock()
         # Track how many times translate is called
         call_count = 0
@@ -124,7 +124,7 @@ async def test_translate_tool_respects_5000_char_limit():
     chunk_sizes = []
 
     # Mock the translator
-    with patch("basic.tools.GoogleTranslator") as mock_translator_class:
+    with patch("basic.tools.translate_tool.GoogleTranslator") as mock_translator_class:
         mock_translator = MagicMock()
 
         def mock_translate(text):
@@ -204,7 +204,7 @@ async def test_classify_tool_long_text_sampling():
 
     # Patch the LLMTextCompletionProgram
     with patch(
-        "llama_index.core.program.LLMTextCompletionProgram"
+        "basic.tools.classify_tool.LLMTextCompletionProgram"
     ) as mock_program_class:
         mock_program = MagicMock()
         mock_program.acall = AsyncMock(return_value=MockClassification())
@@ -236,7 +236,7 @@ async def test_extract_tool_text_batching():
     tool = ExtractTool()
 
     # Mock LlamaExtract at the correct import location
-    with patch("llama_cloud_services.LlamaExtract") as mock_extract_class:
+    with patch("basic.tools.extract_tool.LlamaExtract") as mock_extract_class:
         mock_extract = MagicMock()
         mock_agent = MagicMock()
 
@@ -280,7 +280,7 @@ async def test_extract_tool_respects_5000_char_limit():
     tool = ExtractTool()
 
     # Mock LlamaExtract
-    with patch("llama_cloud_services.LlamaExtract") as mock_extract_class:
+    with patch("basic.tools.extract_tool.LlamaExtract") as mock_extract_class:
         mock_extract = MagicMock()
         mock_agent = MagicMock()
 
@@ -318,7 +318,7 @@ async def test_extract_tool_rejects_file_parameters():
     tool = ExtractTool()
 
     # Mock LlamaExtract
-    with patch("llama_cloud_services.LlamaExtract") as mock_extract_class:
+    with patch("basic.tools.extract_tool.LlamaExtract") as mock_extract_class:
         mock_extract = MagicMock()
         mock_agent = MagicMock()
         mock_extract.get_agent = MagicMock(return_value=mock_agent)

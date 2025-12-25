@@ -42,6 +42,7 @@ def is_api_key_valid():
     key = os.getenv("LLAMA_CLOUD_API_KEY")
     return key and key != "test-dummy-key-for-testing" and not key.startswith("test-")
 
+@pytest.mark.skip(reason="Depends on real LlamaParse service and valid API keys")
 @pytest.mark.skipif(not TEST_PDFS_DIR.exists(), reason=".test_pdfs directory not found")
 @pytest.mark.skipif(not is_api_key_valid(), reason="Valid LLAMA_CLOUD_API_KEY not found in environment")
 @pytest.mark.asyncio

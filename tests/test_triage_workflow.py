@@ -173,14 +173,14 @@ async def test_parameter_resolution():
     email_data = EmailData(from_email="user@example.com", subject="Test", text="Test")
 
     # Test simple parameter
+    from basic.plan_utils import resolve_params
     params = {"text": "hello"}
-    resolved = workflow._resolve_params(params, {}, email_data)
+    resolved = resolve_params(params, {}, email_data)
     assert resolved["text"] == "hello"
-
     # Test template parameter
     context = {"step_1": {"parsed_text": "This is parsed content"}}
     params = {"text": "{{step_1.parsed_text}}"}
-    resolved = workflow._resolve_params(params, context, email_data)
+    resolved = resolve_params(params, context, email_data)
     assert resolved["text"] == "This is parsed content"
 
 
@@ -210,8 +210,8 @@ async def test_result_formatting():
         },
     ]
 
-    formatted = workflow._create_execution_log(results, email_data)
-
+    from basic.response_utils import create_execution_log
+    formatted = create_execution_log(results, email_data)
     assert "Test Subject" in formatted
     assert "summarise" in formatted
     assert "translate" in formatted

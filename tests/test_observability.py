@@ -232,15 +232,22 @@ def test_logging_handler_configured(reset_callback_manager):
         }):
             setup_observability()
             
-            # Check that logging handler was added to workflow loggers
-            workflow_logger = logging.getLogger('basic.email_workflow')
+            # Check that logging handler was added to root logger
+            root_logger = logging.getLogger()
             has_langfuse_handler = any(
                 isinstance(h, LangfuseLoggingHandler) 
-                for h in workflow_logger.handlers
+                for h in root_logger.handlers
             )
             
-            assert has_langfuse_handler, "LangfuseLoggingHandler should be added to workflow loggers"
+            assert has_langfuse_handler, "LangfuseLoggingHandler should be added to root logger"
     finally:
+        # Clean up: remove LangfuseLoggingHandler instances from root logger
+        root_logger = logging.getLogger()
+        root_logger.handlers = [
+            h for h in root_logger.handlers 
+            if not isinstance(h, LangfuseLoggingHandler)
+        ]
+        
         # Clean up: remove LangfuseLoggingHandler instances from all workflow loggers
         for logger_name in workflow_loggers:
             workflow_logger = logging.getLogger(logger_name)

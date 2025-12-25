@@ -592,10 +592,8 @@ class TestResolveParams:
             "step_1": {"nested": {"field": "value"}}
         }
         email_data = EmailData(from_email="test@example.com", subject="Test")
-        
-        resolved = resolve_params(params, context, email_data)
-        
-        # Should keep original value since nested fields are not supported
-        # The pattern doesn't match multi-level nesting
-        assert resolved["data"] == "{step_1.nested.field}"
 
+        resolved = resolve_params(params, context, email_data)
+
+        # Nested fields are now supported
+        assert resolved["data"] == "value"

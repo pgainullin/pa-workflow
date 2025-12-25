@@ -175,13 +175,14 @@ Jane"""
 
     def test_whitespace_handling(self):
         """Test that whitespace is properly handled."""
-        email_body = """   My message   
+        email_body = """   My message
 
-> Quoted content
-"""
-        
+    > Quoted content
+    > More quoted content
+    """
+
         top, chain = split_email_chain(email_body)
-        
+
         # Leading/trailing whitespace should be stripped
         assert top.strip() == "My message"
         assert "Quoted content" in chain
