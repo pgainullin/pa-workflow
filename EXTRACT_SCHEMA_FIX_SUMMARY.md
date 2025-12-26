@@ -1,26 +1,23 @@
-# ExtractTool Schema Handling Fix Summary
+# Extract Tool Schema Fix
 
 ## Issue
-The `ExtractTool` failed with a `TypeError` or a custom validation error ("Schema must be a dict or Pydantic BaseModel class") when the `schema` parameter was passed as a JSON string. This often occurred when the tool was called by the LLM triage agent or when parameters were resolved from templates, as they are typically treated as strings in the execution plan.
+The user requested that the `extract_tool` prompt (specifically the schema definition provided by the Triage LLM) should be "enriched" to account for:
+1.  User Intent (specific data requested).
+2.  Parsed Data context.
+3.  Downstream Step requirements (specifically for chart generation).
 
-## Changes
+Previously, the Triage LLM might define a generic schema that doesn't match the input requirements of subsequent tools like `static_graph_tool` (which expects `x` and `y` arrays), leading to failures or the need for intermediate transformation steps.
 
-### 1. `src/basic/tools/extract_tool.py`
-- **JSON String Support**: Added logic to automatically detect and parse `schema` if it is passed as a string.
-- **Pydantic Model Support**: Expanded validation to accept both Pydantic `BaseModel` classes and instances.
-- **Improved Error Reporting**: Enhanced the error message to include the received type and a preview of the value when validation fails, making it significantly easier to debug pipeline issues.
+## Fix
+Updated `src/basic/prompt_templates/triage_prompt.txt` to include a new **Guideline #10**.
 
-### 2. `tests/test_tools.py` (Maintenance & Verification)
-- **New Test Case**: Added `test_extract_tool_string_schema` to verify that JSON string schemas are correctly parsed and used.
-- **Path Correction**: Fixed `test_classify_tool` and `test_print_to_pdf_tool` by updating their `patch` paths to point to the specific tool modules rather than the package root, which prevents `AttributeError` during testing.
-- **Encoding Fixes**: Updated `test_parse_tool_encoding_fallback` to use valid Latin-1 characters and improved `test_parse_tool_all_encodings_fail` with more robust mocking of binary content.
+The new guideline explicitly instructs the Triage LLM:
+> "10. When defining the 'schema' for the 'extract' tool, ensure it captures the specific data requested by the user. CRITICAL: If the extracted data is intended for a downstream tool (like 'static_graph'), the schema MUST be structured to match that tool's input requirements (e.g., for charts, use fields like 'x' and 'y' as arrays to allow direct data passing)."
 
-### 3. `tests/test_extract_pipeline.py` (New Integration Test)
-- Created a comprehensive integration test that simulates the full **Parse -> Extract** pipeline.
-- Verified that numerical data (integers and floats) is correctly extracted from parsed PDF text.
-- Confirmed that the pipeline works seamlessly when the schema is passed as a JSON string from a previous step's output or template.
+## Impact
+*   **User Intent:** The prompt enforces capturing specific data requested.
+*   **Downstream Compatibility:** By mandating the schema match downstream tools (referencing `x`/`y` for charts), we ensure the `extract_tool` output can be directly fed into `static_graph_tool`.
+*   **Efficiency:** Reduces the likelihood of "mismatched" data formats between steps.
 
-## Verification Results
-- All 33 tests in `tests/test_tools.py` are passing.
-- The new pipeline tests in `tests/test_extract_pipeline.py` are passing.
-- Verified that the fix correctly identifies and parses schemas like `'{"field": "number"}'` into the required dictionary format for LlamaCloud Extract.
+## Verification
+This is a prompt engineering change. Verification involves ensuring the Triage LLM follows these instructions in a real or simulated workflow. Since this is a change to the system prompt text, explicit unit testing of the LLM's *response* requires an end-to-end test with an LLM, which is outside the scope of deterministic unit tests, but the prompt change itself is verified.
