@@ -46,51 +46,91 @@ class SearchTool(Tool):
         Returns:
             Dictionary with 'success' and 'results' or 'error'
         """
-        query = kwargs.get("query")
+        query_input = kwargs.get("query")
         max_results = kwargs.get("max_results", self.max_results)
 
-        if not query:
+        if not query_input:
             return {"success": False, "error": "Missing required parameter: query"}
 
+        # Handle batch_results if query_input is a dict or if it was passed as a top-level param
+        batch_queries = []
+        
+        # 1. If query_input itself contains batch_results
+        if isinstance(query_input, dict) and "batch_results" in query_input and isinstance(query_input["batch_results"], list):
+            logger.info("Found batch_results in query input, performing multiple searches")
+            for item in query_input["batch_results"]:
+                if isinstance(item, dict):
+                    # Try to find a sensible query field
+                    potential_keys = ["query", "search_term", "author", "topic", "name", "subject"]
+                    found_query = None
+                    for key in potential_keys:
+                        if key in item and item[key]:
+                            found_query = str(item[key])
+                            break
+                    if found_query:
+                        batch_queries.append(found_query)
+                    elif item:
+                        # Fallback: stringify the whole item if it's small or has any fields
+                        batch_queries.append(str(item))
+                elif item:
+                    batch_queries.append(str(item))
+        
+        # 2. If it's a single query string
+        else:
+            batch_queries = [str(query_input)]
+
+        if not batch_queries:
+            return {"success": False, "error": "No valid queries found in input"}
+
         try:
-            # Use DuckDuckGo Instant Answer API
-            # This is a simple, free API that doesn't require authentication
+            all_results = []
+            queries_performed = []
+
             async with httpx.AsyncClient() as client:
-                # DuckDuckGo HTML search (simpler than the instant answer API)
-                response = await client.get(
-                    "https://html.duckduckgo.com/html/",
-                    params={"q": query},
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                    },
-                    timeout=10.0,
-                    follow_redirects=True,
-                )
+                for query in batch_queries:
+                    logger.info(f"Performing DuckDuckGo search for: {query}")
+                    # DuckDuckGo HTML search (simpler than the instant answer API)
+                    response = await client.get(
+                        "https://html.duckduckgo.com/html/",
+                        params={"q": query},
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                        },
+                        timeout=10.0,
+                        follow_redirects=True,
+                    )
 
-                if response.status_code != 200:
-                    return {
-                        "success": False,
-                        "error": f"Search request failed with status {response.status_code}",
-                    }
+                    if response.status_code == 200:
+                        results = self._parse_duckduckgo_results(
+                            response.text, max_results
+                        )
+                        if results:
+                            all_results.extend(results)
+                            queries_performed.append(query)
+                    else:
+                        logger.warning(f"Search failed for '{query}' with status {response.status_code}")
 
-                # Parse HTML response to extract search results
-                results = self._parse_duckduckgo_results(
-                    response.text, max_results
-                )
-
-                if not results:
-                    return {
-                        "success": True,
-                        "query": query,
-                        "results": [],
-                        "message": "No results found",
-                    }
-
+            if not all_results:
                 return {
                     "success": True,
-                    "query": query,
-                    "results": results,
+                    "query": ", ".join(batch_queries[:3]) + ("..." if len(batch_queries) > 3 else ""),
+                    "results": [],
+                    "message": "No results found for any of the queries",
                 }
+
+            return {
+                "success": True,
+                "query": ", ".join(queries_performed[:3]) + ("..." if len(queries_performed) > 3 else ""),
+                "results": all_results,
+                "batch_mode": len(batch_queries) > 1
+            }
+
+        except httpx.TimeoutException:
+            logger.exception("Search request timed out")
+            return {"success": False, "error": "Search request timed out"}
+        except Exception as e:
+            logger.exception("Error performing web search")
+            return {"success": False, "error": str(e)}
 
         except httpx.TimeoutException:
             logger.exception("Search request timed out")

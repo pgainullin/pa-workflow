@@ -170,7 +170,10 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                         if isinstance(current_val, dict):
                             if part in current_val:
                                 current_val = current_val[part]
-                            # Special handling for batch_results:
+                            # NEW: Special handling for extracted_data wrapper
+                            elif "extracted_data" in current_val and isinstance(current_val["extracted_data"], dict) and part in current_val["extracted_data"]:
+                                current_val = current_val["extracted_data"][part]
+                            # Special handling for batch_results (Auto-Unwrap):
                             elif "batch_results" in current_val and isinstance(current_val["batch_results"], list) and current_val["batch_results"]:
                                 logger.info(f"Key '{part}' not found directly, checking first item in batch_results for '{ref}'")
                                 first_batch = current_val["batch_results"][0]
@@ -179,6 +182,25 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                                 else:
                                     path_valid = False
                                     break
+                            # NEW: Special handling for nested batch_results in extracted_data
+                            elif "extracted_data" in current_val and isinstance(current_val["extracted_data"], dict) and \
+                                 "batch_results" in current_val["extracted_data"] and \
+                                 isinstance(current_val["extracted_data"]["batch_results"], list) and \
+                                 current_val["extracted_data"]["batch_results"]:
+                                 
+                                logger.info(f"Key '{part}' not found directly, checking batch_results inside extracted_data for '{ref}'")
+                                nested_batch = current_val["extracted_data"]["batch_results"]
+                                 
+                                if part == "batch_results":
+                                    current_val = nested_batch
+                                else:
+                                    # Auto-unwrap first item
+                                    first_batch = nested_batch[0]
+                                    if isinstance(first_batch, dict) and part in first_batch:
+                                        current_val = first_batch[part]
+                                    else:
+                                        path_valid = False
+                                        break
                             else:
                                 path_valid = False
                                 break

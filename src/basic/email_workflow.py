@@ -42,6 +42,7 @@ from .tools import (
     SearchTool,
     ImageGenTool,
     StaticGraphTool,
+    ForeachTool,
     ToolRegistry,
 )
 from .utils import (
@@ -170,6 +171,7 @@ class EmailWorkflow(Workflow):
         self.tool_registry.register(SearchTool())
         self.tool_registry.register(ImageGenTool())
         self.tool_registry.register(StaticGraphTool())
+        self.tool_registry.register(ForeachTool(self.tool_registry))
 
     @llm_api_retry
     async def _llm_complete_with_retry(self, prompt: str) -> str:
@@ -507,6 +509,10 @@ class EmailWorkflow(Workflow):
                     resolved_params = resolve_params(
                         params, execution_context, email_data
                     )
+
+                    # Pass context and email_data to tools (especially higher-order ones like ForeachTool)
+                    resolved_params["__context"] = execution_context
+                    resolved_params["__email_data"] = email_data
 
                     # Execute the tool
                     result = await tool.execute(**resolved_params)
