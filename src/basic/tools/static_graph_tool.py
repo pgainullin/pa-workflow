@@ -74,31 +74,61 @@ class StaticGraphTool(Tool):
         if not data:
             return {"success": False, "error": "Missing required parameter: data"}
         
-        # Check for batch_results and extract first valid dataset
+        # Check for batch_results and merge valid datasets
         if "batch_results" in data and isinstance(data["batch_results"], list):
-            logger.info("Found batch_results in data, searching for valid dataset")
-            for result in data["batch_results"]:
-                if not isinstance(result, dict):
-                    continue
+            logger.info("Found batch_results in data, merging valid datasets")
+            
+            merged_data = {}
+            has_merged_data = False
+            
+            if chart_type == "pie":
+                all_values = []
+                all_labels = []
+                for result in data["batch_results"]:
+                    if not isinstance(result, dict):
+                        continue
+                    vals = result.get("values")
+                    labs = result.get("labels")
+                    if vals and labs and len(vals) == len(labs):
+                        all_values.extend(vals)
+                        all_labels.extend(labs)
+                        has_merged_data = True
                 
-                # Check validity based on chart_type
-                is_valid = False
-                if chart_type == "pie":
-                    if result.get("values") and result.get("labels"):
-                        is_valid = True
-                elif chart_type == "histogram":
-                    if result.get("values"):
-                        is_valid = True
-                else: # line, bar, scatter (default check)
-                    # We check for x and y. Note: valid_types check happens later,
-                    # but we want to be permissive here to find potential candidates.
-                    if result.get("x") and result.get("y"):
-                        is_valid = True
+                if has_merged_data:
+                    merged_data = {"values": all_values, "labels": all_labels}
+
+            elif chart_type == "histogram":
+                all_values = []
+                for result in data["batch_results"]:
+                    if not isinstance(result, dict):
+                        continue
+                    vals = result.get("values")
+                    if vals:
+                        all_values.extend(vals)
+                        has_merged_data = True
                 
-                if is_valid:
-                    data = result
-                    logger.info("Found valid dataset in batch_results")
-                    break
+                if has_merged_data:
+                    merged_data = {"values": all_values}
+
+            else: # line, bar, scatter (default check)
+                all_x = []
+                all_y = []
+                for result in data["batch_results"]:
+                    if not isinstance(result, dict):
+                        continue
+                    x_vals = result.get("x")
+                    y_vals = result.get("y")
+                    if x_vals and y_vals and len(x_vals) == len(y_vals):
+                        all_x.extend(x_vals)
+                        all_y.extend(y_vals)
+                        has_merged_data = True
+                
+                if has_merged_data:
+                    merged_data = {"x": all_x, "y": all_y}
+            
+            if has_merged_data:
+                data = merged_data
+                logger.info(f"Successfully merged data from batch_results for {chart_type}")
         
         if not chart_type:
             return {"success": False, "error": "Missing required parameter: chart_type"}
