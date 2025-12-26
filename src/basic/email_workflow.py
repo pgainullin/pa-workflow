@@ -436,6 +436,73 @@ class EmailWorkflow(Workflow):
                             break
                         continue
 
+                    # Check for 'foreach' loop execution
+                    foreach_ref = step_def.get("foreach")
+                    if foreach_ref:
+                        # Resolve the foreach reference
+                        # We wrap it in a dict to use resolve_params
+                        resolved_foreach_dict = resolve_params(
+                            {"items": foreach_ref}, execution_context, email_data
+                        )
+                        resolved_foreach = resolved_foreach_dict.get("items")
+
+                        if isinstance(resolved_foreach, list):
+                            logger.info(f"Iterating step {i+1} over {len(resolved_foreach)} items")
+                            step_results = []
+                            
+                            for idx, item in enumerate(resolved_foreach):
+                                # Create temporary context with 'item' for parameter resolution
+                                loop_context = execution_context.copy()
+                                loop_context["item"] = item
+                                
+                                try:
+                                    # Resolve params with item in context
+                                    resolved_params = resolve_params(
+                                        params, loop_context, email_data
+                                    )
+                                    
+                                    # Execute the tool
+                                    item_result = await tool.execute(**resolved_params)
+                                    step_results.append(item_result)
+                                    
+                                    # Add individual result to main results list
+                                    results.append({
+                                        "step": f"{i+1}.{idx+1}",
+                                        "tool": tool_name,
+                                        "description": f"{description} (Item {idx+1})",
+                                        **item_result
+                                    })
+                                except Exception as e:
+                                    logger.exception(f"Error executing loop item {idx+1} for step {i+1}")
+                                    error_result = {"success": False, "error": str(e)}
+                                    step_results.append(error_result)
+                                    results.append({
+                                        "step": f"{i+1}.{idx+1}",
+                                        "tool": tool_name,
+                                        "description": f"{description} (Item {idx+1})",
+                                        **error_result
+                                    })
+
+                            # Store aggregate result in context for future steps
+                            # We create a result that mimics a batch result
+                            aggregate_result = {
+                                "success": any(r.get("success", False) for r in step_results), # Success if at least one succeeded? Or all?
+                                "results": step_results,
+                                "batch_results": step_results
+                            }
+                            execution_context[f"step_{i + 1}"] = aggregate_result
+                            
+                            logger.info(f"[PLAN EXEC STEP {i + 1}] Completed loop over {len(step_results)} items")
+                            
+                            # If critical and all failed, stop
+                            if critical and not aggregate_result["success"]:
+                                logger.error(f"Critical step {i + 1} failed (all loop items failed). Stopping execution.")
+                                break
+                                
+                            continue
+                        else:
+                            logger.warning(f"'foreach' resolved to non-list value: {type(resolved_foreach)}. Proceeding with single execution.")
+
                     # Resolve parameter references from execution context
                     resolved_params = resolve_params(
                         params, execution_context, email_data

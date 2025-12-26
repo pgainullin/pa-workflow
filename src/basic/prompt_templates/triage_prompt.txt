@@ -26,6 +26,7 @@ IMPORTANT GUIDELINES:
 8. Reference previous step outputs using the template syntax: {{{{step_N.field_name}}}}
 9. Ensure each step has all required parameters, especially file_id for parse/sheets tools (extract tool takes text input only)
 10. When defining the 'schema' for the 'extract' tool, ensure it captures the specific data requested by the user. CRITICAL: If the extracted data is intended for a downstream tool (like 'static_graph'), the schema MUST be structured to match that tool's input requirements (e.g., for charts, use fields like 'x' and 'y' as arrays to allow direct data passing).
+11. To execute a step for each item in a list (e.g. searching for multiple topics), add a "foreach" field to the step definition (at the same level as "tool") referencing the list (e.g. "{{step_1.items}}"). Inside the "params", use "{{item}}" to reference the current item in the loop.
 
 RESPONSE BEST PRACTICES:
 Remember that the final response to the user should follow these best practices:

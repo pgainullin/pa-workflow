@@ -138,24 +138,50 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
         Helper to resolve a single template reference.
         
         Args:
-            ref: The reference string (e.g., "step_1.field" or "step_1.nested.field")
+            ref: The reference string (e.g., "step_1.field" or "item" or "item.field")
             original_value: The original parameter value
             
         Returns:
             Tuple of (success: bool, resolved_value: Any)
         """
         parts = ref.split(".")
-        if len(parts) >= 2:
+        if len(parts) >= 1:
             step_key = parts[0]
-            # Validate that step_key follows the expected 'step_N' pattern
-            if re.fullmatch(r"step_\d+", step_key):
+            
+            is_valid_key = False
+            if step_key == "item":
+                is_valid_key = True
+            elif re.fullmatch(r"step_\d+", step_key):
+                # steps require at least one field access (step_N.field)
+                if len(parts) >= 2:
+                    is_valid_key = True
+                else:
+                    logger.warning(
+                        f"Invalid template reference format: '{ref}'. Expected at least 'step_N.field'."
+                    )
+                    return False, original_value
+            
+            if is_valid_key:
                 if step_key in context:
                     current_val = context[step_key]
                     # Traverse the rest of the path
                     path_valid = True
                     for part in parts[1:]:
-                        if isinstance(current_val, dict) and part in current_val:
-                            current_val = current_val[part]
+                        if isinstance(current_val, dict):
+                            if part in current_val:
+                                current_val = current_val[part]
+                            # Special handling for batch_results:
+                            elif "batch_results" in current_val and isinstance(current_val["batch_results"], list) and current_val["batch_results"]:
+                                logger.info(f"Key '{part}' not found directly, checking first item in batch_results for '{ref}'")
+                                first_batch = current_val["batch_results"][0]
+                                if isinstance(first_batch, dict) and part in first_batch:
+                                    current_val = first_batch[part]
+                                else:
+                                    path_valid = False
+                                    break
+                            else:
+                                path_valid = False
+                                break
                         else:
                             path_valid = False
                             break
@@ -167,36 +193,42 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
                         f"Template path '{ref}' not found in execution context. "
                     )
                 else:
-                    logger.warning(
-                        f"Step '{step_key}' not found in execution context. "
-                        f"Available steps: {list(context.keys())}"
-                    )
+                    # Don't warn for 'item' if it's missing, it might just be outside a loop context (though usually shouldn't happen if planned correctly)
+                    # But warn for steps.
+                    if step_key != "item":
+                        logger.warning(
+                            f"Step '{step_key}' not found in execution context. "
+                            f"Available steps: {list(context.keys())}"
+                        )
+                    else:
+                         logger.debug("Variable 'item' not found in context.")
             else:
-                logger.warning(
-                    f"Invalid step key '{step_key}' in template reference '{ref}'. "
-                    f"Expected 'step_N' pattern."
-                )
+                 if step_key != "item":
+                    logger.warning(
+                        f"Invalid step key '{step_key}' in template reference '{ref}'. "
+                        f"Expected 'step_N' pattern or 'item'."
+                    )
         else:
             logger.warning(
-                f"Invalid template reference format: '{ref}'. Expected at least 'step_N.field'."
+                f"Invalid template reference format: '{ref}'."
             )
         # If not found or invalid, keep the original value
         return False, original_value
 
     def _resolve_string(value: str) -> Any:
         has_template = ("{{" in value and "}}" in value) or (
-            re.search(r"\{step_\d+\.[a-zA-Z_][a-zA-Z0-9_.]*\}", value) is not None
+            re.search(r"\{(step_\d+|item)[a-zA-Z0-9_.]*\}", value) is not None
         )
 
         if has_template:
             # Check if the entire value is a single template reference
-            # Pattern 1: {{step_N.field...}} (with optional whitespace)
+            # Pattern 1: {{step_N.field...}} or {{item...}} (with optional whitespace)
             single_double_brace_match = re.fullmatch(
-                r"\{\{\s*(step_\d+\.[a-zA-Z0-9_.]+)\s*\}\}", value
+                r"\{\{\s*((step_\d+|item)[a-zA-Z0-9_.]*)\s*\}\}", value
             )
-            # Pattern 2: {step_N.field...} (no whitespace)
+            # Pattern 2: {step_N.field...} or {item...} (no whitespace)
             single_single_brace_match = re.fullmatch(
-                r"\{(step_\d+\.[a-zA-Z0-9_.]+)\}", value
+                r"\{((step_\d+|item)[a-zA-Z0-9_.]*)\}", value
             )
 
             # If the entire value is a single reference, return the actual value
@@ -231,9 +263,9 @@ def resolve_params(params: dict, context: dict, email_data: EmailData) -> dict:
             resolved_value = re.sub(
                 r"\{\{([^}]+)\}\}", double_brace_replacer, value
             )
-            # Update regex to allow dots in field path
+            # Update regex to allow dots in field path and item references
             resolved_value = re.sub(
-                r"\{(step_\d+\.[a-zA-Z0-9_.]+)\}",
+                r"\{(step_\d+\.[a-zA-Z0-9_.]+|item[a-zA-Z0-9_.]*)\}",
                 single_brace_replacer,
                 resolved_value,
             )
